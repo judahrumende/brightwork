@@ -16,6 +16,7 @@ import { llmClient } from '../llm';
 import { ResearchFailure, researchAnswer } from '../research/answer';
 import { pageReader, publicPageUrl } from '../research/page';
 import { siteHosting } from '../workspace/publication';
+import { githubSiteSync } from '../workspace/github-site-sync';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
 import { searxngEndpoint, searxngSearch } from '../research/searxng';
@@ -339,6 +340,21 @@ export function registerAuth(
         : undefined,
     redis: cache,
     hosting,
+    siteSync:
+      env.GITHUB_SITE_WORKSPACE_ID &&
+      env.GITHUB_SITE_TOKEN &&
+      env.GITHUB_SITE_REPO
+        ? {
+            workspaceId: env.GITHUB_SITE_WORKSPACE_ID,
+            repo: env.GITHUB_SITE_REPO,
+            branch: env.GITHUB_SITE_BRANCH ?? 'main',
+            sync: githubSiteSync({
+              token: env.GITHUB_SITE_TOKEN,
+              repo: env.GITHUB_SITE_REPO,
+              branch: env.GITHUB_SITE_BRANCH ?? 'main',
+            }),
+          }
+        : undefined,
     readPage,
     limit: allow,
     agentEnabled,

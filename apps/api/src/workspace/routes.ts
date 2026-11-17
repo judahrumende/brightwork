@@ -5,6 +5,7 @@ import type Redis from 'ioredis';
 import { websitePages } from '@brightwork/shared';
 import type { siteHosting } from './publication';
 import type { pageReader } from '../research/page';
+import type { githubSiteSync } from './github-site-sync';
 import {
   calendarEventTimes,
   recurrenceRules,
@@ -27,6 +28,14 @@ type Context = {
   redis: Redis;
   agentEnabled: boolean;
   hosting: ReturnType<typeof siteHosting>;
+  siteSync:
+    | {
+        workspaceId: string;
+        repo: string;
+        branch: string;
+        sync: ReturnType<typeof githubSiteSync>;
+      }
+    | undefined;
   readPage: ReturnType<typeof pageReader>;
   limit: (
     type: string,
@@ -940,7 +949,14 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       const site = await store.workItem(access.id, resource);
       if (site?.kind !== 'website')
         return reply.code(404).send({ message: 'Website not found.' });
-      return { deployments: await store.deployments(access.id, resource) };
+      const sync = context.siteSync;
+      return {
+        deployments: await store.deployments(access.id, resource),
+        github:
+          sync?.workspaceId === access.id && canLeadRun(access.role)
+            ? { repo: sync.repo, branch: sync.branch }
+            : null,
+      };
     } catch (error) {
       return reportError(error, reply);
     }
@@ -977,6 +993,46 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
               'Refresh deployment history and choose an earlier deployment.',
           });
         return { deploymentId: restored.id, url: hosting.url(resource) };
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    },
+  );
+  app.post(
+    deploymentsPath + '/:deploymentId/github',
+    async (request, reply) => {
+      try {
+        const access = await authorize(request, reply, true);
+        if (!access) return;
+        if (!canLeadRun(access.role))
+          return reply.code(403).send({
+            message: 'An owner or admin can sync a website to GitHub.',
+          });
+        const connector = context.siteSync;
+        if (connector?.workspaceId !== access.id)
+          return reply.code(409).send({
+            message: 'GitHub sync is unavailable for this workspace.',
+          });
+        const { resource, deploymentId } = resourceParams
+          .extend({ deploymentId: z.uuid() })
+          .parse(request.params);
+        const deploy = await store.liveDeployment(
+          access.id,
+          resource,
+          deploymentId,
+        );
+        if (!deploy)
+          return reply.code(409).send({
+            message: 'Refresh the site and select its current live deployment.',
+          });
+        await context.limit('site-github-sync', access.accountId, 4, 60);
+        const result = await connector.sync(deploy);
+        if (!result)
+          return reply.code(409).send({
+            message:
+              'GitHub declined the branch update. Check the branch and try again.',
+          });
+        return result;
       } catch (error) {
         return reportError(error, reply);
       }

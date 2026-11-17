@@ -10,6 +10,21 @@ const optionalValue = z.preprocess(
 export const authEnv = z.object({
   APP_ORIGIN: z.url({ protocol: /^https?$/u }).default('http://127.0.0.1:5173'),
   SITE_BASE_DOMAIN: optionalValue,
+  GITHUB_SITE_WORKSPACE_ID: optionalValue.pipe(z.uuid().optional()),
+  GITHUB_SITE_REPO: optionalValue.pipe(
+    z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]*\/(?!\.{1,2}$)[a-z0-9_.-]{1,100}$/iu)
+      .optional(),
+  ),
+  GITHUB_SITE_BRANCH: optionalValue.pipe(
+    z
+      .string()
+      .regex(/^[a-z0-9_][a-z0-9_.-]*(?:\/[a-z0-9_][a-z0-9_.-]*)*$/iu)
+      .max(160)
+      .optional(),
+  ),
+  GITHUB_SITE_TOKEN: optionalValue,
   AUTH_SECRET: optionalValue.pipe(z.string().min(32).optional()),
   DATABASE_URL: optionalValue,
   REDIS_URL: optionalValue,
