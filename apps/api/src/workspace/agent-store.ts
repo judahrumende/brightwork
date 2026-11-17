@@ -742,6 +742,25 @@ export function agentStore(db: Database) {
         .orderBy(desc(publications.publishedAt), desc(publications.id))
         .limit(100);
     },
+    async liveDeployment(businessId: string, id: string, deploymentId: string) {
+      const [row] = await db
+        .select({
+          id: artifacts.id,
+          html: publications.document,
+          pages: publications.pages,
+          revision: publications.draftRevision,
+        })
+        .from(publications)
+        .innerJoin(artifacts, eq(artifacts.id, publications.artifactId))
+        .where(
+          and(
+            websiteScope(businessId, id),
+            eq(publications.id, deploymentId),
+            isNull(publications.unpublishedAt),
+          ),
+        );
+      return row;
+    },
     async rollbackDeployment(
       businessId: string,
       id: string,

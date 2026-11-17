@@ -28,17 +28,43 @@ export function WebsiteDeployments({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [synced, setSynced] = useState<{
+    url: string;
+    changed: boolean;
+  } | null>(null);
   const history = useQuery({
     queryKey: [...queryKey, 'deployments', endpoint],
     queryFn: ({ signal }) =>
-      api<{ deployments: Deployment[] }>(endpoint, { signal }),
+      api<{
+        deployments: Deployment[];
+        github?: { repo: string; branch: string } | null;
+      }>(endpoint, { signal }),
   });
   const deployments = history.data?.deployments ?? [];
   const liveId = deployments.find((item) => !item.unpublishedAt)?.id ?? null;
+  const github = history.data?.github;
+
+  async function sync(deploymentId: string) {
+    setBusy(true);
+    setError('');
+    setSynced(null);
+    try {
+      setSynced(
+        await write<{ url: string; changed: boolean }>(
+          endpoint + '/' + deploymentId + '/github',
+        ),
+      );
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function rollback(item: Deployment, expectedLive: string | null) {
     setBusy(true);
     setError('');
+    setSynced(null);
     try {
       await write(endpoint + '/' + item.id + '/rollback', { expectedLive });
       setConfirm(null);
@@ -53,6 +79,29 @@ export function WebsiteDeployments({
   return (
     <section aria-label="Deployment history" className={styles.versionHistory}>
       <h3>Deployment history</h3>
+      {github && liveId && (
+        <section aria-label="GitHub sync">
+          <p>
+            {github.repo} · {github.branch}
+          </p>
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void sync(liveId)}
+          >
+            Sync live deployment
+          </Button>
+          {synced && (
+            <p role="status">
+              {synced.changed ? 'Synced to GitHub.' : 'GitHub is up to date.'}{' '}
+              <a href={synced.url} target="_blank" rel="noreferrer">
+                View commit
+              </a>
+            </p>
+          )}
+        </section>
+      )}
       {history.isPending && <p role="status">Loading deployments…</p>}
       {history.isError && <p role="alert">{errorMessage(history.error)}</p>}
       {history.data && deployments.length === 0 && <p>No deployments yet.</p>}
