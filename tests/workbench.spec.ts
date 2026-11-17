@@ -328,6 +328,23 @@ test('Visitors shows an empty period and lets keyboard users change the range', 
   await page.route('**' + api + '/traffic', (route) =>
     route.fulfill({ json: { daily: [] } }),
   );
+  await page.route('**' + api + '/traffic/visits?*', (route) => {
+    const range = new URL(route.request().url()).searchParams;
+    const days =
+      (Date.parse(range.get('to') ?? '') -
+        Date.parse(range.get('from') ?? '')) /
+      86_400_000;
+    return route.fulfill({
+      json: {
+        visits: days > 1 ? 1 : 0,
+        measuredViews: days > 1 ? 1 : 0,
+        singlePageVisits: days > 1 ? 1 : 0,
+        averageDurationSeconds: 0,
+        sources: days > 1 ? [{ label: 'launch.example.test', count: 1 }] : [],
+        pages: [{ label: '/', count: 1 }],
+      },
+    });
+  });
   await page.goto(workbench);
   await page.getByRole('button', { name: 'View website traffic' }).click();
   await expect(
@@ -336,6 +353,11 @@ test('Visitors shows an empty period and lets keyboard users change the range', 
   await expect(
     page.getByRole('slider', { name: 'Inspect a day' }),
   ).toHaveAttribute('aria-valuetext', /0 page views/u);
+  await expect(
+    page
+      .getByRole('region', { name: 'Traffic sources' })
+      .getByRole('rowheader', { name: 'launch.example.test' }),
+  ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({
     path: 'test-results/visual/084-visitors-overview.png',
@@ -352,6 +374,9 @@ test('Visitors shows an empty period and lets keyboard users change the range', 
     .getByRole('menuitemcheckbox', { name: 'Yesterday' })
     .press('Enter');
   await expect(page.getByRole('button', { name: 'Yesterday' })).toBeFocused();
+  await expect(
+    page.getByRole('region', { name: 'Traffic sources' }),
+  ).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Inspect a day' })).toHaveCount(
     0,
   );

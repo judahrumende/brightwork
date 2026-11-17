@@ -245,6 +245,7 @@ function Home({
   if (showVisitors) {
     return (
       <Visitors
+        companyId={company.id}
         traffic={traffic}
         onBack={() => {
           restoreFocus.current = true;

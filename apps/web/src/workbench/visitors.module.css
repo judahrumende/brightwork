@@ -48,6 +48,22 @@
   display: block;
   margin-top: 12px;
 }
+.breakdown {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  text-align: start;
+}
+.breakdown th,
+.breakdown td {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--whisper);
+  overflow-wrap: anywhere;
+}
+.breakdown :is(th, td):last-child {
+  text-align: end;
+  padding-left: 12px;
+}
 .plot {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

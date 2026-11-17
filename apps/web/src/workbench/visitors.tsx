@@ -136,9 +136,11 @@ function PageViewChart({
 }
 
 export function Visitors({
+  companyId,
   traffic,
   onBack,
 }: {
+  companyId: string;
   traffic: ReturnType<typeof useTraffic>;
   onBack: () => void;
 }) {
@@ -148,6 +150,28 @@ export function Visitors({
   const label = trafficRanges.find(([value]) => value === range)![1];
   const points = pageViewSeries(traffic.data?.daily ?? [], range, new Date());
   const pageViews = points.reduce((total, point) => total + point.views, 0);
+  const from = new Date(points[0]!.day).toISOString();
+  const to = new Date(
+    new Date(points.at(-1)!.day).getTime() + 86_400_000,
+  ).toISOString();
+  const sessions = useQuery({
+    queryKey: ['company', companyId, 'visitor-sessions', from, to],
+    queryFn: ({ signal }) =>
+      api<{
+        visits: number;
+        measuredViews: number;
+        singlePageVisits: number;
+        averageDurationSeconds: number;
+        sources: { label: string; count: number }[];
+        pages: { label: string; count: number }[];
+      }>(
+        `/api/companies/${companyId}/traffic/visits?` +
+          new URLSearchParams({ from, to }),
+        { signal },
+      ),
+    refetchInterval: 30_000,
+  });
+  const measured = sessions.data;
   return (
     <section className={styles.visitors} aria-labelledby="visitors-heading">
       <header className={styles.heading}>
@@ -203,10 +227,85 @@ export function Visitors({
               <h2>Page views</h2>
               <strong>{pageViews.toLocaleString()}</strong>
             </article>
+            {measured && (
+              <>
+                <article className={styles.panel}>
+                  <h2>Visits</h2>
+                  <strong>{measured.visits.toLocaleString()}</strong>
+                </article>
+                <article className={styles.panel}>
+                  <h2>Views per visit</h2>
+                  <strong>
+                    {measured.visits
+                      ? (measured.measuredViews / measured.visits).toFixed(1)
+                      : '0'}
+                  </strong>
+                </article>
+                <article className={styles.panel}>
+                  <h2>Average duration</h2>
+                  <strong>
+                    {measured.averageDurationSeconds.toLocaleString()}s
+                  </strong>
+                </article>
+                <article className={styles.panel}>
+                  <h2>Single-page visits</h2>
+                  <strong>
+                    {measured.visits
+                      ? Math.round(
+                          (100 * measured.singlePageVisits) / measured.visits,
+                        )
+                      : 0}
+                    %
+                  </strong>
+                </article>
+              </>
+            )}
           </div>
           <PageViewChart key={range} points={points} label={label} />
+          {sessions.isError && (
+            <p role="status">Visitor session details are unavailable.</p>
+          )}
+          {measured && measured.visits > 0 && (
+            <div className={styles.summary}>
+              <TrafficBreakdown
+                title="Traffic sources"
+                rows={measured.sources}
+              />
+              <TrafficBreakdown title="Top pages" rows={measured.pages} />
+            </div>
+          )}
         </>
       )}
+    </section>
+  );
+}
+
+function TrafficBreakdown({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: readonly { label: string; count: number }[];
+}) {
+  return (
+    <section className={styles.panel} aria-label={title}>
+      <h2>{title}</h2>
+      <table className={styles.breakdown}>
+        <thead>
+          <tr>
+            <th scope="col">{title === 'Top pages' ? 'Page' : 'Source'}</th>
+            <th scope="col">{title === 'Top pages' ? 'Views' : 'Visits'}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ label, count }) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              <td>{count.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import { publishWebsite } from './publish-website';
 import { upcomingOccurrences } from './recurrence';
+import { visitorRepository } from './visitor-events';
 import {
   and,
   asc,
@@ -63,6 +64,7 @@ export function turnSnapshot(row: Turn & { attachments?: AttachmentLink[] }) {
 }
 
 export function agentStore(db: Database) {
+  const visitors = visitorRepository(db);
   type Writer = Pick<Database, 'insert'>;
   async function saveWebsiteVersion(
     writer: Writer,
@@ -879,16 +881,8 @@ export function agentStore(db: Database) {
         );
       return row;
     },
-    async visit(id: string) {
-      const day = new Date().toISOString().slice(0, 10);
-      await db
-        .insert(visitDays)
-        .values({ artifactId: id, day, views: 1 })
-        .onConflictDoUpdate({
-          target: [visitDays.artifactId, visitDays.day],
-          set: { views: sql`${visitDays.views} + 1` },
-        });
-    },
+    visit: visitors.record,
+    reportVisits: visitors.report,
     async visitorCounts(businessId: string) {
       const first = new Date();
       first.setUTCDate(first.getUTCDate() - 89);
