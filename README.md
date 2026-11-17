@@ -144,8 +144,11 @@ pnpm lint
 ## Runs, scheduled work, and outreach
 
 - Open **Home → Runs → Open Run**. Add a goal and a credit limit, then enter up to 12 steps or have Pip plan them. Pip processes one step at a time. Answer questions in Inbox and review drafts in Run. With site hosting configured, enable **Queue website publication when I approve the draft** to publish the reviewed revision through the worker.
+- Open **Run history** in a Run summary to see persisted status changes, queued steps, and decisions that unblocked work. The summary shows credits used and the latest status of each step and queued publication.
+- Build chat can load earlier messages and attach up to three text files of up to 24 KiB each. The message sends the attached text to the configured model. Workspace members can download attachments. Use **Dictate** in a browser that provides speech recognition to draft the prompt before sending it.
 - Use the checkbox in **Schedule → New task** to run a task with Pip using your credits. Open the task to pause execution. When the worker returns after several missed times, it queues one turn and advances to the next future occurrence.
 - Optional OpenAI web research uses `WEB_SEARCH_API_KEY` and `WEB_SEARCH_MODEL`. Pip displays cited findings under the search step in chat.
+- Pip reads public pages with the same URL, DNS, redirect, response-size, and timeout checks as standalone research. Set the worker's `APP_ORIGIN` and `SITE_BASE_DOMAIN` to the same values as the API for those host exclusions.
 - Optional outbound email uses `OUTREACH_RESEND_API_KEY` and `OUTREACH_FROM_EMAIL` with a verified Resend sender. Approve the draft in Inbox, enter the recipient, then select **Queue this email**. The Inbox records whether the provider accepted the request.
 - Optional inbound email uses a dedicated Resend receiving domain with Resend's MX record. Set `INBOUND_EMAIL_DOMAIN`, `INBOUND_RESEND_API_KEY` with permission to retrieve received mail, and `INBOUND_RESEND_WEBHOOK_SECRET` for the `email.received` webhook at `/api/webhooks/inbound-email`. Run the database migrations before enabling the webhook. Inbox displays each workspace's receiving address and the most recent 50 messages. Messages route using the recipient addresses in the verified webhook. The HTML reader blocks remote resources.
 

@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { Queue, Worker } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
+import Redis from 'ioredis';
 import postgres from 'postgres';
 import { accounts, businesses, members, publications } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
@@ -14,6 +17,8 @@ import { inboundMail } from '../src/workspace/inbound-mail';
 import { mailStore } from '../src/workspace/mail-store';
 import { runStore } from '../src/workspace/run-store';
 import { taskAutomationStore } from '../src/workspace/task-automation';
+import { agentRunner } from '../../worker/src/agent';
+import type { ToolCall } from '../src/llm';
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -245,14 +250,11 @@ test(
       await runs.advance(clock());
       assert.equal((await runs.list(business.id))[0]?.waitingFor, 'approval');
       assert.equal(await agent.published(page.id), undefined);
-      assert.ok(
-        await agent.decide(
-          business.id,
-          page.id,
-          page.revision,
-          true,
-          account.id,
-        ),
+      const decide = () =>
+        agent.decide(business.id, page.id, page.revision, true, account.id);
+      assert.equal(
+        (await Promise.all([decide(), decide()])).filter(Boolean).length,
+        1,
       );
       assert.equal(await agent.published(page.id), undefined);
       assert.ok(await runs.control(business.id, started.id, 'pause'));
@@ -285,6 +287,196 @@ test(
       assert.equal(finished.state, 'completed');
       assert.equal(finished.publications[0]?.state, 'published');
       assert.equal(finished.creditsUsed, '0.1000000000');
+
+      const startedResearch = await runs.create(business.id, account.id, {
+        goal: 'Research a source, ask the owner, and prepare a reviewed homepage',
+        steps: ['Read an example page and ask for the headline'],
+        creditLimit: '1',
+        publishWebsites: true,
+      });
+      assert.ok(startedResearch);
+      const completions = [
+        {
+          name: 'read_public_page',
+          input: { url: 'https://example.test/about' },
+        },
+        {
+          name: 'ask_owner',
+          input: {
+            title: 'Which headline?',
+            body: 'Choose the public headline.',
+          },
+        },
+        null,
+        {
+          name: 'build',
+          input: {
+            title: 'Research homepage',
+            body: '<h1>Chosen headline</h1>',
+          },
+        },
+        null,
+      ];
+      let llmCalls = 0;
+      const run = agentRunner(
+        agent,
+        credits,
+        async (messages, tools) => {
+          assert.ok(
+            tools.some((tool) => tool.function.name === 'read_public_page'),
+          );
+          const fixture = completions[llmCalls++];
+          if (fixture?.name === 'build')
+            assert.ok(
+              messages.some((message) =>
+                JSON.stringify(message).includes('Chosen headline'),
+              ),
+            );
+          const calls: ToolCall[] = fixture
+            ? [
+                {
+                  type: 'function',
+                  id: 'fixture-' + llmCalls,
+                  function: {
+                    name: fixture.name,
+                    arguments: JSON.stringify(fixture.input),
+                  },
+                },
+              ]
+            : [];
+          return {
+            text: fixture ? '' : 'Step complete.',
+            calls,
+            usage: undefined,
+          };
+        },
+        undefined,
+        async (url) => ({
+          url: url.href,
+          title: 'Example source',
+          paragraphs: ['Public fixture evidence about the company.'],
+          score: 1,
+        }),
+      );
+      const first = await runs.advance(clock());
+      assert.ok(first?.turnId);
+      await Promise.all([run(first.turnId), run(first.turnId)]);
+      assert.equal(llmCalls, 3);
+      const evidence = (
+        await agent.readTurn(business.id, first.turnId)
+      )?.parts.find(
+        (part) => part.type === 'tool' && part.name === 'read_public_page',
+      );
+      assert.match(JSON.stringify(evidence), /Example source/);
+      const question = (await agent.listArtifacts(business.id)).find(
+        (item) => item.turnId === first.turnId && item.kind === 'question',
+      );
+      assert.ok(question);
+      await runs.advance(clock());
+      assert.equal((await runs.list(business.id))[0]?.waitingFor, 'answer');
+      assert.ok(
+        await agent.answerQuestion(business.id, question.id, 'Chosen headline'),
+      );
+      const next = await restarted.advance(clock());
+      assert.ok(next?.turnId && next.turnId !== first.turnId);
+      const redisUrl = process.env.REDIS_URL;
+      if (redisUrl) {
+        const connection = new Redis(redisUrl, {
+          maxRetriesPerRequest: null,
+          connectTimeout: 5000,
+        });
+        const options = { connection, prefix: schema };
+        const queue = new Queue<{ turnId: string }>('run-fixture', options);
+        const startWorker = () =>
+          new Worker<{ turnId: string }>(
+            'run-fixture',
+            (job) => run(job.data.turnId),
+            { ...options, autorun: false },
+          );
+        const original = startWorker();
+        const replacement = startWorker();
+        try {
+          await original.waitUntilReady();
+          await original.close();
+          const job = { turnId: next.turnId };
+          await Promise.all([
+            queue.add('turn', job, { jobId: next.turnId }),
+            queue.add('turn', job, { jobId: next.turnId }),
+          ]);
+          const terminal = once(replacement, 'completed', {
+            signal: AbortSignal.timeout(10_000),
+          });
+          await Promise.race([replacement.run(), terminal]);
+          const counts = await queue.getJobCounts('completed', 'waiting');
+          assert.equal(counts.completed, 1);
+          assert.equal(counts.waiting, 0);
+        } finally {
+          await replacement.close();
+          await original.close();
+          await queue.obliterate({ force: true });
+          await queue.close();
+          connection.disconnect();
+        }
+      } else {
+        await run(next.turnId);
+      }
+      assert.equal(llmCalls, 5);
+      const reviewed = (await agent.listArtifacts(business.id)).find(
+        (item) => item.turnId === next.turnId && item.kind === 'website',
+      );
+      assert.ok(reviewed);
+      await restarted.advance(clock());
+      assert.equal((await runs.list(business.id))[0]?.waitingFor, 'approval');
+      assert.ok(
+        await agent.decide(
+          business.id,
+          reviewed.id,
+          reviewed.revision,
+          true,
+          account.id,
+        ),
+      );
+      assert.equal(
+        (await runs.list(business.id))[0]?.publications[0]?.state,
+        'queued',
+      );
+      // The second attempt can still see an answered question only on the first turn.
+      for (let index = 0; index < 3; index += 1)
+        await restarted.advance(clock());
+      const report = await runs.history(business.id, startedResearch.id);
+      assert.ok(report);
+      assert.equal(report.run.state, 'completed');
+      assert.ok(
+        report.events.some(
+          (event) => event.kind === 'waiting' && event.detail === 'answer',
+        ),
+      );
+      assert.ok(report.events.some((event) => event.kind === 'step_finished'));
+      assert.equal(
+        await runs.history(otherBusiness.id, startedResearch.id),
+        null,
+      );
+
+      const lowBudget = await runs.create(business.id, account.id, {
+        goal: 'Exercise the credit cap',
+        steps: ['Try a model call'],
+        creditLimit: '0.01',
+        publishWebsites: false,
+      });
+      assert.ok(lowBudget);
+      const denied = await restarted.advance(clock());
+      assert.ok(denied?.turnId);
+      await run(denied.turnId);
+      assert.equal(llmCalls, 5);
+      await restarted.advance(clock());
+      assert.equal(
+        (await runs.history(business.id, lowBudget.id))?.run.state,
+        'failed',
+      );
+      assert.match(
+        (await runs.history(business.id, lowBudget.id))?.run.failure ?? '',
+        /credit limit/,
+      );
 
       const task = await agent.saveArtifact(
         {

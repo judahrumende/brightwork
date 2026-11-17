@@ -134,6 +134,20 @@
       "when": 1794834000018,
       "tag": "0018_notification_history",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794834000019,
+      "tag": "0019_run_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794834000020,
+      "tag": "0020_chat_attachments",
+      "breakpoints": true
     }
   ]
 }

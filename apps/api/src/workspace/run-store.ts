@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { Database } from '../db/database';
 import {
   agentTurns,
@@ -6,6 +6,7 @@ import {
   businessRuns,
   members,
   publicationRequests,
+  runEvents,
   runSteps,
 } from '../db/schema';
 import { publishWebsite } from './publish-website';
@@ -149,6 +150,36 @@ export function runStore(db: Database) {
         ),
         publications: publications.filter((item) => item.runId === run.id),
       }));
+    },
+
+    async history(businessId: string, runId: string, before?: number) {
+      const [run] = await db
+        .select()
+        .from(businessRuns)
+        .where(
+          and(
+            eq(businessRuns.id, runId),
+            eq(businessRuns.businessId, businessId),
+          ),
+        );
+      if (!run) return null;
+      const limit = 50;
+      const events = await db
+        .select()
+        .from(runEvents)
+        .where(
+          and(
+            eq(runEvents.runId, run.id),
+            before ? lt(runEvents.id, before) : undefined,
+          ),
+        )
+        .orderBy(desc(runEvents.id))
+        .limit(limit + 1);
+      return {
+        run: summarize(run),
+        events: events.slice(0, limit),
+        before: events.length > limit ? (events[limit - 1]?.id ?? null) : null,
+      };
     },
 
     async control(businessId: string, id: string, action: 'pause' | 'resume') {

@@ -171,6 +171,15 @@ export const agentTurns = pgTable('agent_turns', {
   updatedAt: date('updated_at').defaultNow().notNull(),
 });
 
+export const chatAttachments = pgTable('chat_attachments', {
+  id: uuid().primaryKey().defaultRandom(),
+  turnId: uuid('turn_id')
+    .notNull()
+    .references(() => agentTurns.id, { onDelete: 'cascade' }),
+  name: text().notNull(),
+  content: text().notNull(),
+});
+
 export const runSteps = pgTable(
   'run_steps',
   {
@@ -189,6 +198,16 @@ export const runSteps = pgTable(
   },
   (t) => [primaryKey({ columns: [t.runId, t.position] })],
 );
+
+export const runEvents = pgTable('run_events', {
+  id: serial().primaryKey(),
+  runId: uuid('run_id')
+    .notNull()
+    .references(() => businessRuns.id, { onDelete: 'cascade' }),
+  kind: text().notNull(),
+  detail: text().notNull(),
+  createdAt: date('created_at').notNull().defaultNow(),
+});
 
 export const calendarEvents = pgTable(
   'calendar_events',

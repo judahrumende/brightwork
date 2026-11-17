@@ -18,9 +18,10 @@ import { BuildCanvas } from './build-canvas';
 import type { WebsiteDraft } from './website-editor';
 import type { WebsitePage } from '@brightwork/shared';
 import { ResearchResults } from './research-results';
+import { Dictation } from './dictation';
 import styles from './workbench.module.css';
 
-type Chat = { enabled: boolean; turns: Turn[] };
+type Chat = { enabled: boolean; turns: Turn[]; before?: string | null };
 type Artifact = {
   id: string;
   kind:
@@ -105,16 +106,27 @@ export function artifactLink(
   );
 }
 
-export function PipChat({ id }: { id: string }) {
+export function PipChat({ id, readOnly }: { id: string; readOnly: boolean }) {
   const cache = useQueryClient();
   const chat = usePipTurns(id);
   const [prompt, setPrompt] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [earlier, setEarlier] = useState<Chat | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const before = earlier ? earlier.before : chat.data?.before;
+  const current = chat.data?.turns ?? [];
+  const known = new Set(current.map((turn) => turn.id));
+  const transcript = [
+    ...(earlier?.turns ?? []).filter((turn) => !known.has(turn.id)),
+    ...current,
+  ];
   const active = (
     chat.data?.turns.filter(inProgress).map((turn) => turn.id) ?? []
   ).join(',');
-  const enabled = Boolean(chat.data?.enabled);
+  const enabled = Boolean(chat.data?.enabled && !readOnly);
   useEffect(() => {
     if (!active) return;
     const sources = active.split(',').map((turnId) => {
@@ -128,7 +140,7 @@ export function PipChat({ id }: { id: string }) {
             ...existing,
             turns: existing.turns.map((turn) =>
               turn.id === next.id && turn.revision <= next.revision
-                ? next
+                ? { ...turn, ...next }
                 : turn,
             ),
           };
@@ -164,13 +176,41 @@ export function PipChat({ id }: { id: string }) {
     return () => sources.forEach((source) => source.close());
   }, [active, cache, id]);
 
+  async function loadEarlier() {
+    if (!before || loadingHistory) return;
+    setLoadingHistory(true);
+    setHistoryError('');
+    try {
+      const page = await api<Chat>(
+        root(id) + '/pip/turns?' + new URLSearchParams({ before }),
+      );
+      setEarlier((previous) => ({
+        ...page,
+        turns: [...page.turns, ...(previous?.turns ?? current)],
+      }));
+    } catch (failure) {
+      setHistoryError(errorMessage(failure));
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault();
     if (pending || !enabled || !prompt.trim()) return;
     setPending(true);
     setError('');
     try {
-      const turn = await write<Turn>(root(id) + '/pip/turns', { prompt });
+      const attachments = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          content: await file.text(),
+        })),
+      );
+      const turn = await write<Turn>(root(id) + '/pip/turns', {
+        prompt,
+        ...(attachments.length ? { attachments } : {}),
+      });
       cache.setQueryData<Chat>(
         turnKey(id),
         (existing) =>
@@ -182,6 +222,7 @@ export function PipChat({ id }: { id: string }) {
           },
       );
       setPrompt('');
+      setFiles([]);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -196,16 +237,39 @@ export function PipChat({ id }: { id: string }) {
         <h2>Talk to {brand.agent}</h2>
       </header>
       <div className={styles.transcript}>
-        {!chat.data?.turns.length && (
+        {before && (
+          <Button
+            type="button"
+            size="small"
+            variant="secondary"
+            disabled={loadingHistory}
+            onClick={() => void loadEarlier()}
+          >
+            Load earlier messages
+          </Button>
+        )}
+        {historyError && <p role="alert">{historyError}</p>}
+        {transcript.length === 0 && (
           <EmptyState
             icon={<Mascot size={56} />}
             title="What would you like to work on?"
             description="Ask for a plan, a page, or a draft to review."
           />
         )}
-        {chat.data?.turns.map((turn) => (
+        {transcript.map((turn) => (
           <article key={turn.id}>
             <p className={styles.userMessage}>{turn.prompt}</p>
+            {turn.attachments?.map((file) => (
+              <a
+                key={file.id}
+                href={
+                  root(id) + '/pip/turns/' + turn.id + '/attachments/' + file.id
+                }
+                download={file.name}
+              >
+                {file.name}
+              </a>
+            ))}
             {turn.parts
               .filter((part) => part.type === 'tool')
               .map((part) => (
@@ -213,7 +277,8 @@ export function PipChat({ id }: { id: string }) {
                   <p className={styles.tool}>
                     {part.name.replace(/_/gu, ' ')} · {part.status}
                   </p>
-                  {part.name === 'web_search' && (
+                  {(part.name === 'web_search' ||
+                    part.name === 'read_public_page') && (
                     <ResearchResults output={part.output} />
                   )}
                 </div>
@@ -250,8 +315,15 @@ export function PipChat({ id }: { id: string }) {
             </button>
           </p>
         )}
-        {chat.data && !enabled && (
-          <p role="status">Connect an LLM provider to message {brand.agent}.</p>
+        {readOnly ? (
+          <p role="status">This workspace is view only.</p>
+        ) : (
+          chat.data &&
+          !enabled && (
+            <p role="status">
+              Connect an LLM provider to message {brand.agent}.
+            </p>
+          )
         )}
         <label htmlFor="pip-prompt">Message {brand.agent}</label>
         <textarea
@@ -267,6 +339,51 @@ export function PipChat({ id }: { id: string }) {
               event.currentTarget.form?.requestSubmit();
             }
           }}
+        />
+        <label>
+          Attach text files
+          <input
+            type="file"
+            multiple
+            accept=".txt,.md,.csv,.json,.log"
+            disabled={!enabled || pending}
+            onChange={(event) => {
+              const input = event.currentTarget;
+              const picked = Array.from(input.files ?? []);
+              input.value = '';
+              if (
+                picked.length > 3 ||
+                picked.some((file) => file.size < 1 || file.size > 24 * 1024)
+              ) {
+                setError('Choose up to three text files, each up to 24 KB.');
+                return;
+              }
+              setError('');
+              setFiles(picked);
+            }}
+          />
+        </label>
+        {files.length > 0 && (
+          <p>
+            {files.map((file) => file.name).join(', ')}{' '}
+            <Button
+              type="button"
+              size="small"
+              variant="quiet"
+              onClick={() => setFiles([])}
+              disabled={pending}
+            >
+              Remove attachments
+            </Button>
+          </p>
+        )}
+        <Dictation
+          disabled={!enabled || pending}
+          onTranscript={(text) =>
+            setPrompt((draft) =>
+              [draft.trimEnd(), text].filter(Boolean).join(' ').slice(0, 12000),
+            )
+          }
         />
         <Button type="submit" disabled={!enabled || pending || !prompt.trim()}>
           {pending ? 'Sending…' : 'Send'}

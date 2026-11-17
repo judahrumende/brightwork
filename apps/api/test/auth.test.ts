@@ -16,6 +16,7 @@ import {
   calendarEvents,
   members,
 } from '../src/db/schema';
+import { agentStore } from '../src/workspace/agent-store';
 
 const { TEST_DATABASE_URL, TEST_MAILPIT_URL, REDIS_URL } = process.env;
 const origin = 'http://127.0.0.1:5173';
@@ -352,6 +353,57 @@ test(
       );
       assert.equal(results.at(-1)?.id, shopWork.id);
       assert.deepEqual(await readSearch(separateCookie), []);
+
+      const withFiles = await agentStore(database.db).addTurn(
+        studio,
+        owner.companyList.userId,
+        'Use the attached brief',
+        [
+          {
+            name: 'private.txt',
+            content: 'Synthetic attachment for the studio only.',
+          },
+        ],
+      );
+      assert.ok(withFiles.attachments[0]);
+      const chatUrl = `/api/companies/${studio}/pip/turns`;
+      const downloadPath =
+        chatUrl +
+        '/' +
+        withFiles.id +
+        '/attachments/' +
+        withFiles.attachments[0].id;
+      const attachment = await server.inject({
+        url: downloadPath,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(attachment.statusCode, 200);
+      assert.match(
+        String(attachment.headers['content-disposition']),
+        /^attachment;/u,
+      );
+      assert.equal(
+        attachment.body,
+        'Synthetic attachment for the studio only.',
+      );
+      assert.equal(
+        (
+          await server.inject({
+            url: downloadPath,
+            headers: { cookie: separateCookie },
+          })
+        ).statusCode,
+        404,
+      );
+      const earlier = await server.inject({
+        url: chatUrl + '?before=' + withFiles.id,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(earlier.statusCode, 200);
+      assert.deepEqual(
+        earlier.json<{ turns: { id: string }[] }>().turns.map((row) => row.id),
+        [turn.id],
+      );
 
       const notifications = `/api/companies/${studio}/notifications`;
       const markRead = `/api/companies/${studio}/run/read`;
