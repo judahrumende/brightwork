@@ -8,11 +8,14 @@ import { Button } from '../ui/primitives';
 import { Sky } from '../sky/sky';
 import { creditKey, sessionKey } from './session';
 import styles from './workbench.module.css';
+import { BillingSettings } from './billing-settings';
 
 const creditLabels = {
   starter: 'Starter credits',
   model: 'Pip model call',
   tool: 'Pip tool call',
+  subscription: 'Subscription credits',
+  refund: 'Refund credit adjustment',
 };
 
 function CreditHistory({ available }: { available: string }) {
@@ -86,7 +89,9 @@ export function Profile({ session }: { session: Session }) {
   const { profile, session: account } = session;
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
-  const [section, setSection] = useState<'Account' | 'Credits'>('Account');
+  const [section, setSection] = useState<'Account' | 'Credits' | 'Billing'>(
+    'Account',
+  );
   const balance = useQuery({
     queryKey: creditKey,
     queryFn: () => api<{ available: string }>('/api/me/credits'),
@@ -259,7 +264,7 @@ export function Profile({ session }: { session: Session }) {
             <aside>
               <strong>Settings</strong>
               <nav className={styles.settingsNav} aria-label="Settings">
-                {(['Account', 'Credits'] as const).map((item) => (
+                {(['Account', 'Credits', 'Billing'] as const).map((item) => (
                   <button
                     type="button"
                     key={item}
@@ -286,6 +291,8 @@ export function Profile({ session }: { session: Session }) {
               </header>
               {section === 'Credits' ? (
                 <CreditHistory available={available} />
+              ) : section === 'Billing' ? (
+                <BillingSettings />
               ) : (
                 <>
                   <div className={styles.accountCard}>

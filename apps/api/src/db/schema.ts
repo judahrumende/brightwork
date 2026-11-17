@@ -525,6 +525,22 @@ export const visitDays = pgTable(
   (t) => [primaryKey({ columns: [t.artifactId, t.day] })],
 );
 
+export const billingCustomers = pgTable('billing_customers', {
+  accountId: uuid('account_id')
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  customerId: text('customer_id').notNull().unique(),
+  subscriptionId: text('subscription_id'),
+  state: text().notNull().default('free'),
+  periodEnd: date('period_end'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+});
+
+export const billingEvents = pgTable('billing_events', {
+  id: text().primaryKey(),
+  receivedAt: date('received_at').notNull().defaultNow(),
+});
+
 export const creditEntries = pgTable(
   'credit_entries',
   {
@@ -536,7 +552,9 @@ export const creditEntries = pgTable(
       onDelete: 'set null',
     }),
     operationKey: text('operation_key').notNull(),
-    kind: text({ enum: ['starter', 'model', 'tool'] }).notNull(),
+    kind: text({
+      enum: ['starter', 'model', 'tool', 'subscription', 'refund'],
+    }).notNull(),
     amount: numeric({ precision: 24, scale: 10 }).notNull(),
     createdAt: date('created_at').defaultNow().notNull(),
   },
