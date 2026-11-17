@@ -32,7 +32,9 @@ export function WorkspaceSettings({
   company: Company;
   accountId: string;
 }) {
-  const [tab, setTab] = useState<'team' | 'vault' | 'domains'>('team');
+  const [tab, setTab] = useState<'team' | 'vault' | 'domains' | 'commerce'>(
+    'team',
+  );
   const endpoint = `/api/companies/${company.id}/settings`;
   if (!['owner', 'admin'].includes(company.role))
     return (
@@ -66,6 +68,13 @@ export function WorkspaceSettings({
         >
           Domains
         </Button>
+        <Button
+          variant="secondary"
+          aria-pressed={tab === 'commerce'}
+          onClick={() => setTab('commerce')}
+        >
+          Commerce
+        </Button>
       </nav>
       {tab === 'team' && (
         <TeamSettings
@@ -76,6 +85,9 @@ export function WorkspaceSettings({
       )}
       {tab === 'vault' && <VaultSettings endpoint={endpoint + '/vault'} />}
       {tab === 'domains' && <DomainSettings endpoint={endpoint + '/domains'} />}
+      {tab === 'commerce' && (
+        <CommerceSettings endpoint={endpoint + '/shopify'} />
+      )}
     </section>
   );
 }
@@ -432,6 +444,138 @@ function DomainSettings({ endpoint }: { endpoint: string }) {
           >
             Remove domain
           </Button>
+        </article>
+      ))}
+      {error && <p role="alert">{error}</p>}
+    </section>
+  );
+}
+
+function CommerceSettings({ endpoint }: { endpoint: string }) {
+  const cache = useQueryClient();
+  const key = ['workspace-settings', endpoint];
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const commerce = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      api<{
+        enabled: boolean;
+        shops: { id: string; shop: string; connected: boolean }[];
+        totals: {
+          shop: string;
+          currency: string;
+          orders: number;
+          orderValue: string;
+        }[];
+      }>(endpoint, { signal }),
+  });
+
+  async function change(path: string, body: object, method = 'POST') {
+    if (busy) return false;
+    setBusy(true);
+    setError('');
+    try {
+      await write(endpoint + path, body, method);
+      await cache.invalidateQueries({ queryKey: key });
+      return true;
+    } catch (failure) {
+      setError(errorMessage(failure));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function connect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (await change('', Object.fromEntries(new FormData(form)))) form.reset();
+  }
+
+  return (
+    <section aria-label="Shopify stores">
+      <h2>Shopify</h2>
+      {commerce.isPending && <p role="status">Loading Shopify stores…</p>}
+      {commerce.isError && <p role="alert">{errorMessage(commerce.error)}</p>}
+      {commerce.data && !commerce.data.enabled && (
+        <p>Shopify connections are unavailable.</p>
+      )}
+      {commerce.data?.enabled && (
+        <form
+          className={styles.taskForm}
+          onSubmit={(event) => void connect(event)}
+        >
+          <label>
+            Store domain
+            <input
+              name="shop"
+              placeholder="store.myshopify.com"
+              required
+              maxLength={77}
+            />
+          </label>
+          <label>
+            Admin API token
+            <input
+              name="token"
+              type="password"
+              autoComplete="off"
+              required
+              maxLength={512}
+            />
+          </label>
+          <label>
+            Webhook signing secret
+            <input
+              name="secret"
+              type="password"
+              autoComplete="off"
+              required
+              maxLength={512}
+            />
+          </label>
+          <Button type="submit" disabled={busy}>
+            Connect or update store
+          </Button>
+        </form>
+      )}
+      {commerce.data?.shops.map((store) => (
+        <article key={store.id}>
+          <h3>{store.shop}</h3>
+          {store.connected ? (
+            <>
+              <p>Add this URL to your Shopify order webhook subscriptions.</p>
+              <p>
+                <code>
+                  {location.origin}/api/webhooks/shopify/{store.id}
+                </code>
+              </p>
+              <Button
+                variant="quiet"
+                size="small"
+                disabled={busy}
+                onClick={() => void change('/' + store.id, {}, 'DELETE')}
+              >
+                Disconnect
+              </Button>
+            </>
+          ) : (
+            <p>Disconnected</p>
+          )}
+          {commerce.data?.totals
+            .filter((total) => total.shop === store.shop)
+            .map((total) => (
+              <p key={total.currency}>
+                Paid order value received by Brightwork{' '}
+                {new Intl.NumberFormat(undefined, {
+                  style: 'currency',
+                  currency: total.currency,
+                }).format(Number(total.orderValue))}
+                {' · '}
+                {total.orders} {total.orders === 1 ? 'order' : 'orders'}
+              </p>
+            ))}
         </article>
       ))}
       {error && <p role="alert">{error}</p>}

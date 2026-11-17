@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { shopifyConnectionInput } from './shopify-orders';
+import type { shopifyOrders } from './shopify-orders';
 import { teamRole } from './team';
 import type { teamStore } from './team';
 import type { vaultStore } from './vault';
@@ -16,13 +18,14 @@ export function registerWorkspaceSettings(
   app: FastifyInstance,
   context: {
     team: ReturnType<typeof teamStore>;
+    commerce: ReturnType<typeof shopifyOrders> | undefined;
     vault: ReturnType<typeof vaultStore> | undefined;
     domains: ReturnType<typeof domainStore>;
     authorize: Authorize;
     reportError: (failure: unknown, reply: FastifyReply) => unknown;
   },
 ) {
-  const { team, vault, domains } = context;
+  const { team, vault, domains, commerce } = context;
   const base = '/api/companies/:id/settings';
   const target = z.object({ resource: z.uuid() });
   type Access = NonNullable<Awaited<ReturnType<Authorize>>>;
@@ -48,6 +51,41 @@ export function registerWorkspaceSettings(
       }
     };
   }
+  app.get(
+    base + '/shopify',
+    handle(false, async (_request, _reply, access) => ({
+      enabled: Boolean(commerce),
+      ...(commerce
+        ? await commerce.report(access.id)
+        : { shops: [], totals: [] }),
+    })),
+  );
+  app.post(
+    base + '/shopify',
+    handle(true, async (request, reply, access) => {
+      if (!commerce)
+        return reply.code(503).send({ message: 'Shopify is unavailable.' });
+      const input = shopifyConnectionInput.parse(request.body);
+      const result = await commerce.connect(access.id, input).catch(() => null);
+      if (!result)
+        return reply.code(422).send({
+          message:
+            'Brightwork could not verify this Shopify connection. Check the store, credentials, and workspace.',
+        });
+      return { connected: true };
+    }),
+  );
+  app.delete(
+    base + '/shopify/:resource',
+    handle(true, async (request, reply, access) => {
+      const { resource } = target.parse(request.params);
+      if (!(await commerce?.disconnect(access.id, resource)))
+        return reply
+          .code(404)
+          .send({ message: 'Shopify connection unavailable.' });
+      return { disconnected: true };
+    }),
+  );
   app.get(
     base + '/team',
     handle(false, async (_request, _reply, access) => {

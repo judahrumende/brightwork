@@ -707,3 +707,60 @@ test('Schedule saves an event after correcting its end time and opens its detail
   await page.keyboard.press('Escape');
   await expect(entry).toBeFocused();
 });
+
+test('Commerce connects a store, shows its order total and disconnects', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const endpoint = api + '/settings/shopify';
+  const store = {
+    id: company.id,
+    shop: 'fixture.myshopify.com',
+    connected: false,
+  };
+  await page.route('**' + api + '/settings/team', (route) =>
+    route.fulfill({ json: { members: [], invites: [] } }),
+  );
+  await page.route('**' + endpoint, (route) => {
+    if (route.request().method() === 'POST') {
+      expect(route.request().postDataJSON()).toEqual({
+        shop: store.shop,
+        token: 'fixture-admin-token',
+        secret: 'fixture-webhook-secret',
+      });
+      store.connected = true;
+      return route.fulfill({ json: { connected: true } });
+    }
+    return route.fulfill({
+      json: {
+        enabled: true,
+        shops: [store],
+        totals: [
+          { shop: store.shop, currency: 'USD', orders: 2, orderValue: '50.00' },
+        ],
+      },
+    });
+  });
+  await page.route('**' + endpoint + '/' + store.id, (route) => {
+    expect(route.request().method()).toBe('DELETE');
+    store.connected = false;
+    return route.fulfill({ json: { disconnected: true } });
+  });
+  await page.goto(workbench + '/settings');
+  await page.getByRole('button', { name: 'Commerce', exact: true }).click();
+  await page.getByLabel('Store domain').fill(store.shop);
+  await page.getByLabel('Admin API token').fill('fixture-admin-token');
+  await page
+    .getByLabel('Webhook signing secret')
+    .fill('fixture-webhook-secret');
+  await page.getByRole('button', { name: 'Connect or update store' }).click();
+  await expect(page.getByLabel('Admin API token')).toHaveValue('');
+  await expect(
+    page.getByText('/api/webhooks/shopify/' + store.id, { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Paid order value received.*50\.00.*2 orders/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(page.getByText('Disconnected', { exact: true })).toBeVisible();
+});
