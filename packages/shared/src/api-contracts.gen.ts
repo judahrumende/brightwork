@@ -1,4 +1,4 @@
-// Generated schema evidence from kit/api.json. Regenerate with pnpm contracts:generate.
+// Generated schema evidence from kit/api-shapes.json. Regenerate with pnpm contracts:generate.
 import { z } from 'zod';
 
 export const observedContracts = {

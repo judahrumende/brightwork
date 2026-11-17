@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const input = new URL('../kit/api.json', import.meta.url);
+const input = new URL('../kit/api-shapes.json', import.meta.url);
 const output = new URL(
   '../packages/shared/src/api-contracts.gen.ts',
   import.meta.url,
@@ -57,7 +57,7 @@ const rows = observed.map((entry) => {
 });
 
 const content = [
-  '// Generated schema evidence from kit/api.json. Regenerate with pnpm contracts:generate.',
+  '// Generated schema evidence from kit/api-shapes.json. Regenerate with pnpm contracts:generate.',
   "import { z } from 'zod';",
   '',
   'export const observedContracts = {',
