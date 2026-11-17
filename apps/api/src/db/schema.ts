@@ -441,6 +441,7 @@ export const publications = pgTable(
     document: text().notNull(),
     pages: jsonb().$type<WebsitePage[]>().notNull().default([]),
     draftRevision: integer('draft_revision').notNull().default(1),
+    rollbackSourceId: uuid('rollback_source_id'),
     publishedAt: date('published_at').defaultNow().notNull(),
     unpublishedAt: date('unpublished_at'),
   },

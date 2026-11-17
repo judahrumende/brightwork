@@ -21,9 +21,23 @@ export function siteHosting(
   const base = parsed.data;
   const scheme = new URL(origin).protocol;
   const baseUrl = new URL(scheme + '//' + base);
-  if (baseUrl.hostname === new URL(origin).hostname)
+  const dashboard = new URL(origin).hostname;
+  const onSiteDomain = (hostname: string) =>
+    hostname === baseUrl.hostname || hostname.endsWith('.' + baseUrl.hostname);
+  if (onSiteDomain(dashboard))
     throw new Error('Site hosting needs a distinct base domain');
   const url = (id: string) => scheme + '//' + id + '.' + base;
+
+  app.addHook('onRequest', async (request, reply) => {
+    if (!onSiteDomain(request.hostname.toLowerCase().replace(/\.$/u, '')))
+      return;
+    const route = request.routeOptions.url;
+    if (
+      !['GET', 'HEAD'].includes(request.method) ||
+      (route !== '/' && route !== '/:page')
+    )
+      return reply.code(404).send('Site route not found');
+  });
 
   async function serveSite(
     request: FastifyRequest,

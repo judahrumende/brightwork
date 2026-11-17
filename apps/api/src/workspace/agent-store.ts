@@ -727,6 +727,68 @@ export function agentStore(db: Database) {
         publishWebsite(tx, businessId, id, revision, enabled),
       );
     },
+    async deployments(businessId: string, id: string) {
+      return db
+        .select({
+          id: publications.id,
+          revision: publications.draftRevision,
+          publishedAt: publications.publishedAt,
+          unpublishedAt: publications.unpublishedAt,
+          rollbackSourceId: publications.rollbackSourceId,
+        })
+        .from(publications)
+        .innerJoin(artifacts, eq(artifacts.id, publications.artifactId))
+        .where(websiteScope(businessId, id))
+        .orderBy(desc(publications.publishedAt), desc(publications.id))
+        .limit(100);
+    },
+    async rollbackDeployment(
+      businessId: string,
+      id: string,
+      source: string,
+      expectedLive: string | null,
+    ) {
+      return db.transaction(async (tx) => {
+        const [site] = await tx
+          .select({ id: artifacts.id })
+          .from(artifacts)
+          .where(websiteScope(businessId, id))
+          .for('update');
+        if (!site) return null;
+        const [snapshot] = await tx
+          .select()
+          .from(publications)
+          .where(
+            and(eq(publications.artifactId, id), eq(publications.id, source)),
+          );
+        if (!snapshot?.unpublishedAt) return null;
+        const active = and(
+          eq(publications.artifactId, id),
+          isNull(publications.unpublishedAt),
+        );
+        const [live] = await tx
+          .select({ id: publications.id })
+          .from(publications)
+          .where(active);
+        if ((live?.id ?? null) !== expectedLive) return null;
+        if (live)
+          await tx
+            .update(publications)
+            .set({ unpublishedAt: new Date() })
+            .where(active);
+        const [next] = await tx
+          .insert(publications)
+          .values({
+            artifactId: id,
+            document: snapshot.document,
+            pages: snapshot.pages,
+            draftRevision: snapshot.draftRevision,
+            rollbackSourceId: snapshot.id,
+          })
+          .returning({ id: publications.id });
+        return next ?? null;
+      });
+    },
     async published(id: string) {
       const [row] = await db
         .select({ document: publications.document, pages: publications.pages })

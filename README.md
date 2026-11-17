@@ -93,6 +93,7 @@ pnpm dev
 - Set `LLM_API_KEY`, `LLM_MODEL` and, when needed, `LLM_BASE_URL`. Start `pnpm --filter @brightwork/worker dev` in a second terminal. Build uses the worker for Pip chat and saved drafts.
 - `STARTER_CREDITS`, `MODEL_CREDITS_PER_CALL` and `TOOL_CREDITS_PER_CALL` configure internal quotas with ten decimal places. The worker debits each model and tool attempt before it starts. Review balances and recent transactions in Settings under Credits.
 - Leave `SITE_BASE_DOMAIN` empty for private draft previews. For hosting, use a separate base domain, route its wildcard subdomains to Fastify, and provision DNS and TLS. Publishing requires approval of the current draft revision. Restoring a saved version creates a draft for review. The Visitors report counts requests for live pages by UTC date.
+- **Build → Import website** extracts public page text into a draft for review. **Visual editing** edits simple text elements and embeds small raster images so they travel with that page's saved revision. **Site tools → Deployment history** lets owners and admins restore an earlier live snapshot. The editable draft and its versions stay available for future review.
 - Set `API_TRUST_PROXY` to the address or range of a deployment's trusted proxy if Fastify should use its forwarded client IP for auth rate limits.
 - Run `pnpm test:unit` for auth, LLM, recurrence, exact credit arithmetic, publication, SSE, and traffic range tests.
 

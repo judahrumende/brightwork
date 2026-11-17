@@ -121,6 +121,7 @@ test(
         server,
         authEnv.parse({
           APP_ORIGIN: origin,
+          SITE_BASE_DOMAIN: 'sites.example.test',
           DATABASE_URL: url.href,
           REDIS_URL,
           AUTH_SECRET: 'fixture-key-' + fixture,
@@ -462,6 +463,151 @@ test(
         ],
       );
       assert.equal(revised.unread, 1);
+
+      const site = await agentStore(database.db).saveArtifact({
+        businessId: studio,
+        kind: 'website',
+        state: 'pending',
+        title: 'Publish fixture',
+        body: '<h1>First published home</h1>',
+        pages: [
+          { slug: 'about', title: 'About', html: '<h1>First about</h1>' },
+        ],
+      });
+      const work = `/api/companies/${studio}/work/${site.id}`;
+      const host = site.id + '.sites.example.test';
+      const visit = (url: string, suppliedCookie = '') =>
+        server.inject({ url, headers: { host, cookie: suppliedCookie } });
+      assert.equal((await visit('/')).statusCode, 404);
+      assert.equal((await visit(work, freshCookie)).statusCode, 404);
+      assert.equal(
+        (await visit('/api/auth/email/code', freshCookie)).statusCode,
+        404,
+      );
+      assert.equal(
+        (
+          await post(
+            work + '/decision',
+            { approve: true, revision: 1 },
+            freshCookie,
+          )
+        ).statusCode,
+        200,
+      );
+      assert.equal(
+        (
+          await post(
+            work + '/publish',
+            { publish: true, revision: 1 },
+            freshCookie,
+          )
+        ).statusCode,
+        200,
+      );
+      const live = await visit('/about');
+      assert.equal(live.statusCode, 200);
+      assert.match(live.body, /First about/);
+      assert.match(String(live.headers['content-security-policy']), /sandbox/);
+      assert.equal(live.headers['set-cookie'], undefined);
+
+      const deployments = async () => {
+        const response = await server.inject({
+          url: work + '/deployments',
+          headers: { cookie: freshCookie },
+        });
+        assert.equal(response.statusCode, 200);
+        return response.json<{
+          deployments: {
+            id: string;
+            revision: number;
+            unpublishedAt: string | null;
+            rollbackSourceId: string | null;
+          }[];
+        }>().deployments;
+      };
+      const [initialDeployment] = await deployments();
+      assert.ok(initialDeployment);
+      const edit = await server.inject({
+        method: 'PATCH',
+        url: work + '/website',
+        headers: { ...headers, cookie: freshCookie },
+        payload: {
+          revision: 1,
+          title: site.title,
+          body: '<h1>Second home</h1>',
+          pages: [
+            { slug: 'about', title: 'About', html: '<h1>Second about</h1>' },
+          ],
+        },
+      });
+      assert.equal(edit.statusCode, 200);
+      assert.match((await visit('/about')).body, /First about/);
+      assert.equal(
+        (
+          await post(
+            work + '/publish',
+            { publish: true, revision: 2 },
+            freshCookie,
+          )
+        ).statusCode,
+        409,
+      );
+      assert.equal(
+        (
+          await post(
+            work + '/decision',
+            { approve: true, revision: 2 },
+            freshCookie,
+          )
+        ).statusCode,
+        200,
+      );
+      assert.equal(
+        (
+          await post(
+            work + '/publish',
+            { publish: true, revision: 2 },
+            freshCookie,
+          )
+        ).statusCode,
+        200,
+      );
+      assert.match((await visit('/about')).body, /Second about/);
+      const [current] = await deployments();
+      assert.ok(current);
+      const rollbackPath =
+        work + '/deployments/' + initialDeployment.id + '/rollback';
+      assert.equal(
+        (
+          await post(
+            rollbackPath,
+            { expectedLive: current.id },
+            collaboratorCookie,
+          )
+        ).statusCode,
+        403,
+      );
+      const attempts = await Promise.all([
+        post(rollbackPath, { expectedLive: current.id }, freshCookie),
+        post(rollbackPath, { expectedLive: current.id }, freshCookie),
+      ]);
+      assert.deepEqual(
+        attempts.map((result) => result.statusCode).sort(),
+        [200, 409],
+      );
+      assert.match((await visit('/about')).body, /First about/);
+      const [restored] = await deployments();
+      assert.equal(restored?.rollbackSourceId, initialDeployment.id);
+      assert.equal(
+        (await agentStore(database.db).workItem(studio, site.id))?.revision,
+        2,
+      );
+      const rejectedImport = await post(
+        `/api/companies/${studio}/work/websites/import`,
+        { url: 'http://127.0.0.1/' },
+        freshCookie,
+      );
+      assert.equal(rejectedImport.statusCode, 422);
     } finally {
       await server.close();
       await database.close();
