@@ -7,22 +7,30 @@ import { verifyInboundSignature } from './inbound-signature';
 
 type Config = { domain: string; apiKey: string; secret: string };
 const recipientId = z.uuid();
+const messageId = z.string().regex(/^<[^<>\s@]{1,400}@[^<>\s@]{1,400}>$/u);
 const delivery = z.object({
   email_id: z.uuid(),
   created_at: z.iso.datetime({ offset: true }),
   from: z.string().trim().min(1).max(1000),
   to: z.array(z.string().max(1000)).max(100),
   subject: z.string().max(4000).default(''),
+  message_id: z.string().nullish(),
 });
 const content = z.object({
   text: z.string().nullish(),
   html: z.string().nullish(),
+  message_id: z.string().nullish(),
+  headers: z
+    .record(z.string(), z.union([z.string(), z.array(z.string())]))
+    .catch({})
+    .default({}),
 });
 const summary = {
   id: inboundEmails.id,
   sender: inboundEmails.sender,
   subject: inboundEmails.subject,
   receivedAt: inboundEmails.receivedAt,
+  threadId: inboundEmails.threadId,
 };
 const maxResponseBytes = 4_000_000;
 const maxStoredCharacters = 200_000;
@@ -100,6 +108,7 @@ export function inboundMail(db: Database, config?: Config, request = fetch) {
           ...summary,
           body: inboundEmails.body,
           html: inboundEmails.html,
+          messageId: inboundEmails.messageId,
         })
         .from(inboundEmails)
         .where(
@@ -108,6 +117,18 @@ export function inboundMail(db: Database, config?: Config, request = fetch) {
         .limit(1);
       return email;
     },
+    thread: (id: string, thread: string) =>
+      db
+        .select(summary)
+        .from(inboundEmails)
+        .where(
+          and(
+            eq(inboundEmails.businessId, id),
+            eq(inboundEmails.threadId, thread),
+          ),
+        )
+        .orderBy(desc(inboundEmails.receivedAt), desc(inboundEmails.id))
+        .limit(50),
     register(app: FastifyInstance) {
       if (!config) return;
       app.register(async (hook) => {
@@ -181,18 +202,55 @@ export function inboundMail(db: Database, config?: Config, request = fetch) {
               email.email_id,
               request,
             );
+            const id = messageId.safeParse(
+              message.message_id ?? email.message_id,
+            );
+            const references = Object.entries(message.headers)
+              .filter(([key]) => /^(references|in-reply-to)$/iu.test(key))
+              .flatMap(([, value]) =>
+                [value]
+                  .flat()
+                  .flatMap((text) => text.match(/<[^<>\s]+>/gu) ?? []),
+              )
+              .filter((value) => messageId.safeParse(value).success)
+              .slice(-32);
+            const parents = references.length
+              ? await db
+                  .select({
+                    businessId: inboundEmails.businessId,
+                    threadId: inboundEmails.threadId,
+                  })
+                  .from(inboundEmails)
+                  .where(
+                    and(
+                      inArray(inboundEmails.businessId, remaining),
+                      inArray(inboundEmails.messageId, references),
+                    ),
+                  )
+                  .orderBy(
+                    desc(inboundEmails.receivedAt),
+                    desc(inboundEmails.id),
+                  )
+              : [];
             await db
               .insert(inboundEmails)
               .values(
-                remaining.map((businessId) => ({
-                  businessId,
-                  providerId: email.email_id,
-                  sender: email.from,
-                  subject: email.subject,
-                  body: message.text?.slice(0, maxStoredCharacters) ?? null,
-                  html: message.html?.slice(0, maxStoredCharacters) ?? null,
-                  receivedAt: new Date(email.created_at),
-                })),
+                remaining.map((businessId) => {
+                  const parent = parents.find(
+                    (row) => row.businessId === businessId,
+                  );
+                  return {
+                    businessId,
+                    ...(parent ? { threadId: parent.threadId } : {}),
+                    messageId: id.success ? id.data : null,
+                    providerId: email.email_id,
+                    sender: email.from,
+                    subject: email.subject,
+                    body: message.text?.slice(0, maxStoredCharacters) ?? null,
+                    html: message.html?.slice(0, maxStoredCharacters) ?? null,
+                    receivedAt: new Date(email.created_at),
+                  };
+                }),
               )
               .onConflictDoNothing({
                 target: [inboundEmails.providerId, inboundEmails.businessId],

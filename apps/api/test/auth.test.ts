@@ -396,6 +396,25 @@ test(
         ).statusCode,
         404,
       );
+      const fileSearch = `/api/companies/${studio}/work/files?q=studio%20only`;
+      const found = await server.inject({
+        url: fileSearch,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(found.statusCode, 200);
+      assert.equal(
+        found.json<{ files: { id: string }[] }>().files[0]?.id,
+        withFiles.attachments[0].id,
+      );
+      assert.equal(
+        (
+          await server.inject({
+            url: fileSearch,
+            headers: { cookie: separateCookie },
+          })
+        ).statusCode,
+        404,
+      );
       const earlier = await server.inject({
         url: chatUrl + '?before=' + withFiles.id,
         headers: { cookie: freshCookie },

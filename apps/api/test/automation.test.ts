@@ -56,6 +56,8 @@ test(
         .returning();
       assert.ok(otherBusiness);
       const emailId = randomUUID();
+      const replyId = randomUUID();
+      const rootMessageId = '<original@sender.example.test>';
       const signingKey = Buffer.alloc(32, 56);
       let retrievals = 0;
       const inbound = inboundMail(
@@ -66,6 +68,14 @@ test(
           secret: 'whsec_' + signingKey.toString('base64'),
         },
         async (url) => {
+          if (url === 'https://api.resend.com/emails/receiving/' + replyId) {
+            retrievals += 1;
+            return Response.json({
+              text: 'Fixture reply',
+              message_id: '<reply@sender.example.test>',
+              headers: { 'In-Reply-To': rootMessageId },
+            });
+          }
           assert.equal(
             url,
             'https://api.resend.com/emails/receiving/' + emailId,
@@ -73,7 +83,11 @@ test(
           retrievals += 1;
           return retrievals === 1
             ? Response.json({}, { status: 503 })
-            : Response.json({ text: 'A mailbox fixture.', html: null });
+            : Response.json({
+                text: 'A mailbox fixture.',
+                html: null,
+                message_id: rootMessageId,
+              });
         },
       );
       const server = Fastify();
@@ -105,7 +119,7 @@ test(
         const signature = createHmac('sha256', signingKey)
           .update(`${svixId}.${timestamp}.${payload}`)
           .digest('base64');
-        const inject = (raw: string) =>
+        const inject = (raw: string, sig = signature) =>
           server.inject({
             method: 'POST',
             url: '/api/webhooks/inbound-email',
@@ -113,7 +127,7 @@ test(
               'content-type': 'application/json',
               'svix-id': svixId,
               'svix-timestamp': timestamp,
-              'svix-signature': 'v1,' + signature,
+              'svix-signature': 'v1,' + sig,
             },
             payload: raw,
           });
@@ -140,6 +154,38 @@ test(
         assert.equal(
           (await inboundMail(db).list(business.id))[0]?.id,
           received.id,
+        );
+        const replyPayload = JSON.stringify({
+          type: 'email.received',
+          data: {
+            email_id: replyId,
+            created_at: '2026-11-17T01:05:00Z',
+            from: 'sender@example.test',
+            subject: 'Re: Fixture delivery',
+            to: [address],
+          },
+        });
+        const replySignature = createHmac('sha256', signingKey)
+          .update(`${svixId}.${timestamp}.${replyPayload}`)
+          .digest('base64');
+        assert.equal(
+          (await inject(replyPayload, replySignature)).statusCode,
+          200,
+        );
+        assert.equal(
+          (await inject(replyPayload, replySignature)).statusCode,
+          200,
+        );
+        assert.equal(retrievals, 3);
+        assert.deepEqual(
+          (await inbound.thread(business.id, received.threadId)).map(
+            (item) => item.subject,
+          ),
+          ['Re: Fixture delivery', 'Fixture delivery'],
+        );
+        assert.deepEqual(
+          await inbound.thread(otherBusiness.id, received.threadId),
+          [],
         );
       } finally {
         await server.close();
@@ -511,12 +557,53 @@ test(
       );
       assert.equal(await schedule.advance(clock()), null);
 
+      const recurringStart = new Date(time + 60_000);
+      await agent.saveArtifact(
+        {
+          businessId: business.id,
+          title: 'Recurring fixture',
+          body: 'Report',
+          kind: 'task',
+          dueAt: recurringStart,
+          recurrence: 'daily',
+        },
+        account.id,
+      );
+      time = recurringStart.getTime() + 2 * 86_400_000 + 1;
+      const executed = new Set<string>();
+      for (let day = 0; day < 3; day += 1) {
+        const occurrence = await schedule.advance(clock());
+        assert.ok(occurrence?.turnId);
+        assert.ok(!executed.has(occurrence.turnId));
+        executed.add(occurrence.turnId);
+        assert.equal(
+          (await taskAutomationStore(db).advance(clock()))?.turnId,
+          occurrence.turnId,
+        );
+        assert.match(
+          (await agent.readTurn(business.id, occurrence.turnId))?.prompt ?? '',
+          new RegExp(
+            new Date(recurringStart.getTime() + day * 86_400_000)
+              .toISOString()
+              .slice(0, 10),
+          ),
+        );
+        assert.ok(await agent.claimTurn(occurrence.turnId));
+        await agent.updateTurn(occurrence.turnId, {
+          state: 'completed',
+          answer: 'Done.',
+        });
+      }
+      assert.equal(await schedule.advance(clock()), null);
+
       const draft = await agent.saveArtifact({
         businessId: business.id,
         title: 'Hello',
         body: 'Approved message',
         kind: 'email',
         state: 'pending',
+        replyRecipient: 'hello@example.test',
+        replyMessageId: rootMessageId,
       });
       const mail = mailStore(db);
       const request = {
@@ -526,6 +613,7 @@ test(
         actorId: account.id,
         sender: 'owner@example.test',
         recipient: 'hello@example.test',
+        replyAddress: 'workspace@example.test',
       };
       assert.equal(await mail.queue(request), null);
       assert.ok(

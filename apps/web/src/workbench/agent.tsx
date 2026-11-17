@@ -47,6 +47,7 @@ type Artifact = {
   emailState?:
     'queued' | 'sending' | 'accepted' | 'failed' | 'needs_review' | null;
   emailRecipient?: string | null;
+  replyRecipient?: string | null;
   emailNote?: string | null;
 };
 const turnKey = (id: string) => ['company', id, 'turns'] as const;
@@ -588,7 +589,7 @@ export function WorkList({
     setError('');
     try {
       await write(root(id) + '/work/' + item.id + '/send-email', {
-        recipient,
+        recipient: item.replyRecipient ?? recipient,
         revision: item.revision,
       });
       await cache.invalidateQueries({ queryKey: workKey(id) });
@@ -1041,7 +1042,8 @@ export function WorkList({
                         type="email"
                         required
                         maxLength={254}
-                        value={recipient}
+                        value={selected.replyRecipient ?? recipient}
+                        readOnly={Boolean(selected.replyRecipient)}
                         onChange={(event) =>
                           setRecipient(event.currentTarget.value)
                         }

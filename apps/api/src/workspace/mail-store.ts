@@ -12,6 +12,8 @@ export type EmailAttempt = {
   recipient: string;
   subject: string;
   body: string;
+  replyTo?: string | null;
+  inReplyTo?: string | null;
   attempts: number;
   firstAttemptAt: Date;
 };
@@ -25,10 +27,16 @@ export function mailStore(db: Database) {
       actorId: string;
       sender: string;
       recipient: string;
+      replyAddress?: string | null;
     }) {
       return db.transaction(async (tx) => {
         const [draft] = await tx
-          .select({ subject: artifacts.title, body: artifacts.body })
+          .select({
+            subject: artifacts.title,
+            body: artifacts.body,
+            recipient: artifacts.replyRecipient,
+            inReplyTo: artifacts.replyMessageId,
+          })
           .from(artifacts)
           .where(
             and(
@@ -41,6 +49,11 @@ export function mailStore(db: Database) {
           )
           .for('no key update');
         if (!draft) return null;
+        if (
+          draft.recipient &&
+          (draft.recipient !== input.recipient || !input.replyAddress)
+        )
+          return null;
         const [created] = await tx
           .insert(outboundEmails)
           .values({
@@ -51,6 +64,9 @@ export function mailStore(db: Database) {
             recipient: input.recipient,
             subject: draft.subject,
             body: draft.body,
+            ...(draft.inReplyTo
+              ? { inReplyTo: draft.inReplyTo, replyTo: input.replyAddress }
+              : {}),
           })
           .onConflictDoNothing()
           .returning({ id: outboundEmails.id, state: outboundEmails.state });
@@ -149,6 +165,8 @@ export function mailStore(db: Database) {
           recipient: email.recipient,
           subject: email.subject,
           body: email.body,
+          replyTo: email.replyTo,
+          inReplyTo: email.inReplyTo,
           attempts,
           firstAttemptAt,
         };

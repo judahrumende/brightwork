@@ -16,6 +16,15 @@ export function resendMail(key: string, request = fetch) {
           to: [attempt.recipient],
           subject: attempt.subject,
           text: attempt.body,
+          ...(attempt.replyTo ? { reply_to: [attempt.replyTo] } : {}),
+          ...(attempt.inReplyTo
+            ? {
+                headers: {
+                  'In-Reply-To': attempt.inReplyTo,
+                  References: attempt.inReplyTo,
+                },
+              }
+            : {}),
         }),
         redirect: 'error',
         signal: AbortSignal.timeout(25_000),
