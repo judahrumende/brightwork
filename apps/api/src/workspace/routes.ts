@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { Queue } from 'bullmq';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
-import { websitePages, workNotificationKey } from '@brightwork/shared';
+import { websitePages } from '@brightwork/shared';
 import { siteHosting } from './publication';
 import {
   calendarEventTimes,
@@ -348,20 +348,41 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/notifications', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { before } = z
+        .object({
+          before: z.coerce.number().int().positive().optional(),
+        })
+        .parse(request.query);
+      return await store.notificationHistory(
+        access.accountId,
+        access.id,
+        before,
+      );
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.post(path + '/run/read', async (request, reply) => {
     try {
       requireOrigin(request);
       const access = await authorize(request, reply);
       if (!access) return;
-      const { keys } = z
-        .object({ keys: z.array(z.string().min(1).max(160)).max(200) })
+      const body = z
+        .union([
+          z.object({ all: z.literal(true) }).strict(),
+          z
+            .object({ keys: z.array(z.string().min(1).max(160)).max(200) })
+            .strict(),
+        ])
         .parse(request.body);
-      const summary = await store.workSummary(access.id);
-      const visible = new Set(summary.map(workNotificationKey));
       await store.markNotifications(
         access.accountId,
         access.id,
-        [...new Set(keys)].filter((key) => visible.has(key)),
+        'all' in body ? null : body.keys,
       );
       return {
         items: await store.readNotifications(access.accountId, access.id),

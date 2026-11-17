@@ -68,11 +68,37 @@ const growthDock = new Map<string, string>([
   ['Ads', 'ads'],
 ]);
 
-function Dock({ company }: { company: Company }) {
+const dockKinds: Partial<Record<string, WorkSummary['kind']>> = {
+  Outreach: 'email',
+  Build: 'website',
+  Messages: 'question',
+  Documents: 'document',
+  Schedule: 'task',
+};
+
+function Dock({
+  company,
+  items,
+  unavailable,
+}: {
+  company: Company;
+  items: readonly WorkSummary[] | undefined;
+  unavailable: boolean;
+}) {
   return (
     <nav className={styles.dock} aria-label="Workspace applications">
       {dock.map(([label, icon, color, section, view]) => {
         const tool = growthDock.get(label);
+        const work =
+          items?.filter((item) =>
+            label === 'Library'
+              ? ['document', 'memory'].includes(item.kind)
+              : item.kind === dockKinds[label],
+          ) ?? [];
+        const inRun = work.filter((item) => item.inRun);
+        const other = work.filter((item) => !item.inRun);
+        const tracksWork = label === 'Library' || Boolean(dockKinds[label]);
+        const destination = label === 'Outreach' ? 'inbox' : view;
         return label === 'Research' || tool ? (
           <a
             key={label}
@@ -93,9 +119,12 @@ function Dock({ company }: { company: Company }) {
             key={label}
             label={label}
             side="top"
-            width={label === 'Browser' ? 464 : 340}
+            width={340}
             trigger={
-              <button className={styles.dockButton}>
+              <button
+                className={styles.dockButton}
+                data-in-run={inRun.length > 0 || undefined}
+              >
                 <span style={{ backgroundColor: color }}>
                   <Icon name={icon} size={25} />
                 </span>
@@ -107,28 +136,54 @@ function Dock({ company }: { company: Company }) {
             {label === 'Settings' ? (
               <p>Open the account menu to adjust appearance and wallpaper.</p>
             ) : (
-              <EmptyState
-                icon={<Icon name={icon} size={38} />}
-                title={
-                  label === 'Browser'
-                    ? `${brand.agent} hasn’t used the browser yet`
-                    : `No ${section.toLowerCase()} yet`
-                }
-                description={
-                  label === 'Browser'
-                    ? `History will appear here after ${brand.agent} visits a page.`
-                    : undefined
-                }
-                action={
-                  view && (
-                    <Button asChild size="small" variant="secondary">
-                      <a href={workspacePath(company.id, view)}>
-                        Open {labels[view]}
-                      </a>
-                    </Button>
-                  )
-                }
-              />
+              <>
+                {work.length === 0 && (
+                  <EmptyState
+                    icon={<Icon name={icon} size={38} />}
+                    title={
+                      tracksWork && !items
+                        ? unavailable
+                          ? 'Saved work is unavailable'
+                          : 'Loading saved work…'
+                        : `No ${section.toLowerCase()} yet`
+                    }
+                  />
+                )}
+                {(
+                  [
+                    ['In Run', inRun],
+                    ['Recent work', other],
+                  ] as const
+                ).map(
+                  ([title, rows]) =>
+                    rows.length > 0 && (
+                      <section
+                        key={title}
+                        aria-label={title}
+                        className={styles.dockWork}
+                      >
+                        <h4>{title}</h4>
+                        <ul className={styles.activityLinks}>
+                          {rows.slice(0, 4).map((item) => (
+                            <li key={item.id}>
+                              <a href={artifactLink(company.id, item)}>
+                                {item.title}
+                                <Icon name="arrow" />
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ),
+                )}
+                {destination && (
+                  <Button asChild size="small" variant="secondary">
+                    <a href={workspacePath(company.id, destination)}>
+                      Open {labels[destination]}
+                    </a>
+                  </Button>
+                )}
+              </>
             )}
           </FloatingPanel>
         );
@@ -159,11 +214,13 @@ function Home({
   timezone,
   onSearch,
   items,
+  unavailable,
 }: {
   company: Company;
   timezone: string;
   onSearch: () => void;
   items: readonly WorkSummary[] | undefined;
+  unavailable: boolean;
 }) {
   const traffic = useTraffic(company.id);
   const pageViews = pageViewSeries(
@@ -204,7 +261,7 @@ function Home({
           <div className={styles.waiting}>
             <Mascot size={16} /> Ready when you are
           </div>
-          <Dock company={company} />
+          <Dock company={company} items={items} unavailable={unavailable} />
         </section>
         <PipActivity companyId={company.id} items={items} />
       </div>
@@ -294,14 +351,14 @@ function Search({
       <Dialog.Portal>
         <Dialog.Overlay className={styles.scrim} />
         <Dialog.Content className={styles.palette} aria-describedby={undefined}>
-          <Dialog.Title>Search workspace</Dialog.Title>
+          <Dialog.Title>Search your workspaces</Dialog.Title>
           <input
             aria-label="Search views and saved work"
             value={value}
             autoComplete="off"
             maxLength={120}
             onChange={(event) => setValue(event.currentTarget.value)}
-            placeholder={`Search ${company.name}`}
+            placeholder="Search views and saved work"
           />
           <nav aria-label="Search results">
             {matches.map((view) => (
@@ -491,11 +548,7 @@ export function Workbench({
               <Icon name="calendar" size={20} />
             </a>
           </Button>
-          <Notifications
-            companyId={company.id}
-            items={work.data?.items}
-            unavailable={work.isError}
-          />
+          <Notifications companyId={company.id} />
         </nav>
         <Profile session={session} />
       </header>
@@ -505,6 +558,7 @@ export function Workbench({
           timezone={timezone}
           onSearch={() => setSearch(true)}
           items={work.data?.items}
+          unavailable={work.isError}
         />
       ) : view === 'research' ? (
         <WebSearch

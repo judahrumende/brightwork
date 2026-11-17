@@ -21,7 +21,7 @@ const socialUser = z.object({
 });
 export type OAuthProvider = 'GoogleOAuth' | 'AppleOAuth';
 
-export function authProviders(env: AuthEnv) {
+export function authProviders(env: AuthEnv, request: typeof fetch = fetch) {
   const origin = new URL(env.APP_ORIGIN);
   const callback = new URL('/auth/callback', origin).href;
   const mail =
@@ -46,7 +46,7 @@ export function authProviders(env: AuthEnv) {
 
     async verifyHuman(token: string, ip: string) {
       if (!env.TURNSTILE_SECRET_KEY) return false;
-      const res = await fetch(
+      const res = await request(
         'https://challenges.cloudflare.com/turnstile/v0/siteverify',
         {
           method: 'POST',
@@ -109,7 +109,7 @@ export function authProviders(env: AuthEnv) {
       code: string,
       verifier: string,
     ): Promise<SocialIdentity> {
-      const res = await fetch(new URL('authenticate', workosUrl), {
+      const res = await request(new URL('authenticate', workosUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -70,6 +70,7 @@ export type WorkSummary = Pick<
   'id' | 'kind' | 'title' | 'state' | 'revision'
 > & {
   answered: boolean;
+  inRun?: boolean;
 };
 
 export function useWorkspaceSummary(id: string) {

@@ -150,7 +150,7 @@ test('Research explains rate limits and keeps the saved-work shortcut available'
   await expect(input).toHaveValue(question);
   await page.keyboard.press('Control+k');
   await expect(
-    page.getByRole('dialog', { name: 'Search workspace' }),
+    page.getByRole('dialog', { name: 'Search your workspaces' }),
   ).toBeVisible();
 });
 
