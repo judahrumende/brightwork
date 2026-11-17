@@ -169,6 +169,13 @@
       "when": 1794834000023,
       "tag": "0023_workspace_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794834000024,
+      "tag": "0024_stripe_billing",
+      "breakpoints": true
     }
   ]
 }

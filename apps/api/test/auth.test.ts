@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
@@ -14,11 +14,13 @@ import {
   agentTurns,
   artifacts,
   calendarEvents,
+  creditEntries,
   members,
   workspaceCredentials,
 } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
 import { domainStore } from '../src/workspace/domains';
+import { stripeBilling } from '../src/workspace/stripe-billing';
 
 const { TEST_DATABASE_URL, TEST_MAILPIT_URL, REDIS_URL } = process.env;
 const origin = 'http://127.0.0.1:5173';
@@ -786,6 +788,171 @@ test(
       assert.equal(await fixtureDNS.verify(other, domain.id), 'missing');
       assert.equal(await fixtureDNS.verify(studio, domain.id), 'verified');
       assert.ok((await domains.list(studio))[0]?.verifiedAt);
+
+      const stripeSecret = 'whsec_fixture_signature';
+      let stripeStatus = 'active';
+      let invoice = 'in_initial';
+      let refunded = false;
+      let scheduledCancellation = false;
+      let stripeReads = 0;
+      const stripe = stripeBilling(
+        database.db,
+        {
+          key: 'sk_test_fixture',
+          webhook: stripeSecret,
+          price: 'price_fixture',
+          origin,
+          renewalCredits: '5',
+        },
+        async (input, options) => {
+          const target = new URL(String(input));
+          assert.equal(target.origin, 'https://api.stripe.com');
+          assert.equal(
+            new Headers(options?.headers).get('Stripe-Version'),
+            '2024-10-28.acacia',
+          );
+          if (target.pathname === '/v1/customers')
+            return Response.json({ id: 'cus_fixture', livemode: false });
+          if (target.pathname === '/v1/checkout/sessions')
+            return Response.json({
+              url: 'https://checkout.stripe.com/c/pay/cs_test_fixture',
+            });
+          if (target.pathname === '/v1/billing_portal/sessions')
+            return Response.json({
+              url: 'https://billing.stripe.com/p/session/test_fixture',
+            });
+          assert.equal(target.pathname, '/v1/subscriptions');
+          assert.equal(target.searchParams.get('customer'), 'cus_fixture');
+          stripeReads += 1;
+          return Response.json({
+            data: [
+              {
+                id: 'sub_fixture',
+                created: 1,
+                status: stripeStatus,
+                current_period_end: Math.floor(Date.now() / 1000) + 3600,
+                cancel_at_period_end: scheduledCancellation,
+                items: { data: [{ price: { id: 'price_fixture' } }] },
+                latest_invoice: {
+                  id: invoice,
+                  amount_paid: 100,
+                  status: 'paid',
+                  charge: { refunded },
+                },
+              },
+            ],
+          });
+        },
+      );
+      const buyer = owner.companyList.userId;
+      assert.equal(
+        (await stripe.checkout(buyer, email))?.url,
+        'https://checkout.stripe.com/c/pay/cs_test_fixture',
+      );
+      assert.equal(
+        (await stripe.portal(buyer))?.url,
+        'https://billing.stripe.com/p/session/test_fixture',
+      );
+      const billingServer = Fastify();
+      try {
+        stripe.register(billingServer);
+        const deliver = (
+          id: string,
+          type: string,
+          invalid = false,
+          livemode = false,
+        ) => {
+          const timestamp = String(Math.floor(Date.now() / 1000));
+          const payload = JSON.stringify({
+            id,
+            type,
+            livemode,
+            data: { object: { customer: 'cus_fixture' } },
+          });
+          const hash = createHmac('sha256', stripeSecret)
+            .update(timestamp + '.' + payload)
+            .digest('hex');
+          return billingServer.inject({
+            method: 'POST',
+            url: '/api/webhooks/stripe',
+            headers: {
+              'content-type': 'application/json',
+              'stripe-signature': 't=' + timestamp + ',v1=' + hash,
+            },
+            payload: invalid ? payload + ' ' : payload,
+          });
+        };
+        assert.equal(
+          (await deliver('evt_failed', 'invoice.paid', true)).statusCode,
+          401,
+        );
+        assert.equal(
+          (await deliver('evt_live', 'invoice.paid', false, true)).statusCode,
+          200,
+        );
+        assert.equal(stripeReads, 0);
+        assert.equal(
+          (await deliver('evt_initial', 'customer.subscription.created'))
+            .statusCode,
+          200,
+        );
+        assert.equal((await stripe.read(buyer)).paid, true);
+        assert.equal(
+          (await deliver('evt_initial', 'customer.subscription.created'))
+            .statusCode,
+          200,
+        );
+        assert.equal(stripeReads, 1);
+        invoice = 'in_renewal';
+        assert.equal(
+          (await deliver('evt_renewal', 'invoice.paid')).statusCode,
+          200,
+        );
+        scheduledCancellation = true;
+        assert.equal(
+          (await deliver('evt_cancel_later', 'customer.subscription.updated'))
+            .statusCode,
+          200,
+        );
+        assert.equal((await stripe.read(buyer)).cancelAtPeriodEnd, true);
+        assert.equal((await stripe.read(buyer)).paid, true);
+        refunded = true;
+        assert.equal(
+          (await deliver('evt_refund', 'charge.refunded')).statusCode,
+          200,
+        );
+        assert.equal((await stripe.read(buyer)).state, 'refunded');
+        assert.equal((await stripe.read(buyer)).paid, false);
+        assert.equal(
+          (await deliver('evt_refund', 'charge.refunded')).statusCode,
+          200,
+        );
+        stripeStatus = 'canceled';
+        assert.equal(
+          (await deliver('evt_cancel', 'customer.subscription.deleted'))
+            .statusCode,
+          200,
+        );
+        assert.equal((await stripe.read(buyer)).state, 'canceled');
+        const entries = await database.db
+          .select({ kind: creditEntries.kind, amount: creditEntries.amount })
+          .from(creditEntries)
+          .where(eq(creditEntries.accountId, buyer));
+        assert.deepEqual(
+          entries
+            .filter(({ kind }) => kind === 'subscription')
+            .map(({ amount }) => amount),
+          ['5.0000000000', '5.0000000000'],
+        );
+        assert.deepEqual(
+          entries
+            .filter(({ kind }) => kind === 'refund')
+            .map(({ amount }) => amount),
+          ['-5.0000000000'],
+        );
+      } finally {
+        await billingServer.close();
+      }
     } finally {
       await server.close();
       await database.close();

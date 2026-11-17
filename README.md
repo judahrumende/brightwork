@@ -98,6 +98,7 @@ pnpm dev
 - Set `API_TRUST_PROXY` to the address or range of a deployment's trusted proxy if Fastify should use its forwarded client IP for auth rate limits.
 - Run `pnpm test:unit` for auth, LLM, recurrence, exact credit arithmetic, publication, SSE, and traffic range tests.
 - In **Workspace settings**, owners and admins can create email-bound team invitations. The recipient signs in using that address and accepts from Home. The vault requires a stable `VAULT_KEY` generated with `openssl rand -hex 32`. The Domains section verifies ownership against a DNS TXT record. Configure DNS and TLS separately before hosting sites.
+- Account **Billing** uses Stripe test mode. Configure `STRIPE_TEST_KEY`, `STRIPE_TEST_PRICE`, and `STRIPE_WEBHOOK_SECRET`, enable the test customer portal, and send subscription creation, change and deletion, invoice paid and failed, and charge-refunded events to `/api/webhooks/stripe`. Set `STRIPE_RENEWAL_CREDITS` to the credits granted per settled invoice. A full refund of the latest paid invoice reverses its credit grant and suspends paid entitlement until the provider reports a new paid entitlement.
 
 ## Standalone web search API
 

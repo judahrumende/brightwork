@@ -20,6 +20,7 @@ import { githubSiteSync } from '../workspace/github-site-sync';
 import { teamStore } from '../workspace/team';
 import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
+import { stripeBilling } from '../workspace/stripe-billing';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
 import { searxngEndpoint, searxngSearch } from '../research/searxng';
@@ -259,7 +260,18 @@ export function registerAuth(
 
   const workspace = agentStore(database.db);
   const team = teamStore(database.db);
+  const billing =
+    env.STRIPE_TEST_KEY && env.STRIPE_WEBHOOK_SECRET && env.STRIPE_TEST_PRICE
+      ? stripeBilling(database.db, {
+          key: env.STRIPE_TEST_KEY,
+          webhook: env.STRIPE_WEBHOOK_SECRET,
+          price: env.STRIPE_TEST_PRICE,
+          origin,
+          renewalCredits: env.STRIPE_RENEWAL_CREDITS,
+        })
+      : null;
   const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
+  billing?.register(app);
   registerGrowth(app, {
     env,
     db: database.db,
@@ -586,6 +598,7 @@ export function registerAuth(
       originTab(request);
       empty.parse(request.body);
       const { account, session } = await activeSession(request);
+      const currentBilling = await billing?.read(account.id);
       const browserLanguage = locale(request.headers['accept-language']);
       const browserTimezone = timezone(
         request.headers['x-brightwork-time-zone'] ??
@@ -620,15 +633,21 @@ export function registerAuth(
           userId: account.id,
           offers: [],
           access: {
-            state: 'free',
-            paid: false,
-            plan: null,
-            canSpend: false,
+            state: currentBilling?.paid ? 'paid' : 'free',
+            paid: currentBilling?.paid ?? false,
+            plan: currentBilling?.paid ? 'test-subscription' : null,
+            canSpend: currentBilling?.paid ?? false,
             canGrant: false,
             companyLimit: 1,
           },
-          subscription: null,
-          canOpenPortal: false,
+          subscription: currentBilling?.canOpenPortal
+            ? {
+                state: currentBilling.state,
+                periodEnd: currentBilling.periodEnd,
+                cancelAtPeriodEnd: currentBilling.cancelAtPeriodEnd,
+              }
+            : null,
+          canOpenPortal: currentBilling?.canOpenPortal ?? false,
           checkoutOffers: [],
           firstMonthOffer: null,
           packs: [],
@@ -658,6 +677,39 @@ export function registerAuth(
       return authError(error, reply);
     }
   });
+  app.get('/api/me/billing', async (request, reply) => {
+    try {
+      const { account } = await activeSession(request);
+      return billing
+        ? await billing.read(account.id)
+        : { enabled: false, state: 'free', paid: false };
+    } catch (error) {
+      return authError(error, reply);
+    }
+  });
+  for (const mode of ['checkout', 'portal'] as const) {
+    app.post('/api/me/billing/' + mode, async (request, reply) => {
+      try {
+        originTab(request);
+        const { account } = await activeSession(request);
+        if (!billing)
+          throw new AuthFailure(503, 'Stripe test billing is unavailable.');
+        await allow('billing-' + mode, account.id, 5, 60);
+        const result =
+          mode === 'checkout'
+            ? await billing.checkout(account.id, account.email)
+            : await billing.portal(account.id);
+        if (!result)
+          throw new AuthFailure(
+            409,
+            'Check the existing subscription before opening this billing action.',
+          );
+        return result;
+      } catch (error) {
+        return authError(error, reply);
+      }
+    });
+  }
   app.get('/api/me/credits', async (request, reply) => {
     try {
       return await credits.open((await activeSession(request)).account.id);
