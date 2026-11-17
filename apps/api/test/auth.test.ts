@@ -15,6 +15,7 @@ import {
   artifacts,
   calendarEvents,
   creditEntries,
+  inboundEmails,
   members,
   workspaceCredentials,
 } from '../src/db/schema';
@@ -31,6 +32,8 @@ test(
   async () => {
     assert.ok(TEST_DATABASE_URL && TEST_MAILPIT_URL && REDIS_URL);
     const fixture = randomUUID();
+    const providerEmail = randomUUID();
+    const attachmentId = randomUUID();
     const schema = 'auth_fixture_' + fixture.replaceAll('-', '');
     const url = new URL(TEST_DATABASE_URL);
     url.searchParams.set('search_path', schema);
@@ -126,6 +129,10 @@ test(
         authEnv.parse({
           APP_ORIGIN: origin,
           SHOPIFY_ENABLED: 'true',
+          INBOUND_EMAIL_DOMAIN: 'mail.example.test',
+          INBOUND_RESEND_API_KEY: 'fixture-inbound-key',
+          INBOUND_RESEND_WEBHOOK_SECRET:
+            'whsec_' + Buffer.alloc(32, 42).toString('base64'),
           VAULT_KEY: '05'.repeat(32),
           SITE_BASE_DOMAIN: 'sites.example.test',
           DATABASE_URL: url.href,
@@ -141,6 +148,26 @@ test(
         }),
         async (input, init) => {
           const target = String(input);
+          if (
+            target ===
+            'https://api.resend.com/emails/receiving/' +
+              providerEmail +
+              '/attachments/' +
+              attachmentId
+          ) {
+            return Response.json({
+              id: attachmentId,
+              size: 7,
+              download_url: 'https://inbound-cdn.resend.com/fixture',
+            });
+          }
+          if (target === 'https://inbound-cdn.resend.com/fixture') {
+            assert.equal(
+              new Headers(init?.headers).has('authorization'),
+              false,
+            );
+            return new Response('fixture');
+          }
           if (
             target ===
             'https://fixture.myshopify.com/admin/api/2026-10/graphql.json'
@@ -703,6 +730,37 @@ test(
         freshCookie,
       );
       assert.equal(rejectedImport.statusCode, 422);
+
+      const [inbound] = await database.db
+        .insert(inboundEmails)
+        .values({
+          businessId: studio,
+          providerId: providerEmail,
+          sender: 'sender@example.test',
+          subject: 'Fixture attachment',
+          receivedAt: new Date(),
+          attachments: [{ id: attachmentId, filename: 'fixture.txt' }],
+        })
+        .returning({ id: inboundEmails.id });
+      assert.ok(inbound);
+      const attachmentPath = `/api/companies/${studio}/work/inbound/${inbound.id}/attachments/${attachmentId}`;
+      const downloaded = await server.inject({
+        url: attachmentPath,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(downloaded.statusCode, 200);
+      assert.equal(
+        downloaded.headers['content-disposition'],
+        'attachment; filename="fixture.txt"',
+      );
+      assert.equal(downloaded.headers['cache-control'], 'no-store');
+      assert.equal(downloaded.headers['x-content-type-options'], 'nosniff');
+      assert.equal(downloaded.body, 'fixture');
+      const inaccessible = await server.inject({
+        url: attachmentPath.replace(studio, other),
+        headers: { cookie: separateCookie },
+      });
+      assert.equal(inaccessible.statusCode, 404);
 
       const settings = `/api/companies/${studio}/settings`;
       const outsider = await session(separateCookie);

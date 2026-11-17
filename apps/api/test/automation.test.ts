@@ -58,6 +58,10 @@ test(
       assert.ok(otherBusiness);
       const emailId = randomUUID();
       const replyId = randomUUID();
+      const attachmentId = randomUUID();
+      const attachmentBody = Buffer.from('synthetic attachment contents');
+      let attachmentReads = 0;
+      let unsafeAttachment = false;
       const rootMessageId = '<original@sender.example.test>';
       const signingKey = Buffer.alloc(32, 56);
       let retrievals = 0;
@@ -69,6 +73,29 @@ test(
           secret: 'whsec_' + signingKey.toString('base64'),
         },
         async (url) => {
+          if (
+            url ===
+            'https://api.resend.com/emails/receiving/' +
+              emailId +
+              '/attachments/' +
+              attachmentId
+          ) {
+            attachmentReads += 1;
+            return Response.json({
+              id: attachmentId,
+              size: attachmentBody.length,
+              download_url: unsafeAttachment
+                ? 'http://127.0.0.1/private'
+                : 'https://inbound-cdn.resend.com/example?signature=test',
+            });
+          }
+          if (
+            String(url) ===
+            'https://inbound-cdn.resend.com/example?signature=test'
+          ) {
+            attachmentReads += 1;
+            return new Response(attachmentBody);
+          }
           if (url === 'https://api.resend.com/emails/receiving/' + replyId) {
             retrievals += 1;
             return Response.json({
@@ -106,6 +133,7 @@ test(
               created_at: '2026-11-17T01:00:00.000123+00:00',
               from: 'Sender <sender@example.test>',
               subject: 'Fixture delivery',
+              attachments: [{ id: attachmentId, filename: 'fixture.pdf' }],
               to: [
                 address,
                 `Business <${address.toUpperCase()}>`,
@@ -156,6 +184,33 @@ test(
           (await inboundMail(db).list(business.id))[0]?.id,
           received.id,
         );
+        assert.deepEqual(
+          (await inbound.read(business.id, received.id))?.attachments,
+          [{ id: attachmentId, filename: 'fixture.pdf' }],
+        );
+        assert.equal(
+          await inbound.download(otherBusiness.id, received.id, attachmentId),
+          null,
+        );
+        assert.equal(
+          await inbound.download(business.id, received.id, randomUUID()),
+          null,
+        );
+        assert.equal(attachmentReads, 0);
+        assert.deepEqual(
+          await inbound.download(business.id, received.id, attachmentId),
+          {
+            filename: 'fixture.pdf',
+            body: attachmentBody,
+          },
+        );
+        assert.equal(attachmentReads, 2);
+        unsafeAttachment = true;
+        assert.equal(
+          await inbound.download(business.id, received.id, attachmentId),
+          null,
+        );
+        assert.equal(attachmentReads, 3);
         const replyPayload = JSON.stringify({
           type: 'email.received',
           data: {

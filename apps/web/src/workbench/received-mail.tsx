@@ -16,6 +16,7 @@ type Message = MailSummary & {
   body: string | null;
   html: string | null;
   messageId?: string | null;
+  attachments?: { id: string; filename: string }[];
 };
 
 export function ReceivedMail({
@@ -119,6 +120,23 @@ export function ReceivedMail({
                 <WebsitePreview title="Email body" html={email.html} />
               ) : (
                 <p>This message has no body.</p>
+              )}
+              {Boolean(email.attachments?.length) && (
+                <section aria-label="Email attachments">
+                  <h4>Attachments</h4>
+                  <ul>
+                    {email.attachments?.map((file) => (
+                      <li key={file.id}>
+                        <a
+                          href={`${base}/${email.id}/attachments/${file.id}`}
+                          download
+                        >
+                          {file.filename}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
               {(message.data?.thread?.length ?? 0) > 1 && (
                 <section aria-label="Messages in this thread">

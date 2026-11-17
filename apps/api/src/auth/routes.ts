@@ -352,6 +352,7 @@ export function registerAuth(
           secret: env.INBOUND_RESEND_WEBHOOK_SECRET,
         }
       : undefined,
+    providerRequest,
   );
   inbound.register(app);
   if (env.OUTREACH_RESEND_WEBHOOK_SECRET)

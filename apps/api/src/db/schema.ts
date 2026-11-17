@@ -380,6 +380,10 @@ export const inboundEmails = pgTable(
       .notNull()
       .references(() => businesses.id, { onDelete: 'cascade' }),
     providerId: uuid('provider_id').notNull(),
+    attachments: jsonb()
+      .$type<{ id: string; filename: string }[]>()
+      .notNull()
+      .default([]),
     messageId: text('message_id'),
     threadId: uuid('thread_id').defaultRandom().notNull(),
     sender: text().notNull(),

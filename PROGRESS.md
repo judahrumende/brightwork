@@ -1,5 +1,21 @@
 # Brightwork progress
 
+## Current release status
+
+The baseline and lockfile are in private GitHub. GitHub Actions installs from the frozen lockfile, starts disposable Postgres, Redis, MinIO and Mailpit, applies migrations, and runs the build, contract checks, unit tests, database fixtures and browser tests before milestone merges. The foundation notes below describe the original offline session.
+
+| Area                          | Verified in CI                                                                                                                         | Still open                                                                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account and Home              | Mailpit email code and magic link, simulated WorkOS Google and Apple callbacks, workspace isolation, dock and notifications            | Live OAuth and provider verification                                                                                                                           |
+| Pip                           | Run history, pause and resume, owner questions, duplicate jobs, approvals, budget exhaustion, paginated chat, text files and dictation | Live research and speech verification                                                                                                                          |
+| Build                         | Revision-scoped approval, public and preview host separation, deployment rollback and GitHub sync fixtures                             | Real subdomain publishing and rollback in staging, additional editing and parity states                                                                        |
+| Schedule, Inbox and Library   | Recurring execution across restarts, calendar editing, scoped search, inbound threading, approved replies and delivery history         | Event triggers and live Resend verification                                                                                                                    |
+| Account settings and commerce | Roles, invitations, vault, domains, notification preferences, Stripe test fixtures and Shopify order fixtures                          | Stripe Connect, referrals and live provider verification                                                                                                       |
+| Insights and channels         | Visitor sessions and sources, partial Growth tools                                                                                     | Sales and customer dashboards, location data, two-way SMS, social replies and connection lifecycle, approved ads budget verification, separately metered media |
+| Foundable parity              | 86 numbered captures, 147 observed API pairs and 70 referenced paths inventoried                                                       | Remaining screenshots and contract investigation, staging API replay, responsive and accessibility acceptance                                                  |
+
+Railway reported an expired trial on project creation. Staging acceptance remains pending until there is an active Railway environment. See [the parity inventory](docs/parity-inventory.md) for capture coverage.
+
 ## 1. Foundation
 
 Status — Implemented and checked in an offline browser build. The normal runtime, pixel-diff report and milestone commit are pending.
@@ -66,17 +82,3 @@ Status — Implemented and checked in an offline browser build. The normal runti
 - Added a local HAR replay command. A synthetic fixture verified schema matching, read-only replay, explicit fixture mutations and mapping captured UUIDs to local fixture records. Full replay against Brightwork is pending.
 - The staging PostgreSQL test covers paused and restarted Runs, single-revision publication, schedule dispatch, email leasing and accessible search. It now also includes a signed Fastify webhook fixture and received-message workspace isolation. This environment has neither the required package cache nor a running fixture database.
 - Dependency installation fails at npm registry DNS. The offline dependency cache lacks required packages. Docker Compose is unavailable, PostgreSQL startup was denied shared memory, and the sandbox denies Git index writes. The full runtime, screenshot diffs and milestone commits require those capabilities.
-
-## Remaining milestones
-
-- [ ] 2. Auth and account
-- [ ] 3. Shell and Home
-- [ ] 4. Agent core
-- [ ] 5. Build
-- [ ] 6. Library, Schedule and Inbox
-- [ ] 7. Settings modal
-- [ ] 8. Insights and Visitors
-- [ ] 9. Marketing site
-- [ ] 10. Polish pass
-
-Continue with the unimplemented items above. Run the full foundation and subsequent milestone checks and commit when the environment permits.
