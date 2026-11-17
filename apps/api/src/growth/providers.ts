@@ -110,7 +110,7 @@ export function metaAds(id: string, token: string, request = fetch) {
         spend,
       };
     },
-    async setStatus(campaignId: string, newStatus: z.infer<typeof status>) {
+    async pause(campaignId: string) {
       const id = metaId.parse(campaignId);
       const current = z
         .object({ account_id: metaId, status: z.string() })
@@ -133,7 +133,7 @@ export function metaAds(id: string, token: string, request = fetch) {
           token,
           {
             method: 'POST',
-            body: new URLSearchParams({ status: status.parse(newStatus) }),
+            body: new URLSearchParams({ status: 'PAUSED' }),
           },
           request,
         ),

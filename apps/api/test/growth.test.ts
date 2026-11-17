@@ -30,18 +30,20 @@ test('Meta campaign controls enforce account ownership and avoid archived campai
   let status = 'PAUSED';
   const ads = metaAds('50', 'ads-token', async (_url, init) => {
     calls.push(init?.method ?? 'GET');
+    if (init?.method === 'POST')
+      assert.equal(String(init.body), 'status=PAUSED');
     return Response.json(
       init?.method === 'POST'
         ? { success: true }
         : { account_id: account, status },
     );
   });
-  assert.equal(await ads.setStatus('11', 'ACTIVE'), false);
+  assert.equal(await ads.pause('11'), false);
   account = '50';
   status = 'ARCHIVED';
-  assert.equal(await ads.setStatus('11', 'ACTIVE'), false);
+  assert.equal(await ads.pause('11'), false);
   status = 'PAUSED';
-  assert.equal(await ads.setStatus('11', 'ACTIVE'), true);
+  assert.equal(await ads.pause('11'), true);
   assert.deepEqual(calls, ['GET', 'GET', 'GET', 'POST']);
 });
 
@@ -77,6 +79,8 @@ test('workspace gates prevent cross-workspace access, unapproved origins and vie
       GROWTH_WORKSPACE_ID: id,
       GROWTH_META_PAGE_ID: '50',
       GROWTH_META_PAGE_TOKEN: 'test',
+      GROWTH_META_AD_ACCOUNT_ID: '50',
+      GROWTH_META_AD_TOKEN: 'test',
     }),
     db: {} as Database,
     store: {
@@ -110,6 +114,14 @@ test('workspace gates prevent cross-workspace access, unapproved origins and vie
   assert.equal((await app.inject({ ...options, headers: {} })).statusCode, 403);
   assert.equal((await app.inject(options)).statusCode, 200);
   assert.equal(saved, 1);
+  role = 'owner';
+  const activation = await app.inject({
+    ...options,
+    url: `/api/companies/${id}/growth/ads/11/status`,
+    payload: { status: 'ACTIVE', accountId: '50' },
+  });
+  assert.equal(activation.statusCode, 409);
+  assert.match(activation.json().message, /activation is disabled/i);
   allowed = false;
   assert.equal(
     (await app.inject(`/api/companies/${id}/growth`)).statusCode,
