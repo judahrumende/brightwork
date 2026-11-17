@@ -509,12 +509,56 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       const { resource } = resourceParams.parse(request.params);
       const email = await context.inbound.read(access.id, resource);
       if (!email) return reply.code(404).send({ message: 'Email not found.' });
-      return { email };
+      return {
+        email,
+        thread: await context.inbound.thread(access.id, email.threadId),
+      };
     } catch (error) {
       return reportError(error, reply);
     }
   });
 
+  app.post(
+    path + '/work/inbound/:resource/reply-draft',
+    async (request, reply) => {
+      try {
+        const access = await authorize(request, reply, true);
+        if (!access) return;
+        const { resource } = resourceParams.parse(request.params);
+        const { body } = z
+          .object({ body: z.string().trim().min(1).max(8000) })
+          .parse(request.body);
+        const email = await context.inbound.read(access.id, resource);
+        if (!email)
+          return reply.code(404).send({ message: 'Email not found.' });
+        const address =
+          /^[^<>]*<([^<>]+)>$/u.exec(email.sender)?.[1] ?? email.sender;
+        const recipient = z.email().safeParse(address.trim());
+        if (!recipient.success || !email.messageId)
+          return reply.code(409).send({
+            message: 'This email does not have a reply address and message ID.',
+          });
+        const title = (
+          /^Re:/iu.test(email.subject) ? email.subject : 'Re: ' + email.subject
+        )
+          .replace(/[\r\n]+/gu, ' ')
+          .trim()
+          .slice(0, 160);
+        const item = await store.saveArtifact({
+          businessId: access.id,
+          kind: 'email',
+          state: 'pending',
+          title: title || 'Re: Your message',
+          body,
+          replyRecipient: recipient.data,
+          replyMessageId: email.messageId,
+        });
+        return reply.code(201).send({ item: { id: item.id } });
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    },
+  );
   app.get(path + '/work/summary', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
@@ -535,6 +579,18 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
           items: items.map((item) => describeWork(item, now)),
         };
       }
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/work/files', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { q } = z
+        .object({ q: z.string().trim().max(160).default('') })
+        .parse(request.query);
+      return { files: await store.listFiles(access.id, q) };
     } catch (error) {
       return reportError(error, reply);
     }
@@ -637,6 +693,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         sender: context.outreachSender,
         recipient,
         revision,
+        replyAddress: context.inbound.address(access.id),
       });
       if (!email)
         return reply.code(409).send({
@@ -856,6 +913,39 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         businessId: access.id,
       });
       return reply.code(201).send({ event });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.patch(path + '/schedule/events/:resource', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const { start, end, ...draft } = eventDraft.parse(request.body);
+      const dates = calendarEventTimes(start, end, draft.timezone);
+      if (!dates)
+        return reply.code(400).send({
+          message: 'Choose valid local times and an end after the start.',
+        });
+      const event = await store.updateCalendarEvent(access.id, resource, {
+        ...draft,
+        ...dates,
+      });
+      if (!event) return reply.code(404).send({ message: 'Event not found.' });
+      return { event };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.delete(path + '/schedule/events/:resource', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      if (!(await store.removeCalendarEvent(access.id, resource)))
+        return reply.code(404).send({ message: 'Event not found.' });
+      return { deleted: true };
     } catch (error) {
       return reportError(error, reply);
     }

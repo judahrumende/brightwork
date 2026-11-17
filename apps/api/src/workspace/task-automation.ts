@@ -104,7 +104,7 @@ export function taskAutomationStore(db: Database) {
           task.dueAt,
           task.recurrence,
           task.timezone,
-          new Date(now.getTime() + 1),
+          new Date(automation.nextAt.getTime() + 1),
           1,
         );
         const [created] = await tx

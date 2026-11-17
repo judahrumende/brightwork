@@ -21,6 +21,7 @@ import { usePreferences, usePresence, workspacePath } from './session';
 import { pageViewSeries } from './traffic-series';
 import { Runs } from './runs';
 import { ReceivedMail } from './received-mail';
+import { WorkspaceFiles } from './workspace-files';
 import { WebSearch } from './web-search';
 import { Growth } from './growth';
 import { useTraffic, Visitors } from './visitors';
@@ -433,8 +434,10 @@ function View({
               key={company.id}
               id={company.id}
               timezone={timezone}
+              editable={company.role !== 'viewer'}
             />
           )}
+          {kind === 'library' && <WorkspaceFiles companyId={company.id} />}
           <WorkList
             id={company.id}
             role={company.role}

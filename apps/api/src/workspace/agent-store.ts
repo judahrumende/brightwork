@@ -229,6 +229,31 @@ export function agentStore(db: Database) {
         before: rows.length > size ? (page.at(-1)?.id ?? null) : null,
       };
     },
+    async listFiles(businessId: string, query: string) {
+      const pattern = '%' + query.replace(/[\\%_]/gu, '\\$&') + '%';
+      return db
+        .select({
+          id: chatAttachments.id,
+          name: chatAttachments.name,
+          turnId: chatAttachments.turnId,
+          createdAt: agentTurns.createdAt,
+        })
+        .from(chatAttachments)
+        .innerJoin(agentTurns, eq(chatAttachments.turnId, agentTurns.id))
+        .where(
+          and(
+            eq(agentTurns.businessId, businessId),
+            query
+              ? or(
+                  ilike(chatAttachments.name, pattern),
+                  ilike(chatAttachments.content, pattern),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(agentTurns.createdAt), desc(chatAttachments.id))
+        .limit(100);
+    },
     async attachments(
       businessId: string,
       turnId: string,
@@ -429,7 +454,12 @@ export function agentStore(db: Database) {
             task.dueAt,
             task.recurrence,
             task.scheduleTimezone,
-            now,
+            new Date(
+              Math.max(
+                now.getTime(),
+                (existing?.lastScheduledAt?.getTime() ?? 0) + 1,
+              ),
+            ),
             1,
           );
           if (!next) return false;
@@ -549,6 +579,35 @@ export function agentStore(db: Database) {
     },
     async createCalendarEvent(input: typeof calendarEvents.$inferInsert) {
       const [event] = await db.insert(calendarEvents).values(input).returning();
+      return event;
+    },
+    async updateCalendarEvent(
+      businessId: string,
+      id: string,
+      patch: Omit<typeof calendarEvents.$inferInsert, 'id' | 'businessId'>,
+    ) {
+      const [event] = await db
+        .update(calendarEvents)
+        .set(patch)
+        .where(
+          and(
+            eq(calendarEvents.businessId, businessId),
+            eq(calendarEvents.id, id),
+          ),
+        )
+        .returning();
+      return event;
+    },
+    async removeCalendarEvent(businessId: string, id: string) {
+      const [event] = await db
+        .delete(calendarEvents)
+        .where(
+          and(
+            eq(calendarEvents.businessId, businessId),
+            eq(calendarEvents.id, id),
+          ),
+        )
+        .returning({ id: calendarEvents.id });
       return event;
     },
     async markNotifications(

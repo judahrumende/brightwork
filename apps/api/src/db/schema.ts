@@ -263,6 +263,8 @@ export const artifacts = pgTable('workspace_artifacts', {
     .default('draft'),
   revision: integer().notNull().default(1),
   answer: text(),
+  replyRecipient: text('reply_recipient'),
+  replyMessageId: text('reply_message_id'),
   answeredAt: date('answered_at'),
   dueAt: date('due_at'),
   recurrence: text({ enum: ['once', 'daily', 'weekly', 'monthly'] })
@@ -323,6 +325,8 @@ export const inboundEmails = pgTable(
       .notNull()
       .references(() => businesses.id, { onDelete: 'cascade' }),
     providerId: uuid('provider_id').notNull(),
+    messageId: text('message_id'),
+    threadId: uuid('thread_id').defaultRandom().notNull(),
     sender: text().notNull(),
     subject: text().notNull(),
     body: text(),
@@ -350,6 +354,8 @@ export const outboundEmails = pgTable(
     }),
     revision: integer().notNull(),
     recipient: text().notNull(),
+    replyTo: text('reply_to'),
+    inReplyTo: text('in_reply_to'),
     sender: text().notNull(),
     subject: text().notNull(),
     body: text().notNull(),

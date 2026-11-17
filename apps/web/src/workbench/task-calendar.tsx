@@ -1,4 +1,4 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../auth/client';
 import { Icon } from '../ui/icons';
@@ -37,6 +37,7 @@ export function TaskCalendar({
   onCreate: (() => void) | undefined;
   onList: () => void;
 }) {
+  const cache = useQueryClient();
   const [mode, setMode] = useState<CalendarMode>('month');
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
   const eventOrigin = useRef<HTMLElement | null>(null);
@@ -338,6 +339,14 @@ export function TaskCalendar({
       {selected && (
         <CalendarEventDetails
           event={selected}
+          companyId={companyId}
+          editable={Boolean(onCreate)}
+          onChanged={async (event) => {
+            await cache.invalidateQueries({
+              queryKey: ['company', companyId, 'work', 'schedule'],
+            });
+            setSelected(event);
+          }}
           onClose={() => setSelected(null)}
           restoreFocus={() => eventOrigin.current?.focus()}
         />
