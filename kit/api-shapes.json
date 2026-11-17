@@ -1,0 +1,4218 @@
+{
+  "observed": [
+    {
+      "method": "GET",
+      "path": "/",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/landing-test",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "arm": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/google/one-tap",
+      "statuses": {
+        "200": 5
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "clientId": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/pricing",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/billing/plans",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "offers": [
+          {
+            "id": "string",
+            "name": "string",
+            "catalogVersion": "string",
+            "termsVersion": "string",
+            "cadence": "string",
+            "interval": "string",
+            "currency": "string",
+            "amountMinor": "number",
+            "credits": "string",
+            "companyLimit": "number",
+            "perks": [
+              "string"
+            ],
+            "features": [
+              "string"
+            ],
+            "creditsRollOver": "boolean",
+            "dailyCredits": "string"
+          }
+        ],
+        "free": {
+          "welcomeCredits": "string",
+          "dailyCredits": "string",
+          "dailyCreditsPerMonth": "string",
+          "companyLimit": "number",
+          "firstWebsiteFree": "boolean"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/security",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/sign-in",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": [
+        "returnTo"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/email/code",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "humanCheck": {
+          "provider": "string",
+          "siteKey": "string"
+        },
+        "signals": {
+          "provider": "string",
+          "clientId": "string"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/sign-up",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": [
+        "returnTo"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/websites",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/selling-online",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/run",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/marketing",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/ads",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/social-media",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/videos",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/email",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/phone",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/get-found",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/integrations",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/blog",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/small-businesses",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/creators",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/solutions/side-projects",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/ideas",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/about",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/careers",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/press",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/contact",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/email/code",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {
+        "email": "string",
+        "humanCheck": "string",
+        "signals": "string"
+      },
+      "responseSchema": {
+        "sent": "boolean",
+        "attempt": "string",
+        "link": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/email/verify",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {
+        "email": "string",
+        "code": "string",
+        "attempt": "string"
+      },
+      "responseSchema": {
+        "signedIn": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/home",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/session",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {},
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "language": "string",
+        "background": "string",
+        "adSharing": "boolean",
+        "assistantAddress": "string",
+        "session": {
+          "provider": "string",
+          "subject": "string",
+          "sessionId": "string",
+          "name": "string",
+          "email": "string",
+          "googleAccount": "null"
+        },
+        "companyList": {
+          "userId": "string(uuid)",
+          "companies": [
+            {
+              "id": "string(uuid)",
+              "name": "string",
+              "onboardingCompletedAt": "string(datetime)",
+              "planUpdatedAt": "string(datetime)",
+              "role": "string"
+            }
+          ],
+          "owned": "number",
+          "lastOpened": "string(uuid)"
+        },
+        "creditBalance": {
+          "userId": "string(uuid)",
+          "available": "string"
+        },
+        "billing": {
+          "userId": "string(uuid)",
+          "offers": [
+            {
+              "id": "string",
+              "name": "string",
+              "catalogVersion": "string",
+              "termsVersion": "string",
+              "cadence": "string",
+              "interval": "string",
+              "currency": "string",
+              "amountMinor": "number",
+              "credits": "string",
+              "companyLimit": "number",
+              "perks": [
+                "string"
+              ],
+              "features": [
+                "string"
+              ],
+              "creditsRollOver": "boolean",
+              "dailyCredits": "string"
+            }
+          ],
+          "access": {
+            "state": "string",
+            "paid": "boolean",
+            "plan": "null",
+            "canSpend": "boolean",
+            "canGrant": "boolean",
+            "companyLimit": "number"
+          },
+          "subscription": "null",
+          "canOpenPortal": "boolean",
+          "checkoutOffers": [
+            "string"
+          ],
+          "firstMonthOffer": {
+            "percent": "number",
+            "endsAt": "string(datetime)",
+            "through": "string(datetime)",
+            "prices": {
+              "standard_200_monthly_v2": "number",
+              "pro_500_monthly_v2": "number",
+              "pro_1k_monthly_v2": "number",
+              "max_2500_monthly_v2": "number",
+              "max_5k_monthly_v3": "number",
+              "max_10k_monthly_v3": "number"
+            }
+          },
+          "packs": [],
+          "creditIncreases": [],
+          "periodEndChanges": [],
+          "adsWallArm": "string",
+          "publishableKey": "string"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/profile",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "profile": {
+          "name": "null",
+          "timezone": "null",
+          "avatar": "null",
+          "language": "null",
+          "browserLanguage": "string",
+          "browserTimezone": "string",
+          "background": "string"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/support/session",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {},
+      "responseSchema": {
+        "appId": "string",
+        "apiBase": "string",
+        "userId": "string(uuid)",
+        "companyId": "null",
+        "intercomUserJwt": "string",
+        "expiresAt": "number",
+        "expiresInMs": "number"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/billing/credits",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "available": "string",
+        "plan": {
+          "credits": "string",
+          "left": "string",
+          "refillsAt": "string(datetime)",
+          "period": "string"
+        },
+        "daily": "null",
+        "carriedOver": "null",
+        "bonus": {
+          "credits": "string",
+          "left": "string",
+          "expiresAt": "null"
+        },
+        "purchased": "null",
+        "dailyPerMonth": "string",
+        "freeDay": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/chats",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "conversations": [
+          {
+            "id": "string(uuid)",
+            "updatedAt": "string(datetime)",
+            "title": "string"
+          }
+        ]
+      },
+      "queryParams": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/config",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "model": "string",
+        "tools": [
+          "string"
+        ],
+        "capabilities": {
+          "buildCreate": "boolean",
+          "buildImageReferences": "boolean",
+          "buildCatalogReferences": "boolean",
+          "automaticSetup": "boolean",
+          "messageQueue": "boolean",
+          "workspaceFiles": "boolean",
+          "dictation": "boolean",
+          "freeChat": "boolean"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/tours",
+      "statuses": {
+        "0": 1,
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "progress": {
+          "enrolled": "boolean",
+          "seen": [
+            "string"
+          ],
+          "at": {}
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/:id/opened",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {},
+      "responseSchema": {
+        "userId": "string(uuid)"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations",
+      "statuses": {
+        "200": 52
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creations": [
+          {
+            "id": "string(uuid)",
+            "title": "string",
+            "kind": "string",
+            "createdAt": "string(datetime)",
+            "updatedAt": "string(datetime)",
+            "currentVersionId": "string(uuid)",
+            "currentChangeId": "string(uuid)",
+            "undidTextEdit": "null",
+            "appWorkspaceId": "string(uuid)",
+            "pages": [
+              {
+                "path": "string",
+                "state": "string"
+              }
+            ],
+            "publication": {
+              "hostname": "string",
+              "url": "string",
+              "hostnameChosen": "boolean",
+              "revision": "number",
+              "published": "boolean",
+              "releaseId": "string",
+              "publishedVersionId": "string(uuid)",
+              "publishedAt": "string(datetime)",
+              "operationId": "string(uuid)",
+              "badgeHidden": "boolean",
+              "visitorAnalytics": "boolean",
+              "pending": "null"
+            },
+            "publicationCapability": {
+              "available": "boolean",
+              "currentVersion": "string"
+            },
+            "thumbnail": {
+              "url": "string",
+              "width": "number",
+              "height": "number",
+              "sha256": "string"
+            }
+          }
+        ],
+        "nextCursor": "null",
+        "logoRevision": "number"
+      },
+      "queryParams": [
+        "source"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/build/active-runs",
+      "statuses": {
+        "200": 7,
+        "304": 48
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "builds": [
+          {
+            "run": {
+              "buildId": "string(uuid)",
+              "creationId": "string(uuid)",
+              "revision": "number",
+              "action": "string",
+              "status": "string",
+              "phase": "string",
+              "summary": "string",
+              "origin": {
+                "turnId": "string(uuid)",
+                "toolCallId": "string"
+              },
+              "timeline": [
+                {
+                  "at": "string",
+                  "phase": "string",
+                  "status": "string",
+                  "summary": "string",
+                  "revision": "number"
+                }
+              ],
+              "result": "null",
+              "error": "null"
+            },
+            "chatId": "string(uuid)",
+            "unattended": "boolean"
+          }
+        ],
+        "line": [
+          {
+            "id": "string(uuid)",
+            "kind": "string",
+            "creationId": "string(uuid)",
+            "website": "string",
+            "title": "string",
+            "asker": "string",
+            "holds": "boolean",
+            "own": "boolean"
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/payments/account",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "state": "string",
+        "ready": "boolean",
+        "checkedAt": "null",
+        "countries": {
+          "US": [
+            "string"
+          ],
+          "AE": [
+            "string"
+          ],
+          "AT": [
+            "string"
+          ],
+          "AU": [
+            "string"
+          ],
+          "BE": [
+            "string"
+          ],
+          "BG": [
+            "string"
+          ],
+          "BR": [
+            "string"
+          ],
+          "CA": [
+            "string"
+          ],
+          "CH": [
+            "string"
+          ],
+          "CY": [
+            "string"
+          ],
+          "CZ": [
+            "string"
+          ],
+          "DE": [
+            "string"
+          ],
+          "DK": [
+            "string"
+          ],
+          "EE": [
+            "string"
+          ],
+          "ES": [
+            "string"
+          ],
+          "FI": [
+            "string"
+          ],
+          "FR": [
+            "string"
+          ],
+          "GB": [
+            "string"
+          ],
+          "GI": [
+            "string"
+          ],
+          "GR": [
+            "string"
+          ],
+          "HK": [
+            "string"
+          ],
+          "HR": [
+            "string"
+          ],
+          "HU": [
+            "string"
+          ],
+          "IE": [
+            "string"
+          ],
+          "IT": [
+            "string"
+          ],
+          "JP": [
+            "string"
+          ],
+          "LI": [
+            "string"
+          ],
+          "LT": [
+            "string"
+          ],
+          "LU": [
+            "string"
+          ],
+          "LV": [
+            "string"
+          ],
+          "MT": [
+            "string"
+          ],
+          "MX": [
+            "string"
+          ],
+          "MY": [
+            "string"
+          ],
+          "NL": [
+            "string"
+          ],
+          "NO": [
+            "string"
+          ],
+          "NZ": [
+            "string"
+          ],
+          "PL": [
+            "string"
+          ],
+          "PT": [
+            "string"
+          ],
+          "RO": [
+            "string"
+          ],
+          "SE": [
+            "string"
+          ],
+          "SG": [
+            "string"
+          ],
+          "SI": [
+            "string"
+          ],
+          "SK": [
+            "string"
+          ],
+          "TH": [
+            "string"
+          ]
+        },
+        "clockCountry": "string",
+        "planRequired": "boolean",
+        "testMode": "boolean",
+        "testPublishableKey": "string",
+        "onboardingPublishableKey": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/visitors",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "hostname": "string",
+        "range": "string",
+        "bucket": "string",
+        "totals": {
+          "visits": "number",
+          "pageViews": "number",
+          "viewsPerVisit": "number",
+          "visitDuration": "number",
+          "bounceRate": "number"
+        },
+        "series": [
+          {
+            "start": "string(datetime)",
+            "visits": "number",
+            "pageViews": "number",
+            "viewsPerVisit": "number",
+            "visitDuration": "number",
+            "bounceRate": "number"
+          }
+        ],
+        "sources": [],
+        "pages": [],
+        "devices": [],
+        "countries": [],
+        "cities": [],
+        "currentVisitors": "number",
+        "aiReads": []
+      },
+      "queryParams": [
+        "range",
+        "site",
+        "timezone"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/insights",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "accounts": [],
+        "readAt": "string(datetime)",
+        "refreshedAt": "null",
+        "refresh": {
+          "state": "string",
+          "reason": "string",
+          "provider": "null"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ai",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "enabled": "boolean",
+        "modelsInPlan": "boolean",
+        "websites": [
+          {
+            "creationId": "string(uuid)",
+            "status": "string",
+            "dailyLimit": "string",
+            "today": {
+              "answers": "number",
+              "credits": "string"
+            },
+            "lastSevenDays": {
+              "answers": "number",
+              "credits": "string"
+            },
+            "days": [],
+            "model": {
+              "id": "string",
+              "picked": "null"
+            },
+            "pictures": {
+              "quality": "string",
+              "picked": "null"
+            }
+          }
+        ],
+        "models": {
+          "default": "string",
+          "choices": [
+            {
+              "id": "string",
+              "name": "string",
+              "goodAt": "string",
+              "creditsPerAnswer": "string",
+              "featured": "boolean",
+              "retires": "null"
+            }
+          ]
+        },
+        "pictures": {
+          "model": {
+            "id": "string",
+            "name": "string"
+          },
+          "default": "string",
+          "choices": [
+            {
+              "quality": "string",
+              "creditsPerPicture": "string"
+            }
+          ]
+        },
+        "creditsLow": "boolean"
+      },
+      "queryParams": [
+        "website"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/read",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": [
+          {
+            "key": "string",
+            "readAt": "string(datetime)"
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/workspace",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "workspace": {
+          "selectedChannels": [
+            "string"
+          ],
+          "channels": {},
+          "settings": {
+            "budget": "number",
+            "pace": "string"
+          },
+          "preferences": {},
+          "updatedAt": "null"
+        },
+        "policy": {
+          "mode": "string",
+          "updatedAt": "null",
+          "tier": "string",
+          "inEffect": "string",
+          "tiers": [
+            "string"
+          ],
+          "videos": "boolean",
+          "ads": "boolean",
+          "filmed": "boolean",
+          "videoProviders": [
+            "string"
+          ]
+        },
+        "primarySite": {
+          "pick": "null",
+          "working": "string(uuid)"
+        },
+        "ownerLines": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/capabilities",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "readiness": "string",
+        "reasons": [
+          "string"
+        ],
+        "managedAds": "boolean",
+        "platforms": [
+          {
+            "platform": "string",
+            "connect": "boolean",
+            "publish": "boolean",
+            "ownerApproves": "boolean",
+            "autoReplies": "boolean",
+            "inbox": [
+              "string"
+            ]
+          }
+        ],
+        "polling": {
+          "pollAfterMs": "number"
+        },
+        "rewrites": "boolean",
+        "tedReplies": "boolean",
+        "pictures": "boolean",
+        "destinations": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/accounts",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/posts",
+      "statuses": {
+        "200": 13
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": [],
+        "nextCursor": "null"
+      },
+      "queryParams": [
+        "limit",
+        "waiting"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/inbox/drafts",
+      "statuses": {
+        "200": 13
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": [],
+        "nextCursor": "null"
+      },
+      "queryParams": [
+        "limit",
+        "waiting"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/integrations/drafts",
+      "statuses": {
+        "200": 7
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "drafts": []
+      },
+      "queryParams": [
+        "state"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/site-care/changes",
+      "statuses": {
+        "200": 7
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "changes": [
+          {
+            "creationId": "string(uuid)",
+            "versionId": "string(uuid)",
+            "baseVersionId": "string(uuid)",
+            "title": "string",
+            "handedOver": {
+              "why": "string",
+              "page": "string"
+            },
+            "edits": [],
+            "savedAt": "string(datetime)",
+            "standing": "string",
+            "previewUrl": "string",
+            "previewFallback": {
+              "url": "string"
+            },
+            "pictures": {
+              "state": "string",
+              "page": "string",
+              "window": {
+                "width": "number",
+                "height": "number"
+              },
+              "before": {
+                "url": "string",
+                "width": "number",
+                "height": "number"
+              },
+              "after": {
+                "url": "string",
+                "width": "number",
+                "height": "number"
+              },
+              "marks": {
+                "before": [],
+                "after": [
+                  {
+                    "x": "number",
+                    "y": "number",
+                    "full": "boolean",
+                    "kind": "string",
+                    "label": "string",
+                    "width": "number",
+                    "height": "number",
+                    "radius": "number"
+                  }
+                ]
+              },
+              "elsewhere": "number"
+            }
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/asked-changes/waiting",
+      "statuses": {
+        "200": 7
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "changes": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/app-email/issues/waiting",
+      "statuses": {
+        "200": 7
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "issues": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/replies",
+      "statuses": {
+        "200": 7
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": [],
+        "nextCursor": "null"
+      },
+      "queryParams": [
+        "limit",
+        "waiting"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/ads",
+      "statuses": {
+        "200": 8
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "ads": []
+      },
+      "queryParams": [
+        "all",
+        "managed",
+        "waiting"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/social/provider-actions",
+      "statuses": {
+        "200": 7
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "actions": []
+      },
+      "queryParams": [
+        "state"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/video/renders",
+      "statuses": {
+        "200": 6
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": [],
+        "nextCursor": "null"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/product-assets",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "status": "string",
+        "site": {
+          "creationId": "string(uuid)",
+          "title": "string",
+          "kind": "string",
+          "live": "boolean",
+          "versionId": "string(uuid)",
+          "capture": "null"
+        },
+        "assets": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/inbox",
+      "statuses": {
+        "0": 3,
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "state": "string",
+        "mailbox": {
+          "address": "string",
+          "displayName": "string"
+        },
+        "setUpAt": "string(datetime)",
+        "homeDomain": "string",
+        "ownDomain": "null",
+        "sender": "string",
+        "ownEmail": "null",
+        "domainConnect": "string",
+        "replyDrafting": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/phone",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "state": "string",
+        "offer": "string",
+        "choice": "null",
+        "yourPhone": "null",
+        "textTedPhone": "null"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/schedule/runs",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": [],
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/schedule/updates",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "updates": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/companies/requests",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "requests": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/:id/ted/next-steps/business",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {
+        "wait": "boolean"
+      },
+      "responseSchema": {
+        "value": {
+          "suggestions": [
+            {
+              "label": "string",
+              "prompt": "string",
+              "why": "string",
+              "kind": "string",
+              "gets": "string",
+              "detail": "string",
+              "steps": [
+                "string"
+              ],
+              "marks": [
+                "string"
+              ]
+            }
+          ],
+          "list": "string(uuid)",
+          "cards": [
+            "string"
+          ],
+          "places": [
+            "string"
+          ]
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/logo/versions",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "companyId": "string(uuid)",
+        "versions": [
+          {
+            "id": "string",
+            "title": "string",
+            "createdAt": "string(datetime)"
+          }
+        ],
+        "nextCursor": "null",
+        "selectedId": "string",
+        "selectedLogo": "string",
+        "selectedBacking": "string",
+        "revision": "number",
+        "publishedRevision": "number"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "company": {
+          "id": "string(uuid)",
+          "name": "string",
+          "tagline": "null",
+          "timezone": "null",
+          "currency": "null",
+          "logoUpdatedAt": "string(datetime)",
+          "mission": "string",
+          "idea": "string",
+          "onboardingCompletedAt": "string(datetime)",
+          "firstWork": "string",
+          "existingSiteUrl": "null",
+          "existingSiteCover": "null",
+          "planUpdatedAt": "string(datetime)",
+          "role": "string"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ads-wallet",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "currency": "string",
+        "availableMinor": "number",
+        "reservedMinor": "number",
+        "spentMinor": "number",
+        "fundingAvailable": "boolean",
+        "canSpend": "boolean",
+        "canAddFunds": "boolean",
+        "hasHistory": "boolean",
+        "unavailableReason": "string",
+        "funding": {
+          "minMinor": "number",
+          "maxMinor": "number",
+          "defaultMinor": "number",
+          "choicesMinor": [
+            "number"
+          ],
+          "consentVersion": "string"
+        },
+        "topUps": [],
+        "grants": [],
+        "recoveries": [],
+        "publishableKey": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/build/website-waits",
+      "statuses": {
+        "0": 3,
+        "200": 35
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "websites": [],
+        "unscanned": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/site-domain",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "access": "string",
+        "addressRecord": "string",
+        "siteLive": "boolean",
+        "setup": "string",
+        "domains": [],
+        "served": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/files",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "savedAt": "string(datetime)",
+        "paths": [],
+        "files": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/directions",
+      "statuses": {
+        "200": 84
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "sessionId": "string",
+        "directions": [],
+        "held": {
+          "why": "string",
+          "since": "string(datetime)"
+        },
+        "aim": {
+          "kind": "string",
+          "title": "string"
+        },
+        "sprint": {
+          "goals": [
+            {
+              "id": "string",
+              "goal": "string",
+              "status": "string"
+            }
+          ],
+          "items": [
+            {
+              "id": "string",
+              "goal": "string",
+              "kind": "string",
+              "status": "string",
+              "why": "string"
+            }
+          ]
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/session",
+      "statuses": {
+        "200": 84
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "session": {
+          "id": "string(uuid)",
+          "chatId": "string(uuid)",
+          "state": "string",
+          "ending": "null",
+          "startedAt": "string(datetime)"
+        },
+        "passes": {
+          "id": "string(uuid)",
+          "turns": [
+            {
+              "id": "string(uuid)",
+              "text": "string",
+              "label": "string",
+              "parts": [
+                {
+                  "at": "string(datetime)",
+                  "id": "string",
+                  "name": "string",
+                  "type": "string",
+                  "input": {
+                    "list": [
+                      {
+                        "id": "string",
+                        "why": "string",
+                        "goal": "string",
+                        "kind": "string",
+                        "made": "null",
+                        "status": "string",
+                        "bigGoal": "string"
+                      }
+                    ],
+                    "note": "string",
+                    "website": "null",
+                    "bigGoals": "null"
+                  },
+                  "output": {
+                    "list": [
+                      {
+                        "id": "string",
+                        "goal": "string",
+                        "status": "string",
+                        "bigGoal": "string"
+                      }
+                    ],
+                    "status": "string",
+                    "bigGoals": [
+                      {
+                        "id": "string",
+                        "goal": "string",
+                        "status": "string"
+                      }
+                    ]
+                  },
+                  "status": "string",
+                  "toolCallId": "string"
+                }
+              ],
+              "status": "string",
+              "revision": "number",
+              "createdAt": "string(datetime)",
+              "startedAt": "string(datetime)",
+              "updatedAt": "string(datetime)",
+              "finishedAt": "string(datetime)",
+              "userMessageId": "string(uuid)",
+              "assistantMessageId": "string(uuid)",
+              "usage": {
+                "credits": "string",
+                "durationMs": "number",
+                "settlement": "string",
+                "inputTokens": "number",
+                "memoryReads": "number",
+                "webSearches": "number",
+                "outputTokens": "number",
+                "websiteReads": "number",
+                "knowledgeReads": "number",
+                "pricingVersion": "string",
+                "videoSandboxMs": "number",
+                "embeddingTokens": "number",
+                "cacheWriteTokens": "number",
+                "desktopSandboxMs": "number",
+                "narrationSeconds": "number",
+                "cachedInputTokens": "number",
+                "monidMicroDollars": "number",
+                "zernioMicroDollars": "number",
+                "transcriptionSeconds": "number"
+              }
+            }
+          ]
+        },
+        "questions": {
+          "sessionId": "string",
+          "questions": [
+            {
+              "id": "string",
+              "kind": "string",
+              "question": "string",
+              "why": "string",
+              "instead": "string",
+              "askedAt": "string(datetime)"
+            }
+          ],
+          "files": "boolean"
+        }
+      },
+      "queryParams": [
+        "passes",
+        "questions",
+        "report"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/tasks",
+      "statuses": {
+        "200": 25
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "tasks": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/chats/:id",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "id": "string(uuid)",
+        "turns": [
+          {
+            "id": "string(uuid)",
+            "text": "string",
+            "parts": [
+              {
+                "at": "string(datetime)",
+                "id": "string",
+                "note": "boolean",
+                "text": "string",
+                "type": "string",
+                "name": "string",
+                "input": {
+                  "label": "string",
+                  "query": "string",
+                  "country": "string"
+                },
+                "output": {
+                  "status": "string",
+                  "sources": [
+                    {
+                      "url": "string",
+                      "title": "string",
+                      "snippet": "string",
+                      "publishedAt": "string"
+                    }
+                  ]
+                },
+                "status": "string",
+                "toolCallId": "string",
+                "progress": {
+                  "steps": [],
+                  "written": {
+                    "idea": "string",
+                    "name": "string",
+                    "mission": "string"
+                  }
+                }
+              }
+            ],
+            "status": "string",
+            "revision": "number",
+            "createdAt": "string(datetime)",
+            "startedAt": "string(datetime)",
+            "updatedAt": "string(datetime)",
+            "finishedAt": "string(datetime)",
+            "userMessageId": "string(uuid)",
+            "assistantMessageId": "string(uuid)",
+            "composerPrediction": "string",
+            "composerPredictionGeneration": "number",
+            "usage": {
+              "credits": "string",
+              "durationMs": "number",
+              "settlement": "string",
+              "inputTokens": "number",
+              "memoryReads": "number",
+              "webSearches": "number",
+              "outputTokens": "number",
+              "websiteReads": "number",
+              "knowledgeReads": "number",
+              "pricingVersion": "string",
+              "videoSandboxMs": "number",
+              "embeddingTokens": "number",
+              "cacheWriteTokens": "number",
+              "desktopSandboxMs": "number",
+              "narrationSeconds": "number",
+              "cachedInputTokens": "number",
+              "monidMicroDollars": "number",
+              "zernioMicroDollars": "number",
+              "transcriptionSeconds": "number"
+            }
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/chats/:id/queue",
+      "statuses": {
+        "0": 3,
+        "200": 2,
+        "304": 40
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "chatId": "string(uuid)",
+        "revision": "number",
+        "paused": "boolean",
+        "items": [],
+        "turn": {
+          "id": "string(uuid)",
+          "text": "string",
+          "parts": [
+            {
+              "at": "string(datetime)",
+              "id": "string",
+              "note": "boolean",
+              "text": "string",
+              "type": "string",
+              "name": "string",
+              "input": {
+                "label": "string",
+                "query": "string",
+                "country": "string"
+              },
+              "output": {
+                "status": "string",
+                "sources": [
+                  {
+                    "url": "string",
+                    "title": "string",
+                    "snippet": "string",
+                    "publishedAt": "string"
+                  }
+                ]
+              },
+              "status": "string",
+              "toolCallId": "string",
+              "progress": {
+                "steps": [],
+                "written": {
+                  "idea": "string",
+                  "name": "string",
+                  "mission": "string"
+                }
+              }
+            }
+          ],
+          "status": "string",
+          "revision": "number",
+          "createdAt": "string(datetime)",
+          "startedAt": "string(datetime)",
+          "updatedAt": "string(datetime)",
+          "finishedAt": "string(datetime)",
+          "userMessageId": "string(uuid)",
+          "assistantMessageId": "string(uuid)",
+          "composerPrediction": "string",
+          "composerPredictionGeneration": "number",
+          "usage": {
+            "credits": "string",
+            "durationMs": "number",
+            "settlement": "string",
+            "inputTokens": "number",
+            "memoryReads": "number",
+            "webSearches": "number",
+            "outputTokens": "number",
+            "websiteReads": "number",
+            "knowledgeReads": "number",
+            "pricingVersion": "string",
+            "videoSandboxMs": "number",
+            "embeddingTokens": "number",
+            "cacheWriteTokens": "number",
+            "desktopSandboxMs": "number",
+            "narrationSeconds": "number",
+            "cachedInputTokens": "number",
+            "monidMicroDollars": "number",
+            "zernioMicroDollars": "number",
+            "transcriptionSeconds": "number"
+          }
+        },
+        "turnSequence": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/workspace/files/limit",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "fileSizeLimit": "number",
+        "yours": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/earlier",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "chats": [
+          "string(uuid)"
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/build/runs",
+      "statuses": {
+        "0": 5,
+        "200": 7,
+        "304": 41
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "runs": [
+          {
+            "buildId": "string(uuid)",
+            "creationId": "string(uuid)",
+            "revision": "number",
+            "action": "string",
+            "status": "string",
+            "phase": "string",
+            "summary": "string",
+            "origin": {
+              "turnId": "string(uuid)",
+              "toolCallId": "string"
+            },
+            "timeline": [
+              {
+                "at": "string",
+                "phase": "string",
+                "status": "string",
+                "summary": "string",
+                "revision": "number"
+              }
+            ],
+            "result": {
+              "versionId": "string(uuid)",
+              "sourceHash": "string",
+              "builderReport": {
+                "summary": "string"
+              },
+              "images": {
+                "styled": "boolean",
+                "offered": "boolean",
+                "generated": "number"
+              },
+              "facts": {
+                "files": {
+                  "added": [
+                    "string"
+                  ],
+                  "counts": {
+                    "added": "number",
+                    "changed": "number",
+                    "removed": "number"
+                  },
+                  "changed": [
+                    "string"
+                  ],
+                  "removed": [
+                    "string"
+                  ]
+                },
+                "pages": [
+                  {
+                    "path": "string",
+                    "state": "string"
+                  }
+                ],
+                "checks": "string",
+                "pagesChanged": [
+                  "string"
+                ],
+                "secretsMissing": []
+              },
+              "siteResult": {
+                "made": [
+                  {
+                    "what": "string",
+                    "mustHave": "string"
+                  }
+                ],
+                "ideas": [
+                  "string"
+                ],
+                "later": [],
+                "checks": [
+                  {
+                    "id": "string",
+                    "note": "null",
+                    "outcome": "string"
+                  }
+                ],
+                "notMade": [
+                  {
+                    "why": "string",
+                    "what": "string",
+                    "mustHave": "null"
+                  }
+                ],
+                "picture": {
+                  "reason": "null",
+                  "outcome": "string"
+                },
+                "version": "number",
+                "couldNotCheck": [
+                  {
+                    "why": "string",
+                    "what": "string"
+                  }
+                ],
+                "missingSettings": []
+              }
+            },
+            "error": "null"
+          }
+        ],
+        "pulled": []
+      },
+      "queryParams": [
+        "chatId"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/schedule/occurrences",
+      "statuses": {
+        "200": 12
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "occurrences": [],
+        "days": [],
+        "calendarEvents": [],
+        "items": [],
+        "posts": [],
+        "clock": "boolean",
+        "truncated": "boolean"
+      },
+      "queryParams": [
+        "from",
+        "limit",
+        "to"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/site-icon",
+      "statuses": {
+        "200": 6,
+        "404": 1
+      },
+      "responseTypes": [
+        "application/json",
+        "image/jpeg",
+        "image/png",
+        "image/x-icon"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "error": {
+          "code": "string",
+          "message": "string"
+        }
+      },
+      "queryParams": [
+        "origin"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/presence",
+      "statuses": {
+        "200": 12
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {},
+      "responseSchema": {
+        "userId": "string(uuid)"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/unattended/:id",
+      "statuses": {
+        "200": 9,
+        "304": 71
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "id": "string(uuid)",
+        "turns": [
+          {
+            "id": "string(uuid)",
+            "text": "string",
+            "label": "string",
+            "parts": [
+              {
+                "at": "string(datetime)",
+                "id": "string",
+                "name": "string",
+                "type": "string",
+                "input": {
+                  "list": [
+                    {
+                      "id": "string",
+                      "why": "string",
+                      "goal": "string",
+                      "kind": "string",
+                      "made": "string(uuid)",
+                      "status": "string",
+                      "bigGoal": "string"
+                    }
+                  ],
+                  "note": "string",
+                  "website": "null",
+                  "bigGoals": [
+                    {
+                      "id": "string",
+                      "met": "string",
+                      "goal": "string",
+                      "status": "string"
+                    }
+                  ]
+                },
+                "output": {
+                  "list": [
+                    {
+                      "id": "string",
+                      "goal": "string",
+                      "status": "string",
+                      "bigGoal": "string"
+                    }
+                  ],
+                  "status": "string",
+                  "bigGoals": [
+                    {
+                      "id": "string",
+                      "goal": "string",
+                      "status": "string"
+                    }
+                  ]
+                },
+                "status": "string",
+                "toolCallId": "string"
+              }
+            ],
+            "status": "string",
+            "revision": "number",
+            "createdAt": "string(datetime)",
+            "startedAt": "string(datetime)",
+            "updatedAt": "string(datetime)",
+            "finishedAt": "string(datetime)",
+            "userMessageId": "string(uuid)",
+            "assistantMessageId": "string(uuid)",
+            "usage": {
+              "credits": "string",
+              "durationMs": "number",
+              "settlement": "string",
+              "inputTokens": "number",
+              "memoryReads": "number",
+              "webSearches": "number",
+              "outputTokens": "number",
+              "websiteReads": "number",
+              "knowledgeReads": "number",
+              "pricingVersion": "string",
+              "videoSandboxMs": "number",
+              "embeddingTokens": "number",
+              "cacheWriteTokens": "number",
+              "desktopSandboxMs": "number",
+              "narrationSeconds": "number",
+              "cachedInputTokens": "number",
+              "monidMicroDollars": "number",
+              "zernioMicroDollars": "number",
+              "transcriptionSeconds": "number"
+            }
+          }
+        ]
+      },
+      "queryParams": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/questions",
+      "statuses": {
+        "200": 82
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "sessionId": "string",
+        "questions": [
+          {
+            "id": "string",
+            "kind": "string",
+            "question": "string",
+            "why": "string",
+            "instead": "string",
+            "askedAt": "string(datetime)",
+            "answer": {
+              "text": "string",
+              "files": "number",
+              "at": "string(datetime)"
+            }
+          }
+        ],
+        "files": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/inbox/threads",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "threads": [
+          {
+            "id": "string(uuid)",
+            "subject": "string",
+            "preview": "string",
+            "senders": [
+              "string"
+            ],
+            "recipients": [
+              "string"
+            ],
+            "labels": [
+              "string"
+            ],
+            "timestamp": "string(datetime)",
+            "messageCount": "number",
+            "attachments": [],
+            "fromTed": "boolean",
+            "latestMessageRead": "boolean"
+          }
+        ],
+        "nextCursor": "null"
+      },
+      "queryParams": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/inbox/sent",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "items": [
+          {
+            "operation": {
+              "id": "string(uuid)",
+              "facts": [
+                "string"
+              ],
+              "state": "string",
+              "reason": "null",
+              "draftId": "string(uuid)",
+              "delivery": [
+                {
+                  "facts": [
+                    "string"
+                  ],
+                  "recipient": "string"
+                }
+              ],
+              "revision": "number",
+              "retryUntil": "string",
+              "recallGuaranteed": "boolean"
+            },
+            "unattended": "boolean",
+            "from": "string",
+            "to": [
+              "string"
+            ],
+            "subject": "string",
+            "preview": "string",
+            "submittedAt": "string(datetime)",
+            "threadId": "string(uuid)",
+            "toName": "string"
+          }
+        ],
+        "nextCursor": "null"
+      },
+      "queryParams": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/inbox/changes",
+      "statuses": {
+        "0": 1,
+        "200": 43
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "revision": "string"
+      },
+      "queryParams": [
+        "seen"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/build/settings",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "ultra": "boolean",
+        "runUltra": "boolean",
+        "ultraOffered": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/notification-preferences",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "preferences": {
+          "signals": "string",
+          "texts": "string",
+          "quietHours": {
+            "enabled": "boolean",
+            "start": "string",
+            "end": "string"
+          },
+          "emailPopups": "boolean",
+          "socialPopups": "boolean",
+          "briefEmails": "boolean",
+          "milestoneUpdates": "boolean",
+          "productGuidance": "boolean",
+          "replyEmails": "boolean",
+          "scheduledTaskEmails": "boolean",
+          "emailAnswers": "boolean",
+          "productUpdates": "boolean",
+          "allEmails": "boolean"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/computer/waits",
+      "statuses": {
+        "200": 31
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "waits": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/credits/receipts",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "receipts": [
+          {
+            "id": "string(uuid)",
+            "kind": "string",
+            "credits": "string",
+            "createdAt": "string(datetime)",
+            "reason": "string"
+          }
+        ],
+        "nextCursor": {
+          "createdAt": "string(datetime)",
+          "id": "string(uuid)"
+        }
+      },
+      "queryParams": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/credits/usage",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "timeZone": "string",
+        "days": [
+          {
+            "day": "string",
+            "credits": {}
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/workspace/files/folder",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "bytes": "number",
+        "limit": "number",
+        "state": "string",
+        "yours": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/domains",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "store": "string",
+        "purchase": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/integrations",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "integrations": [
+          {
+            "id": "string",
+            "connection": "null"
+          }
+        ],
+        "mayManage": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/members",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "companyId": "string(uuid)",
+        "members": [
+          {
+            "userId": "string(uuid)",
+            "role": "string",
+            "name": "null",
+            "email": "null",
+            "joinedAt": "string(datetime)"
+          }
+        ],
+        "imported": [],
+        "invitations": [],
+        "links": [],
+        "teammates": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/members/spend",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "companyId": "string(uuid)",
+        "timeZone": "string",
+        "people": [
+          {
+            "userId": "string(uuid)",
+            "credits": "string"
+          }
+        ],
+        "ted": "string",
+        "foundable": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/computer/vault",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "accounts": [],
+        "openForMs": "null",
+        "mayOpen": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/billing/referrals",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "status": "string",
+        "signUpDue": "boolean",
+        "url": "string",
+        "shareText": "string",
+        "available": "boolean",
+        "creditsPerFriend": "number",
+        "friendsPerDay": "number",
+        "friends": [],
+        "upgradeEarnsBoth": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/domains",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "purchase": "string",
+        "foundables": [
+          {
+            "companyId": "string(uuid)",
+            "name": "string",
+            "orders": [],
+            "registrations": [],
+            "site": {
+              "domains": [],
+              "served": [],
+              "siteLive": "boolean"
+            }
+          }
+        ],
+        "deletedFoundables": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/deleted-creations",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "websites": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/git/connections",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "sync": "string",
+        "connections": [],
+        "mayManage": "boolean",
+        "authorized": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/text",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "companyId": "string(uuid)",
+        "available": "boolean",
+        "linePhone": "string",
+        "code": "string",
+        "linked": "boolean",
+        "consent": "boolean",
+        "href": "string",
+        "qrSvg": "string",
+        "emailSupported": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/companies/logos",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "logos": [
+          {
+            "companyId": "string(uuid)",
+            "logo": "string",
+            "backing": "string"
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/versions",
+      "statuses": {
+        "0": 1,
+        "200": 5
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "versions": [
+          {
+            "id": "string(uuid)",
+            "versionNumber": "number",
+            "savedAt": "string(datetime)",
+            "title": "string",
+            "parentVersionId": "string(uuid)",
+            "revertedFromId": "null",
+            "origin": {
+              "chatId": "string(uuid)",
+              "turnId": "string(uuid)"
+            },
+            "bookmarked": "boolean",
+            "previewable": "boolean"
+          }
+        ],
+        "nextCursor": "null"
+      },
+      "queryParams": [
+        "view"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/domains/orders",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "orders": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/domains/registrations",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "registrations": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/undone",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "headVersionId": "string(uuid)",
+        "undone": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/unattended/:id/turns/:id/events",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "text/event-stream"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/credits",
+      "statuses": {
+        "200": 4
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "available": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/page-pictures",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "versionId": "string(uuid)",
+        "pages": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/files/page",
+      "statuses": {
+        "0": 1,
+        "200": 2,
+        "304": 1
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "files": [],
+        "nextCursor": "null",
+        "counts": {
+          "all": "number",
+          "pictures": "number",
+          "videos": "number",
+          "documents": "number"
+        },
+        "pictures": [],
+        "savedAt": "string(datetime)"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/build/runs/:id",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "run": {
+          "buildId": "string(uuid)",
+          "creationId": "string(uuid)",
+          "revision": "number",
+          "action": "string",
+          "status": "string",
+          "phase": "string",
+          "summary": "string",
+          "origin": {
+            "turnId": "string(uuid)",
+            "toolCallId": "string"
+          },
+          "timeline": [
+            {
+              "at": "string",
+              "phase": "string",
+              "status": "string",
+              "summary": "string",
+              "revision": "number"
+            }
+          ],
+          "result": {
+            "versionId": "string(uuid)",
+            "sourceHash": "string",
+            "builderReport": {
+              "summary": "string"
+            },
+            "images": {
+              "styled": "boolean",
+              "offered": "boolean",
+              "generated": "number"
+            },
+            "facts": {
+              "files": {
+                "added": [],
+                "counts": {
+                  "added": "number",
+                  "changed": "number",
+                  "removed": "number"
+                },
+                "changed": [
+                  "string"
+                ],
+                "removed": []
+              },
+              "pages": [
+                {
+                  "path": "string",
+                  "state": "string"
+                }
+              ],
+              "secretsMissing": []
+            },
+            "credits": "string",
+            "siteResult": {
+              "made": [
+                {
+                  "what": "string",
+                  "mustHave": "null"
+                }
+              ],
+              "ideas": [],
+              "later": [],
+              "checks": [
+                {
+                  "id": "string",
+                  "note": "null",
+                  "outcome": "string"
+                }
+              ],
+              "notMade": [
+                {
+                  "why": "string",
+                  "what": "string",
+                  "mustHave": "null"
+                }
+              ],
+              "version": "number",
+              "couldNotCheck": [
+                {
+                  "why": "string",
+                  "what": "string"
+                }
+              ],
+              "missingSettings": []
+            }
+          },
+          "error": "null"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/:id/run/read",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {
+        "keys": [
+          "string"
+        ]
+      },
+      "responseSchema": {
+        "items": [
+          {
+            "key": "string",
+            "readAt": "string(datetime)"
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/site-care/:id",
+      "statuses": {
+        "200": 5
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "change": {
+          "creationId": "string(uuid)",
+          "versionId": "string(uuid)",
+          "baseVersionId": "string(uuid)",
+          "title": "string",
+          "handedOver": {
+            "why": "string",
+            "page": "string"
+          },
+          "edits": [],
+          "savedAt": "string(datetime)",
+          "standing": "string",
+          "previewUrl": "string",
+          "previewFallback": {
+            "url": "string"
+          },
+          "pictures": {
+            "state": "string",
+            "page": "string",
+            "window": {
+              "width": "number",
+              "height": "number"
+            },
+            "before": {
+              "url": "string",
+              "width": "number",
+              "height": "number"
+            },
+            "after": {
+              "url": "string",
+              "width": "number",
+              "height": "number"
+            },
+            "marks": {
+              "before": [],
+              "after": [
+                {
+                  "x": "number",
+                  "y": "number",
+                  "full": "boolean",
+                  "kind": "string",
+                  "label": "string",
+                  "width": "number",
+                  "height": "number",
+                  "radius": "number"
+                }
+              ]
+            },
+            "elsewhere": "number"
+          }
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/f/:id/build",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/preview-server",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "versionId": "string(uuid)",
+        "state": "string",
+        "live": {
+          "state": "string",
+          "revision": "null"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/preview",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creation": {
+          "id": "string(uuid)",
+          "title": "string",
+          "currentVersion": {
+            "id": "string(uuid)",
+            "versionNumber": "number"
+          },
+          "previewUrl": "string",
+          "previewSite": "string",
+          "previewFallback": {
+            "url": "string",
+            "site": "string"
+          }
+        }
+      },
+      "queryParams": [
+        "preview"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ted/chats/:id/title",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "id": "string(uuid)",
+        "updatedAt": "string(datetime)",
+        "title": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/:id/ted/chats/:id/read",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {},
+      "responseSchema": {},
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/payments/orders/standing",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "live": "boolean",
+        "test": "boolean"
+      },
+      "queryParams": [
+        "creationId"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/apps/:id/backend",
+      "statuses": {
+        "0": 1,
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "workspaceId": "string(uuid)",
+        "ownerId": "string(uuid)",
+        "requestId": "string(uuid)",
+        "setupRequestId": "string(uuid)",
+        "setupAttempt": "number",
+        "providerName": "string",
+        "region": "string",
+        "state": "string",
+        "providerRef": "string",
+        "binding": {
+          "provider": "string",
+          "providerRef": "string",
+          "apiUrl": "string",
+          "publishableKey": "string"
+        },
+        "errorCode": "null",
+        "structureFrom": "null",
+        "createdAt": "string(datetime)",
+        "claimedAt": "string(datetime)",
+        "readyAt": "string(datetime)",
+        "deletedAt": "null"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/apps/:id/files",
+      "statuses": {
+        "0": 1,
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "files": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/secrets",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "secrets": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/app-connections",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "callbackUrl": "string",
+        "mayManage": "boolean",
+        "connections": []
+      },
+      "queryParams": [
+        "creationId"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/app-connections/undelivered",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "undelivered": "null"
+      },
+      "queryParams": [
+        "creationId"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/security",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "scans": "string",
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "security": {
+          "currentVersionId": "string(uuid)",
+          "scan": {
+            "versionId": "string(uuid)",
+            "versionNumber": "number",
+            "scannedAt": "string(datetime)",
+            "findings": [],
+            "omitted": "number",
+            "areas": {
+              "secrets": "string",
+              "database": "string",
+              "packages": "string"
+            }
+          },
+          "ignored": []
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id/server-key",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "keys": "string",
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "backend": {
+          "readyAt": "string(datetime)",
+          "rotatedAt": "null",
+          "rotating": "boolean"
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/git/repositories/:id",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "sync": "string",
+        "repository": "null",
+        "connections": [],
+        "mayManage": "boolean",
+        "mayDownload": "boolean",
+        "authorized": "boolean",
+        "editing": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/ai/calls",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creationId": "string(uuid)",
+        "entries": [],
+        "next": "null",
+        "features": []
+      },
+      "queryParams": [
+        "website"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/app-email/websites/:id/emails",
+      "statuses": {
+        "0": 1,
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "creationId": "string(uuid)",
+        "emails": [],
+        "next": "null",
+        "month": {
+          "sent": "number",
+          "allowance": "number"
+        },
+        "paused": "null",
+        "reachOwnerOnly": "boolean"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/apps/:id/backend/tables",
+      "statuses": {
+        "0": 1,
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json",
+        "x-unknown"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "tables": [
+          {
+            "name": "string",
+            "kind": "string",
+            "rowSecurity": "boolean",
+            "rows": "number",
+            "columns": [
+              {
+                "name": "string",
+                "type": "string",
+                "nullable": "boolean",
+                "default": "null",
+                "generated": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/apps/:id/backend/signups",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "timeZone": "string",
+        "days": [
+          {
+            "day": "string",
+            "users": "number"
+          }
+        ]
+      },
+      "queryParams": [
+        "days",
+        "timezone"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/:id/apps/:id/backend/users",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {
+        "page": "number",
+        "perPage": "number",
+        "search": "string"
+      },
+      "responseSchema": {
+        "users": [],
+        "page": "number",
+        "total": "number"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/apps/:id/backend/policies",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "tables": [
+          {
+            "section": "string",
+            "table": "string",
+            "rowSecurity": "boolean",
+            "policies": [
+              {
+                "name": "string",
+                "command": "string",
+                "permissive": "boolean",
+                "roles": [
+                  "string"
+                ],
+                "using": "string",
+                "check": "null"
+              }
+            ]
+          }
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/creations/:id",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "companyId": "string(uuid)",
+        "creation": {
+          "id": "string(uuid)",
+          "title": "string",
+          "kind": "string",
+          "createdAt": "string(datetime)",
+          "updatedAt": "string(datetime)",
+          "currentVersionId": "string(uuid)",
+          "currentChangeId": "string(uuid)",
+          "undidTextEdit": "null",
+          "appWorkspaceId": "string(uuid)",
+          "pages": [
+            {
+              "path": "string",
+              "state": "string"
+            }
+          ],
+          "publication": {
+            "hostname": "string",
+            "url": "string",
+            "hostnameChosen": "boolean",
+            "revision": "number",
+            "published": "boolean",
+            "releaseId": "string",
+            "publishedVersionId": "string(uuid)",
+            "publishedAt": "string(datetime)",
+            "operationId": "string(uuid)",
+            "badgeHidden": "boolean",
+            "visitorAnalytics": "boolean",
+            "pending": "null"
+          },
+          "publicationCapability": {
+            "available": "boolean",
+            "currentVersion": "string"
+          },
+          "thumbnail": {
+            "url": "string",
+            "width": "number",
+            "height": "number",
+            "sha256": "string"
+          },
+          "currentVersion": {
+            "id": "string(uuid)",
+            "versionNumber": "number",
+            "savedAt": "string(datetime)",
+            "pagePaths": [
+              "string"
+            ],
+            "pages": [
+              {
+                "path": "string",
+                "state": "string",
+                "title": "string",
+                "iconUrl": "string",
+                "description": "string",
+                "openGraphTitle": "string",
+                "openGraphDescription": "string"
+              }
+            ]
+          },
+          "previewUrl": "string",
+          "previewSite": "string",
+          "previewFallback": {
+            "url": "string",
+            "site": "string"
+          }
+        }
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/f/:id",
+      "statuses": {
+        "200": 2
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/search",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "groups": [
+          {
+            "group": "string",
+            "hits": []
+          }
+        ]
+      },
+      "queryParams": [
+        "q"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/f/:id/schedule",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "text/html"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": null,
+      "queryParams": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/:id/schedule/preview",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": {
+        "schedule": {
+          "time": "string",
+          "timeZone": "string",
+          "cadence": "string",
+          "date": "string"
+        }
+      },
+      "responseSchema": {
+        "timeZone": "string",
+        "occurrences": [
+          "string"
+        ]
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/schedule/trigger-options",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "apps": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/billing/promo-codes",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "redemptions": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/assistants",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "assistants": [],
+        "listings": []
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/billing",
+      "statuses": {
+        "200": 1
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "userId": "string(uuid)",
+        "offers": [
+          {
+            "id": "string",
+            "name": "string",
+            "catalogVersion": "string",
+            "termsVersion": "string",
+            "cadence": "string",
+            "interval": "string",
+            "currency": "string",
+            "amountMinor": "number",
+            "credits": "string",
+            "companyLimit": "number",
+            "perks": [
+              "string"
+            ],
+            "features": [
+              "string"
+            ],
+            "creditsRollOver": "boolean",
+            "dailyCredits": "string"
+          }
+        ],
+        "access": {
+          "state": "string",
+          "paid": "boolean",
+          "plan": "null",
+          "canSpend": "boolean",
+          "canGrant": "boolean",
+          "companyLimit": "number"
+        },
+        "subscription": "null",
+        "canOpenPortal": "boolean",
+        "checkoutOffers": [
+          "string"
+        ],
+        "firstMonthOffer": {
+          "percent": "number",
+          "endsAt": "string(datetime)",
+          "through": "string(datetime)",
+          "prices": {
+            "standard_200_monthly_v2": "number",
+            "pro_500_monthly_v2": "number",
+            "pro_1k_monthly_v2": "number",
+            "max_2500_monthly_v2": "number",
+            "max_5k_monthly_v3": "number",
+            "max_10k_monthly_v3": "number"
+          }
+        },
+        "packs": [],
+        "creditIncreases": [],
+        "periodEndChanges": [],
+        "creditIncreaseQuotes": [],
+        "adsWallArm": "string",
+        "publishableKey": "string"
+      },
+      "queryParams": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/:id/run/report",
+      "statuses": {
+        "200": 3
+      },
+      "responseTypes": [
+        "application/json"
+      ],
+      "requestBodySchema": null,
+      "responseSchema": {
+        "report": "null",
+        "earlier": [],
+        "soFar": {
+          "sessionId": "string",
+          "startedAt": "string(datetime)",
+          "spent": "string",
+          "made": [
+            {
+              "at": "string(datetime)",
+              "id": "string",
+              "kind": "string",
+              "title": "string",
+              "saved": "string(uuid)",
+              "change": "string",
+              "handed": "string(uuid)",
+              "handedBefore": [
+                {
+                  "at": "string(datetime)",
+                  "change": "string",
+                  "handed": "string(uuid)"
+                }
+              ],
+              "note": "string"
+            }
+          ],
+          "madeCount": "number",
+          "moved": "string",
+          "budget": "number"
+        }
+      },
+      "queryParams": []
+    }
+  ],
+  "referencedNotCalled": [
+    "/api/app-sign-in/google/start",
+    "/api/auth/callback",
+    "/api/auth/email/challenge",
+    "/api/auth/email/password",
+    "/api/auth/email/verification",
+    "/api/auth/email/verification/resend",
+    "/api/auth/hop",
+    "/api/auth/sign-in",
+    "/api/auth/sign-out",
+    "/api/companies/:id/ads-wallet/top-ups",
+    "/api/companies/:id/app-email/issues/:id",
+    "/api/companies/:id/app-email/websites/:id",
+    "/api/companies/:id/brief/start",
+    "/api/companies/:id/build/references",
+    "/api/companies/:id/build/references/:id/image",
+    "/api/companies/:id/build/runs/:id/design-picture",
+    "/api/companies/:id/computer/jobs",
+    "/api/companies/:id/creations/:id/logs",
+    "/api/companies/:id/creations/:id/share",
+    "/api/companies/:id/creations/:id/versions/:id/codebase",
+    "/api/companies/:id/delete",
+    "/api/companies/:id/existing-site",
+    "/api/companies/:id/existing-site/check",
+    "/api/companies/:id/existing-site/remove",
+    "/api/companies/:id/git",
+    "/api/companies/:id/logo",
+    "/api/companies/:id/logo/versions/select",
+    "/api/companies/:id/members/invitations",
+    "/api/companies/:id/members/leave",
+    "/api/companies/:id/payments",
+    "/api/companies/:id/profile",
+    "/api/companies/:id/run",
+    "/api/companies/:id/run/autonomy-mode",
+    "/api/companies/:id/run/owner-lines",
+    "/api/companies/:id/run/primary-site",
+    "/api/companies/:id/run/tier",
+    "/api/companies/:id/schedule",
+    "/api/companies/:id/site-captures",
+    "/api/companies/:id/social",
+    "/api/companies/:id/social/ads/audiences",
+    "/api/companies/:id/social/ads/campaigns",
+    "/api/companies/:id/social/ads/setup",
+    "/api/companies/:id/ted/files/all",
+    "/api/companies/:id/ted/files/preview",
+    "/api/companies/:id/ted/files/remove",
+    "/api/companies/:id/video",
+    "/api/companies/:id/workspace/files",
+    "/api/computer/views",
+    "/api/connect/:id/start",
+    "/api/first-message/preview",
+    "/api/invitations/accept",
+    "/api/invitations/read",
+    "/api/me/account",
+    "/api/me/account/deletion",
+    "/api/me/assistants/disconnect",
+    "/api/me/billing/came",
+    "/api/me/billing/checkout",
+    "/api/me/billing/increase",
+    "/api/me/billing/paywall",
+    "/api/me/billing/portal",
+    "/api/me/billing/refresh",
+    "/api/me/billing/schedule",
+    "/api/me/billing/sign-up",
+    "/api/me/companies",
+    "/api/me/companies/begin",
+    "/api/me/companies/requests/:id/deliver",
+    "/api/me/company-deletions/:id",
+    "/api/me/connect",
+    "/api/me/domains/move",
+    "/api/me/support/conversations/:id/:id"
+  ]
+}

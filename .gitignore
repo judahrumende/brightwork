@@ -9,6 +9,7 @@ dist/
 !.env.example
 /kit/*
 !/kit/features.md
+!/kit/api-shapes.json
 /reference-v1/
 /PROMPT.md
 /.tanstack/

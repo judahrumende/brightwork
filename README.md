@@ -8,8 +8,9 @@ Requires Node.js 22, pnpm, and Docker with the Compose plugin.
 
 ```sh
 cp .env.example .env
-pnpm i
-docker compose up -d
+pnpm install --frozen-lockfile
+docker compose up -d --wait
+pnpm --filter @brightwork/api db:migrate
 pnpm dev
 ```
 
@@ -47,7 +48,7 @@ Dotted connections show the services introduced by upcoming milestones.
 - `apps/api` holds the API server.
 - `apps/worker` runs Pip turns and saves work in the active business.
 - `packages/shared` owns branding and the Zod schemas derived from the API kit. Run `pnpm contracts:generate` after updating the catalogue.
-- `kit/` and `reference-v1/` are local build references. The kit feature checklist is tracked with the implementation.
+- `kit/` and `reference-v1/` hold local build references. The tracked feature checklist and API shape catalogue support repeatable checks from a fresh checkout.
 
 ## Checks
 
@@ -62,7 +63,7 @@ pnpm test
 pnpm visual:report
 ```
 
-`pnpm test` starts the dev servers and waits for the Fastify health response through Vite. Run `docker compose up -d --wait` separately to verify the backing services.
+`pnpm test` starts the dev servers and waits for the Fastify health response through Vite. GitHub Actions runs the checks with Node 22 and disposable Postgres, Redis, MinIO, and Mailpit services. It applies the migrations and runs the integration suite with synthetic workspace data and provider fixtures. Use that workflow for container checks when Docker Compose is unavailable locally.
 
 Set `BROWSER_EXECUTABLE_PATH` to use an existing Chromium-compatible browser. Visual captures are written to `test-results/visual`. Open `docs/visual-diff.html` after running the report step.
 

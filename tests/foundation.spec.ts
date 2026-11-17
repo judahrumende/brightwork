@@ -28,6 +28,9 @@ test('foundation gallery renders and menus work with a keyboard', async ({
     page.getByRole('menuitemcheckbox', { name: 'Warm' }),
   ).toBeFocused();
   await page.keyboard.press('ArrowDown');
+  await expect(
+    page.getByRole('menuitemcheckbox', { name: 'Direct' }),
+  ).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(
     page.getByRole('button', { name: 'Tone · Direct' }),
@@ -47,7 +50,7 @@ test('gallery exercises sheets, empty states, segmented controls and toast undo'
 }) => {
   await page.goto('/dev/ui');
   await page
-    .getByRole('group', { name: 'Report window' })
+    .getByRole('radiogroup', { name: 'Report window' })
     .getByRole('radio', { name: '90D' })
     .click();
   await expect(page.getByRole('radio', { name: '90D' })).toBeChecked();
@@ -81,7 +84,7 @@ test('sky uses a static layer with reduced motion and supports dark theme', asyn
   await expect(sky).toHaveAttribute('data-animated', 'false');
   await expect(sky.locator('canvas')).toHaveCount(0);
   await page
-    .getByRole('group', { name: 'Theme' })
+    .getByRole('radiogroup', { name: 'Theme' })
     .getByRole('radio', { name: 'Dark' })
     .click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

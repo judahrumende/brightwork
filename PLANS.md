@@ -4,32 +4,32 @@
 
 ## 1. Repository findings and file changes
 
-| Area | What is in the repository |
-| --- | --- |
-| UI | React 19, Vite, TanStack Router and React Query, Radix primitives, and CSS Modules. The authenticated workspace already accepts a view key at `/f/$business/{-$view}`. The Research dock item currently opens an empty popover. The header search and `Cmd/Ctrl+K` find saved work through `/api/me/search-work`. |
-| API and auth | Fastify 5 registers account and workspace routes through `registerAuth`. Workspace routes use a cookie-backed session, business membership, and an `Origin` plus `X-Session-Id` check for POST actions. Existing errors expose `message`. The browser `api()` helper adds the tab ID and sends same-origin credentials. |
-| Data | PostgreSQL and Drizzle hold accounts, sessions, memberships, Pip turns, and workspace artifacts. Redis already supports auth rate limits, presence, and BullMQ. The proposed Research request uses existing membership records and short-lived Redis state. |
-| AI and search | `apps/worker/src/llm.ts` calls OpenAI-compatible Chat Completions. `apps/worker/src/web-search.ts` independently calls OpenAI Responses with its web-search tool. Pip renders URL annotations through `research-results.tsx`. The worker's credit ledger debits a running Pip turn. |
-| Configuration | The visible root env file is `.env.example`. Existing keys include `APP_ORIGIN`, `AUTH_SECRET`, `DATABASE_URL`, `REDIS_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`, `WEB_SEARCH_API_KEY`, and `WEB_SEARCH_MODEL`. Deployment details and the active model are pending confirmation. |
+| Area          | What is in the repository                                                                                                                                                                                                                                                                                               |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI            | React 19, Vite, TanStack Router and React Query, Radix primitives, and CSS Modules. The authenticated workspace already accepts a view key at `/f/$business/{-$view}`. The Research dock item currently opens an empty popover. The header search and `Cmd/Ctrl+K` find saved work through `/api/me/search-work`.       |
+| API and auth  | Fastify 5 registers account and workspace routes through `registerAuth`. Workspace routes use a cookie-backed session, business membership, and an `Origin` plus `X-Session-Id` check for POST actions. Existing errors expose `message`. The browser `api()` helper adds the tab ID and sends same-origin credentials. |
+| Data          | PostgreSQL and Drizzle hold accounts, sessions, memberships, Pip turns, and workspace artifacts. Redis already supports auth rate limits, presence, and BullMQ. The proposed Research request uses existing membership records and short-lived Redis state.                                                             |
+| AI and search | `apps/worker/src/llm.ts` calls OpenAI-compatible Chat Completions. `apps/worker/src/web-search.ts` independently calls OpenAI Responses with its web-search tool. Pip renders URL annotations through `research-results.tsx`. The worker's credit ledger debits a running Pip turn.                                     |
+| Configuration | The visible root env file is `.env.example`. Existing keys include `APP_ORIGIN`, `AUTH_SECRET`, `DATABASE_URL`, `REDIS_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`, `WEB_SEARCH_API_KEY`, and `WEB_SEARCH_MODEL`. Deployment details and the active model are pending confirmation.                                |
 
-| Action | Exact path | Planned change |
-| --- | --- | --- |
-| Create | `infra/searxng/settings.yml` | Private SearXNG instance settings and JSON output. |
-| Create | `apps/api/src/research/searxng.ts` | Search adapter, result validation, ranking and deduplication. |
-| Create | `apps/api/src/research/page.ts` | Public-page transport, redirect and DNS policy, and HTML text extraction. |
-| Create | `apps/api/src/research/answer.ts` | Bounded search-to-answer pipeline, model prompts, evidence checks, and response assembly. |
-| Create | `apps/api/src/research/routes.ts` | Authenticated endpoint, input and error mapping, cache, limits, and cancellation. |
-| Move | `apps/worker/src/llm.ts` → `apps/api/src/llm.ts` | One server-only model client. Preserve existing defaults and add per-call deadline, cancellation, and token-limit options for Research. |
-| Modify | `apps/api/package.json` | Add the HTML parser, export `./llm` for the worker, and add a `test:research` script using existing `tsx --test`. |
-| Modify | `apps/worker/src/index.ts`, `apps/worker/src/agent.ts`, `tests/unit/llm.test.ts` | Update imports and verify that the worker's client behavior and defaults remain compatible. |
-| Modify | `apps/api/src/auth/config.ts`, `apps/api/src/auth/routes.ts` | Parse optional search configuration and register Research with the existing auth, membership, Redis, and rate-window logic. |
-| Create | `packages/shared/src/web-search.ts` | Runtime Zod request, answer, source, citation, and error schemas plus inferred TypeScript types. |
-| Modify | `packages/shared/src/index.ts` | Export the hand-authored search schemas. The generated capture contracts describe the original API. |
-| Create | `apps/web/src/workbench/web-search.tsx`, `apps/web/src/workbench/web-search.module.css` | Workspace Research form and cited results, styled with current tokens and primitives. |
-| Modify | `apps/web/src/workbench/workbench.tsx` | Link the Research dock item to the new workspace view and render the screen in the existing route. |
-| Modify | `compose.yaml`, `.env.example`, `README.md` | Opt-in local SearXNG, server configuration placeholders, and a setup and smoke-test guide. |
-| Create | `apps/api/test/research.test.ts`, `tests/research.spec.ts` | Fastify and pipeline integration tests with fixtures, plus Playwright coverage of the Research view. |
-| Generate | `pnpm-lock.yaml` | Record the dependency resolution with pnpm. There is no tracked lockfile in the inspected repository. |
+| Action   | Exact path                                                                              | Planned change                                                                                                                          |
+| -------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Create   | `infra/searxng/settings.yml`                                                            | Private SearXNG instance settings and JSON output.                                                                                      |
+| Create   | `apps/api/src/research/searxng.ts`                                                      | Search adapter, result validation, ranking and deduplication.                                                                           |
+| Create   | `apps/api/src/research/page.ts`                                                         | Public-page transport, redirect and DNS policy, and HTML text extraction.                                                               |
+| Create   | `apps/api/src/research/answer.ts`                                                       | Bounded search-to-answer pipeline, model prompts, evidence checks, and response assembly.                                               |
+| Create   | `apps/api/src/research/routes.ts`                                                       | Authenticated endpoint, input and error mapping, cache, limits, and cancellation.                                                       |
+| Move     | `apps/worker/src/llm.ts` → `apps/api/src/llm.ts`                                        | One server-only model client. Preserve existing defaults and add per-call deadline, cancellation, and token-limit options for Research. |
+| Modify   | `apps/api/package.json`                                                                 | Add the HTML parser, export `./llm` for the worker, and add a `test:research` script using existing `tsx --test`.                       |
+| Modify   | `apps/worker/src/index.ts`, `apps/worker/src/agent.ts`, `tests/unit/llm.test.ts`        | Update imports and verify that the worker's client behavior and defaults remain compatible.                                             |
+| Modify   | `apps/api/src/auth/config.ts`, `apps/api/src/auth/routes.ts`                            | Parse optional search configuration and register Research with the existing auth, membership, Redis, and rate-window logic.             |
+| Create   | `packages/shared/src/web-search.ts`                                                     | Runtime Zod request, answer, source, citation, and error schemas plus inferred TypeScript types.                                        |
+| Modify   | `packages/shared/src/index.ts`                                                          | Export the hand-authored search schemas. The generated capture contracts describe the original API.                                     |
+| Create   | `apps/web/src/workbench/web-search.tsx`, `apps/web/src/workbench/web-search.module.css` | Workspace Research form and cited results, styled with current tokens and primitives.                                                   |
+| Modify   | `apps/web/src/workbench/workbench.tsx`                                                  | Link the Research dock item to the new workspace view and render the screen in the existing route.                                      |
+| Modify   | `compose.yaml`, `.env.example`, `README.md`                                             | Opt-in local SearXNG, server configuration placeholders, and a setup and smoke-test guide.                                              |
+| Create   | `apps/api/test/research.test.ts`, `tests/research.spec.ts`                              | Fastify and pipeline integration tests with fixtures, plus Playwright coverage of the Research view.                                    |
+| Generate | `pnpm-lock.yaml`                                                                        | Record the dependency resolution with pnpm. There is no tracked lockfile in the inspected repository.                                   |
 
 Each Research request runs directly in Fastify and uses existing Postgres membership records and Redis. This design requires zero database migrations or BullMQ jobs.
 
@@ -59,24 +59,24 @@ Each Research request runs directly in Fastify and uses existing Postgres member
 `POST /api/companies/:id/web-search` takes the existing business UUID. Reuse workspace session identification and membership. Under the proposed rate-limited policy, the existing workspace POST guard restricts search to members with write access. Authentication and authorization happen before cache reads or provider calls. The browser uses the existing `api()` client with an `AbortSignal` to send `Content-Type: application/json` and `X-Session-Id`. Responses use `Cache-Control: no-store`.
 
 ```json
-{"question":"How do I enable JSON output on a SearXNG instance?"}
+{ "question": "How do I enable JSON output on a SearXNG instance?" }
 ```
 
 Accept a strict object with exactly `question`, a string of 3–500 characters after trimming. Cap the HTTP body at 8 KiB. Use `200` with the schema in section 7. For all expected failures, return the strict object `{"code":"<value from the table>","message":"<short user-facing text>"}`. Use `Retry-After` in seconds for `429`.
 
-| Status | Code | Meaning |
-| --- | --- | --- |
-| `400` | `invalid_request` | Invalid question, business ID, tab header, or JSON. |
-| `401` | `sign_in_required` | Missing or expired session. |
-| `403` | `forbidden` | Invalid origin or view-only workspace role. |
-| `404` | `business_not_found` | Unknown or inaccessible workspace. |
-| `413` | `request_too_large` | Body exceeds 8 KiB. |
-| `415` | `unsupported_media_type` | The endpoint requires a JSON request. |
-| `422` | `no_evidence` | No accessible page evidence supports an answer. |
-| `429` | `rate_limited` | An account or service budget is exhausted. |
-| `502` | `upstream_error` | Search or model provider failed or returned malformed data. |
-| `503` | `unavailable` | Research or an essential dependency is unavailable. |
-| `504` | `deadline_exceeded` | The request or an essential phase exceeded its time budget. |
+| Status | Code                     | Meaning                                                     |
+| ------ | ------------------------ | ----------------------------------------------------------- |
+| `400`  | `invalid_request`        | Invalid question, business ID, tab header, or JSON.         |
+| `401`  | `sign_in_required`       | Missing or expired session.                                 |
+| `403`  | `forbidden`              | Invalid origin or view-only workspace role.                 |
+| `404`  | `business_not_found`     | Unknown or inaccessible workspace.                          |
+| `413`  | `request_too_large`      | Body exceeds 8 KiB.                                         |
+| `415`  | `unsupported_media_type` | The endpoint requires a JSON request.                       |
+| `422`  | `no_evidence`            | No accessible page evidence supports an answer.             |
+| `429`  | `rate_limited`           | An account or service budget is exhausted.                  |
+| `502`  | `upstream_error`         | Search or model provider failed or returned malformed data. |
+| `503`  | `unavailable`            | Research or an essential dependency is unavailable.         |
+| `504`  | `deadline_exceeded`      | The request or an essential phase exceeded its time budget. |
 
 ## 6. Streaming
 
@@ -163,14 +163,14 @@ Use this draft 2020-12 JSON Schema as the wire shape for `200`. Implement it in 
 
 These values are proposed launch settings for the separate per-account limit option.
 
-| Control | Proposed behavior |
-| --- | --- |
-| Answer cache | Redis `SET EX 600` for successful validated results only. Scope the key to account, company, provider/model, pipeline version, and the trimmed question using the existing HMAC pattern. Preserve case and internal whitespace. Validate hits again. Store no raw question in the key and no raw HTML in Redis. |
-| Quotas | Reuse the Redis atomic fixed-window counter used by auth. Start at five valid requests per account per minute, 30 per account in a 24-hour window starting with the first request, and 60 cache misses globally per hour. Count cache hits toward the per-account windows. Apply the global cap before provider work and return the limiting window's TTL in `Retry-After`. |
-| Deadlines | Use a 35-second overall deadline, including retries and body reads. Budget up to 4 seconds for search, 8 seconds for the page batch with up to 3 seconds per page including redirects, and 10 seconds per model call, each clamped to the time remaining. Abort remaining page reads once enough usable evidence is ready. |
-| Retries | Retry SearXNG once on a connection error or upstream `502`/`503`, within its original deadline, with short jitter. Attempt each page once, skip failed or slow pages, and use the other candidates. Make one generation attempt and one verification attempt. The user's explicit resubmit starts another request. |
-| Failure handling | Map malformed provider payloads and provider failures to `502`. Serve `422` when the bounded pipeline completes without support. If Redis cannot enforce quotas, return `503` before provider calls. If a cache write fails after quota enforcement and a valid answer, return the answer. Drop invalid cache entries. |
-| Privacy and diagnostics | Record request ID, stage durations, cache outcome, result counts, error codes, and optional provider token counts. Exclude raw questions, prompt/evidence text, full result URLs, secrets, and provider bodies from application logs. Keep the browser request same-origin. |
+| Control                 | Proposed behavior                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Answer cache            | Redis `SET EX 600` for successful validated results only. Scope the key to account, company, provider/model, pipeline version, and the trimmed question using the existing HMAC pattern. Preserve case and internal whitespace. Validate hits again. Store no raw question in the key and no raw HTML in Redis.                                                             |
+| Quotas                  | Reuse the Redis atomic fixed-window counter used by auth. Start at five valid requests per account per minute, 30 per account in a 24-hour window starting with the first request, and 60 cache misses globally per hour. Count cache hits toward the per-account windows. Apply the global cap before provider work and return the limiting window's TTL in `Retry-After`. |
+| Deadlines               | Use a 35-second overall deadline, including retries and body reads. Budget up to 4 seconds for search, 8 seconds for the page batch with up to 3 seconds per page including redirects, and 10 seconds per model call, each clamped to the time remaining. Abort remaining page reads once enough usable evidence is ready.                                                  |
+| Retries                 | Retry SearXNG once on a connection error or upstream `502`/`503`, within its original deadline, with short jitter. Attempt each page once, skip failed or slow pages, and use the other candidates. Make one generation attempt and one verification attempt. The user's explicit resubmit starts another request.                                                          |
+| Failure handling        | Map malformed provider payloads and provider failures to `502`. Serve `422` when the bounded pipeline completes without support. If Redis cannot enforce quotas, return `503` before provider calls. If a cache write fails after quota enforcement and a valid answer, return the answer. Drop invalid cache entries.                                                      |
+| Privacy and diagnostics | Record request ID, stage durations, cache outcome, result counts, error codes, and optional provider token counts. Exclude raw questions, prompt/evidence text, full result URLs, secrets, and provider bodies from application logs. Keep the browser request same-origin.                                                                                                 |
 
 ## 10. Build order and verification
 
