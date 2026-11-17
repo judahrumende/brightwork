@@ -142,8 +142,14 @@ test('mobile Ads displays reported spend, saves a target and pauses a campaign',
   await expect(page.getByLabel('Monthly target (AUD)')).toHaveValue('100.50');
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Pause campaign' }).click();
+  await expect(page.getByText('PAUSED · Delivery: PAUSED')).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Resume campaign' }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(
+      'Activation is disabled until budget enforcement is verified.',
+    ),
   ).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))

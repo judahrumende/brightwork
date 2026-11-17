@@ -385,8 +385,13 @@ export function registerGrowth(
         409,
         'The connected ad account changed. Refresh before continuing.',
       );
+    if (status === 'ACTIVE')
+      throw new GrowthError(
+        409,
+        'Campaign activation is disabled until budget enforcement is verified.',
+      );
     await options.limit('growth-ads-write', access.actor, 10, 60);
-    if (!(await remote(() => provider.setStatus(campaign, status))))
+    if (!(await remote(() => provider.pause(campaign))))
       throw new GrowthError(
         404,
         'Editable campaign not found in the connected account.',

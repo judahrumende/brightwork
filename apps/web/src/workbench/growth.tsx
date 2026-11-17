@@ -485,15 +485,8 @@ function Ads({ base, admin, caps }: Panel) {
     retry: false,
   });
   const campaign = useMutation({
-    mutationFn: ({
-      id,
-      status,
-      accountId,
-    }: {
-      id: string;
-      status: 'ACTIVE' | 'PAUSED';
-      accountId: string;
-    }) => write(`${base}/ads/${id}/status`, { status, accountId }),
+    mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
+      write(`${base}/ads/${id}/status`, { status: 'PAUSED', accountId }),
     onSettled: () => data.refetch(),
   });
   const budget = useMutation({
@@ -582,6 +575,7 @@ function Ads({ base, admin, caps }: Panel) {
           <section>
             <h2>Meta campaigns</h2>
             <p>Ad account {account.accountId}</p>
+            <p>Activation is disabled until budget enforcement is verified.</p>
             {!account.campaigns.length && <p>No campaigns on this page.</p>}
             {account.campaigns.map(({ id, name, status, effective_status }) => (
               <article key={id}>
@@ -589,27 +583,16 @@ function Ads({ base, admin, caps }: Panel) {
                 <p>
                   {status} · Delivery: {effective_status}
                 </p>
-                {(status === 'ACTIVE' || status === 'PAUSED') && (
+                {status === 'ACTIVE' && (
                   <Button
                     variant="secondary"
                     disabled={campaign.isPending}
                     onClick={() => {
-                      const next = status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
-                      if (
-                        window.confirm(
-                          next === 'ACTIVE'
-                            ? `Resume ${name} on Meta? It may start spending under its Meta budget.`
-                            : `Pause ${name} on Meta?`,
-                        )
-                      )
-                        campaign.mutate({
-                          id,
-                          status: next,
-                          accountId: account.accountId,
-                        });
+                      if (window.confirm(`Pause ${name} on Meta?`))
+                        campaign.mutate({ id, accountId: account.accountId });
                     }}
                   >
-                    {status === 'ACTIVE' ? 'Pause campaign' : 'Resume campaign'}
+                    Pause campaign
                   </Button>
                 )}
               </article>
