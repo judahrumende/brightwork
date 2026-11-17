@@ -34,6 +34,7 @@ jobs:
         run: |
           docker compose up -d --wait --wait-timeout 90
           curl --fail --silent --show-error --retry 6 --retry-all-errors http://127.0.0.1:8025/readyz
+          curl --fail --silent --show-error --retry 6 --retry-all-errors http://127.0.0.1:9000/minio/health/ready
           pnpm --filter @brightwork/api db:migrate
       - run: pnpm --filter @brightwork/api test:integration
       - run: pnpm exec playwright install --with-deps chromium
