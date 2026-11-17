@@ -380,6 +380,19 @@ export function Profile({ session }: { session: Session }) {
                   <h2 className={styles.preferencesHeading}>Preferences</h2>
                   <div className={styles.accountCard}>
                     <label>
+                      <span>Show notification badges</span>
+                      <input
+                        type="checkbox"
+                        checked={profile.showNotificationBadges !== false}
+                        disabled={busy}
+                        onChange={(event) =>
+                          void update({
+                            showNotificationBadges: event.currentTarget.checked,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
                       <span>
                         Show predictions
                         <small>Suggest the next message in the composer.</small>

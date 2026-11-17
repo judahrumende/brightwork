@@ -6,6 +6,10 @@ import { websitePages } from '@brightwork/shared';
 import type { siteHosting } from './publication';
 import type { pageReader } from '../research/page';
 import type { githubSiteSync } from './github-site-sync';
+import { registerWorkspaceSettings } from './settings-routes';
+import type { teamStore } from './team';
+import type { vaultStore } from './vault';
+import type { domainStore } from './domains';
 import {
   calendarEventTimes,
   recurrenceRules,
@@ -21,6 +25,9 @@ import type { inboundMail } from './inbound-mail';
 
 type Context = {
   store: ReturnType<typeof agentStore>;
+  team: ReturnType<typeof teamStore>;
+  domains: ReturnType<typeof domainStore>;
+  vault: ReturnType<typeof vaultStore> | undefined;
   runs: ReturnType<typeof runStore>;
   mail: ReturnType<typeof mailStore>;
   inbound: ReturnType<typeof inboundMail>;
@@ -135,6 +142,14 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     }
     return { accountId, id, ...access };
   }
+
+  registerWorkspaceSettings(app, {
+    team: context.team,
+    vault: context.vault,
+    domains: context.domains,
+    authorize,
+    reportError,
+  });
 
   app.get(path, async (request, reply) => {
     try {

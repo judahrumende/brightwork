@@ -124,6 +124,48 @@ test('Home shows Run work in the dock and keeps read notifications in history', 
   ).toHaveAttribute('href', `/f/${work.id}/library?item=${work.id}`);
 });
 
+test('Workspace settings creates an invitation and reads the vault list without values', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const base = api + '/settings';
+  const invitations: { id: string; email: string; role: string }[] = [];
+  await page.route('**' + base + '/team', (route) =>
+    route.fulfill({ json: { members: [], invites: invitations } }),
+  );
+  await page.route('**' + base + '/team/invitations', (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      email: 'guest@example.test',
+      role: 'viewer',
+    });
+    const invite = {
+      id: company.id,
+      email: 'guest@example.test',
+      role: 'viewer',
+    };
+    invitations.push(invite);
+    return route.fulfill({ status: 201, json: { invite } });
+  });
+  await page.route('**' + base + '/vault', (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        credentials: [{ id: company.id, name: 'Test key' }],
+      },
+    }),
+  );
+  await page.goto(workbench + '/settings');
+  await page.getByLabel('Invite by email').fill('guest@example.test');
+  await page.getByLabel('Invitation role').selectOption('viewer');
+  await page.getByRole('button', { name: 'Create invitation' }).click();
+  await expect(page.getByText('guest@example.test · viewer')).toBeVisible();
+  await page.getByRole('button', { name: 'Vault', exact: true }).click();
+  await expect(page.getByText('Test key', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Reveal credential' }),
+  ).toBeVisible();
+});
+
 test('Home opens a Run summary and Run controls can pause it', async ({
   page,
 }) => {

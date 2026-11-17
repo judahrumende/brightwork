@@ -15,8 +15,10 @@ import {
   artifacts,
   calendarEvents,
   members,
+  workspaceCredentials,
 } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
+import { domainStore } from '../src/workspace/domains';
 
 const { TEST_DATABASE_URL, TEST_MAILPIT_URL, REDIS_URL } = process.env;
 const origin = 'http://127.0.0.1:5173';
@@ -121,6 +123,7 @@ test(
         server,
         authEnv.parse({
           APP_ORIGIN: origin,
+          VAULT_KEY: '05'.repeat(32),
           SITE_BASE_DOMAIN: 'sites.example.test',
           DATABASE_URL: url.href,
           REDIS_URL,
@@ -627,6 +630,162 @@ test(
         freshCookie,
       );
       assert.equal(rejectedImport.statusCode, 422);
+
+      const settings = `/api/companies/${studio}/settings`;
+      const outsider = await session(separateCookie);
+      assert.equal(
+        (
+          await post(
+            settings + '/team/invitations',
+            { email: outsider.session.email, role: 'member' },
+            collaboratorCookie,
+          )
+        ).statusCode,
+        403,
+      );
+      const invitation = await post(
+        settings + '/team/invitations',
+        { email: outsider.session.email, role: 'member' },
+        freshCookie,
+      );
+      assert.equal(invitation.statusCode, 201);
+      const inviteId = invitation.json<{ invite: { id: string } }>().invite.id;
+      const accept = '/api/me/invitations/' + inviteId + '/accept';
+      assert.equal(
+        (await post(accept, {}, collaboratorCookie)).statusCode,
+        404,
+      );
+      const accepted = await Promise.all([
+        post(accept, {}, separateCookie),
+        post(accept, {}, separateCookie),
+      ]);
+      assert.deepEqual(
+        accepted.map((answer) => answer.statusCode).sort(),
+        [200, 404],
+      );
+      assert.equal(
+        (await session(separateCookie)).companyList.lastOpened,
+        studio,
+      );
+      const changeRole = (actor: string, id: string, role: string) =>
+        server.inject({
+          method: 'PATCH',
+          url: settings + '/team/members/' + id,
+          headers: { ...headers, cookie: actor },
+          payload: { role },
+        });
+      assert.equal(
+        (await changeRole(freshCookie, outsider.companyList.userId, 'admin'))
+          .statusCode,
+        200,
+      );
+      assert.equal(
+        (await changeRole(separateCookie, owner.companyList.userId, 'member'))
+          .statusCode,
+        403,
+      );
+      assert.equal(
+        (
+          await post(
+            settings + '/team/invitations',
+            { email: 'another@example.test', role: 'admin' },
+            separateCookie,
+          )
+        ).statusCode,
+        409,
+      );
+
+      const value = 'synthetic-vault-' + fixture;
+      assert.equal(
+        (
+          await post(
+            settings + '/vault',
+            { name: 'Receiver', value },
+            freshCookie,
+          )
+        ).statusCode,
+        200,
+      );
+      assert.equal(
+        (
+          await post(
+            settings + '/vault',
+            { name: 'Receiver', value },
+            collaboratorCookie,
+          )
+        ).statusCode,
+        403,
+      );
+      const listing = await server.inject({
+        url: settings + '/vault',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(listing.statusCode, 200);
+      assert.ok(!listing.body.includes(value));
+      const credential = listing.json<{ credentials: { id: string }[] }>()
+        .credentials[0];
+      assert.ok(credential);
+      const stored = await database.db
+        .select({ sealed: workspaceCredentials.sealed })
+        .from(workspaceCredentials)
+        .where(eq(workspaceCredentials.id, credential.id));
+      assert.ok(stored[0]?.sealed && !stored[0].sealed.includes(value));
+      const reveal = settings + '/vault/' + credential.id + '/reveal';
+      assert.equal(
+        (await post(reveal, {}, collaboratorCookie)).statusCode,
+        403,
+      );
+      assert.equal(
+        (await post(reveal.replace(studio, other), {}, separateCookie))
+          .statusCode,
+        404,
+      );
+      assert.equal(
+        (await post(reveal, {}, freshCookie)).json<{ value: string }>().value,
+        value,
+      );
+      const preference = await server.inject({
+        method: 'PATCH',
+        url: '/api/me/account',
+        headers: { ...headers, cookie: freshCookie },
+        payload: { showNotificationBadges: false },
+      });
+      assert.equal(preference.statusCode, 200);
+      assert.equal(
+        preference.json<{ profile: { showNotificationBadges: boolean } }>()
+          .profile.showNotificationBadges,
+        false,
+      );
+      assert.equal(
+        (
+          await post(
+            settings + '/domains',
+            { hostname: 'STUDIO.example.test.' },
+            freshCookie,
+          )
+        ).statusCode,
+        201,
+      );
+      assert.equal(
+        (
+          await post(
+            settings + '/domains',
+            { hostname: 'https://studio.example.test' },
+            freshCookie,
+          )
+        ).statusCode,
+        400,
+      );
+      const domains = domainStore(database.db);
+      const [domain] = await domains.list(studio);
+      assert.ok(domain && domain.hostname === 'studio.example.test');
+      const fixtureDNS = domainStore(database.db, async (record) => {
+        assert.equal(record, '_brightwork-verification.studio.example.test');
+        return [[domain.challenge.slice(0, 12), domain.challenge.slice(12)]];
+      });
+      assert.equal(await fixtureDNS.verify(other, domain.id), 'missing');
+      assert.equal(await fixtureDNS.verify(studio, domain.id), 'verified');
+      assert.ok((await domains.list(studio))[0]?.verifiedAt);
     } finally {
       await server.close();
       await database.close();

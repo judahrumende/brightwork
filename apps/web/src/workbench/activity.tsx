@@ -189,7 +189,13 @@ type NotificationPage = {
   before: number | null;
 };
 
-export function Notifications({ companyId }: { companyId: string }) {
+export function Notifications({
+  companyId,
+  showBadge,
+}: {
+  companyId: string;
+  showBadge: boolean;
+}) {
   const cache = useQueryClient();
   const [filter, setFilter] = useState('all');
   const [marking, setMarking] = useState(false);
@@ -215,7 +221,8 @@ export function Notifications({ companyId }: { companyId: string }) {
     filter === 'unread'
       ? items.filter((item) => !item.readAt && !item.resolvedAt)
       : items;
-  const label = badge ? `Notifications, ${badge} unread` : 'Notifications';
+  const label =
+    showBadge && badge ? `Notifications, ${badge} unread` : 'Notifications';
 
   async function markAllRead() {
     if (marking || !badge) return;
@@ -242,7 +249,7 @@ export function Notifications({ companyId }: { companyId: string }) {
           className={styles.notificationButton}
         >
           <Icon name="bell" size={20} />
-          {badge > 0 && (
+          {showBadge && badge > 0 && (
             <span className={styles.notificationBadge} aria-hidden="true">
               {badge > 9 ? '9+' : badge}
             </span>

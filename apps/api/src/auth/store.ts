@@ -38,6 +38,7 @@ export type ProfileUpdate = Partial<
     | 'background'
     | 'reduceEffects'
     | 'showPredictions'
+    | 'showNotificationBadges'
   >
 >;
 
