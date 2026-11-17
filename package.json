@@ -17,6 +17,7 @@
     "contracts:generate": "node scripts/generate-contracts.mjs",
     "contracts:check": "node scripts/generate-contracts.mjs --check",
     "contracts:replay": "node --experimental-strip-types scripts/replay-har.mjs",
+    "parity:check": "node scripts/check-parity-inventory.mjs",
     "test": "playwright test",
     "visual:report": "node scripts/visual-report.mjs",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts"
