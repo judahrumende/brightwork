@@ -7,6 +7,7 @@ import type { siteHosting } from './publication';
 import type { pageReader } from '../research/page';
 import type { githubSiteSync } from './github-site-sync';
 import { registerWorkspaceSettings } from './settings-routes';
+import type { shopifyOrders } from './shopify-orders';
 import type { teamStore } from './team';
 import type { vaultStore } from './vault';
 import type { domainStore } from './domains';
@@ -26,6 +27,7 @@ import type { inboundMail } from './inbound-mail';
 type Context = {
   store: ReturnType<typeof agentStore>;
   team: ReturnType<typeof teamStore>;
+  commerce: ReturnType<typeof shopifyOrders> | undefined;
   domains: ReturnType<typeof domainStore>;
   vault: ReturnType<typeof vaultStore> | undefined;
   runs: ReturnType<typeof runStore>;
@@ -145,6 +147,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
 
   registerWorkspaceSettings(app, {
     team: context.team,
+    commerce: context.commerce,
     vault: context.vault,
     domains: context.domains,
     authorize,

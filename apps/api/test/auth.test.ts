@@ -125,6 +125,7 @@ test(
         server,
         authEnv.parse({
           APP_ORIGIN: origin,
+          SHOPIFY_ENABLED: 'true',
           VAULT_KEY: '05'.repeat(32),
           SITE_BASE_DOMAIN: 'sites.example.test',
           DATABASE_URL: url.href,
@@ -140,6 +141,14 @@ test(
         }),
         async (input, init) => {
           const target = String(input);
+          if (
+            target ===
+            'https://fixture.myshopify.com/admin/api/2026-10/graphql.json'
+          ) {
+            return Response.json({
+              data: { shop: { myshopifyDomain: 'fixture.myshopify.com' } },
+            });
+          }
           if (
             target ===
             'https://challenges.cloudflare.com/turnstile/v0/siteverify'
@@ -808,6 +817,39 @@ test(
         (await post(reveal, {}, freshCookie)).json<{ value: string }>().value,
         value,
       );
+      const shopify = settings + '/shopify';
+      const shopCredentials = {
+        shop: 'fixture.myshopify.com',
+        token: 'fixture-admin-token',
+        secret: 'fixture-webhook-secret',
+      };
+      assert.equal(
+        (await post(shopify, shopCredentials, collaboratorCookie)).statusCode,
+        403,
+      );
+      assert.equal(
+        (await post(shopify, shopCredentials, freshCookie)).statusCode,
+        200,
+      );
+      const store = await server.inject({
+        url: shopify,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(store.statusCode, 200);
+      assert.ok(
+        !store.body.includes(shopCredentials.token) &&
+          !store.body.includes(shopCredentials.secret),
+      );
+      const unrelatedStores = await server.inject({
+        url: shopify.replace(studio, other),
+        headers: { cookie: separateCookie },
+      });
+      assert.deepEqual(unrelatedStores.json(), {
+        enabled: true,
+        shops: [],
+        totals: [],
+      });
+
       const preference = await server.inject({
         method: 'PATCH',
         url: '/api/me/account',

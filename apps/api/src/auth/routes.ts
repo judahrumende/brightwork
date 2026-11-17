@@ -20,6 +20,7 @@ import { githubSiteSync } from '../workspace/github-site-sync';
 import { teamStore } from '../workspace/team';
 import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
+import { shopifyOrders } from '../workspace/shopify-orders';
 import { stripeBilling } from '../workspace/stripe-billing';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
@@ -260,6 +261,10 @@ export function registerAuth(
 
   const workspace = agentStore(database.db);
   const team = teamStore(database.db);
+  const commerce =
+    env.VAULT_KEY && env.SHOPIFY_ENABLED
+      ? shopifyOrders(database.db, env.VAULT_KEY, providerRequest)
+      : undefined;
   const billing =
     env.STRIPE_TEST_KEY && env.STRIPE_WEBHOOK_SECRET && env.STRIPE_TEST_PRICE
       ? stripeBilling(database.db, {
@@ -272,6 +277,7 @@ export function registerAuth(
       : null;
   const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
   billing?.register(app);
+  commerce?.register(app);
   registerGrowth(app, {
     env,
     db: database.db,
@@ -350,6 +356,7 @@ export function registerAuth(
   registerWorkspace(app, {
     store: workspace,
     team,
+    commerce,
     domains: domainStore(database.db),
     vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
     runs: runStore(database.db),

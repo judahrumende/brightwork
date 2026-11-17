@@ -183,6 +183,13 @@
       "when": 1794834000025,
       "tag": "0025_visitor_events",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794834000026,
+      "tag": "0026_shopify_orders",
+      "breakpoints": true
     }
   ]
 }
