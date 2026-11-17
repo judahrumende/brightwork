@@ -536,6 +536,38 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     }
   });
 
+  app.get(
+    path + '/work/inbound/:resource/attachments/:file',
+    async (request, reply) => {
+      try {
+        const access = await authorize(request, reply);
+        if (!access) return;
+        const { resource, file } = resourceParams
+          .extend({ file: z.uuid() })
+          .parse(request.params);
+        await context.limit('mail-attachment', access.accountId, 10, 60);
+        const result = await context.inbound.download(
+          access.id,
+          resource,
+          file,
+        );
+        if (!result)
+          return reply.code(404).send({ message: 'Attachment not available.' });
+        const name =
+          result.filename
+            .replace(/[^a-z0-9_. -]/giu, '_')
+            .replace(/^\.+/u, '') || 'attachment';
+        return reply
+          .header('Content-Disposition', 'attachment; filename="' + name + '"')
+          .header('X-Content-Type-Options', 'nosniff')
+          .type('application/octet-stream')
+          .send(result.body);
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    },
+  );
+
   app.post(
     path + '/work/inbound/:resource/reply-draft',
     async (request, reply) => {

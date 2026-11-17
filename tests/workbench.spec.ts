@@ -808,3 +808,33 @@ test('Inbox distinguishes provider acceptance from delivery', async ({
   await expect(history).toContainText('Delivered to recipient’s mail server');
   await expect(history).toContainText('Revision 1');
 });
+
+test('Inbox links to downloads in the owning workspace', async ({ page }) => {
+  await seedWorkbench(page);
+  const email = {
+    id: '29065fd3-312d-4821-8405-a6a488c2f457',
+    sender: 'sender@example.test',
+    subject: 'Fixture attachment',
+    receivedAt: '2026-11-18T02:00:02Z',
+    attachments: [{ id: company.id, filename: 'fixture.txt' }],
+  };
+  const base = api + '/work/inbound';
+  const messagePath = base + '/' + email.id;
+  const downloadPath = messagePath + '/attachments/' + company.id;
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**' + base, (route) =>
+    route.fulfill({
+      json: { address: 'receiver@example.test', emails: [email] },
+    }),
+  );
+  await page.route('**' + messagePath, (route) =>
+    route.fulfill({ json: { email, thread: [email] } }),
+  );
+  await page.goto(workbench + '/inbox');
+  await page.getByRole('button', { name: /Fixture attachment/ }).click();
+  const link = page.getByRole('link', { name: 'fixture.txt' });
+  await expect(link).toHaveAttribute('href', downloadPath);
+  await expect(link).toHaveAttribute('download', '');
+});
