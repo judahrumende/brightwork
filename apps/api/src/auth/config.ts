@@ -26,6 +26,12 @@ export const authEnv = z.object({
   ),
   GITHUB_SITE_TOKEN: optionalValue,
   AUTH_SECRET: optionalValue.pipe(z.string().min(32).optional()),
+  VAULT_KEY: optionalValue.pipe(
+    z
+      .string()
+      .regex(/^[a-f0-9]{64}$/iu)
+      .optional(),
+  ),
   DATABASE_URL: optionalValue,
   REDIS_URL: optionalValue,
   SEARXNG_BASE_URL: optionalValue.pipe(

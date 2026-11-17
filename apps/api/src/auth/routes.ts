@@ -17,6 +17,9 @@ import { ResearchFailure, researchAnswer } from '../research/answer';
 import { pageReader, publicPageUrl } from '../research/page';
 import { siteHosting } from '../workspace/publication';
 import { githubSiteSync } from '../workspace/github-site-sync';
+import { teamStore } from '../workspace/team';
+import { vaultStore } from '../workspace/vault';
+import { domainStore } from '../workspace/domains';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
 import { searxngEndpoint, searxngSearch } from '../research/searxng';
@@ -61,6 +64,7 @@ const preferences = z
       .optional(),
     language: z.string().min(1).max(32).nullable().optional(),
     showPredictions: z.boolean().optional(),
+    showNotificationBadges: z.boolean().optional(),
     reduceEffects: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0);
@@ -94,6 +98,7 @@ function asProfile(account: Account) {
       appearance: account.appearance,
       reduceEffects: account.reduceEffects,
       showPredictions: account.showPredictions,
+      showNotificationBadges: account.showNotificationBadges,
     },
   };
 }
@@ -253,6 +258,7 @@ export function registerAuth(
   });
 
   const workspace = agentStore(database.db);
+  const team = teamStore(database.db);
   const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
   registerGrowth(app, {
     env,
@@ -331,6 +337,9 @@ export function registerAuth(
   inbound.register(app);
   registerWorkspace(app, {
     store: workspace,
+    team,
+    domains: domainStore(database.db),
+    vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
     runs: runStore(database.db),
     mail: mailStore(database.db),
     inbound,
@@ -361,6 +370,27 @@ export function registerAuth(
     identify: async (request) => (await activeSession(request)).account.id,
     requireOrigin: originTab,
     reportError: authError,
+  });
+  app.get('/api/me/invitations', async (request, reply) => {
+    try {
+      const { account } = await activeSession(request);
+      return { invitations: await team.inbox(account.email) };
+    } catch (error) {
+      return authError(error, reply);
+    }
+  });
+  app.post('/api/me/invitations/:id/accept', async (request, reply) => {
+    try {
+      originTab(request);
+      const { account } = await activeSession(request);
+      const { id } = z.object({ id: uuid }).parse(request.params);
+      const workspaceId = await team.accept(id, account.id, account.email);
+      if (!workspaceId)
+        throw new AuthFailure(404, 'Invitation not found or expired.');
+      return { workspaceId };
+    } catch (error) {
+      return authError(error, reply);
+    }
   });
   app.get('/api/me/search-work', async (request, reply) => {
     try {

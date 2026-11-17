@@ -36,6 +36,9 @@ export const accounts = pgTable('accounts', {
     .default('clouds'),
   reduceEffects: boolean('reduce_effects').notNull().default(false),
   showPredictions: boolean('show_predictions').notNull().default(true),
+  showNotificationBadges: boolean('show_notification_badges')
+    .notNull()
+    .default(true),
 });
 
 export const identities = pgTable(
@@ -90,6 +93,58 @@ export const members = pgTable(
     openedAt: date('opened_at').defaultNow().notNull(),
   },
   (t) => [primaryKey({ columns: [t.businessId, t.accountId] })],
+);
+
+export const workspaceInvitations = pgTable(
+  'workspace_invitations',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    email: text().notNull(),
+    role: text({ enum: ['admin', 'member', 'viewer'] }).notNull(),
+    expiresAt: date('expires_at').notNull(),
+    acceptedAt: date('accepted_at'),
+  },
+  (table) => [
+    uniqueIndex('workspace_invitation_email').on(table.businessId, table.email),
+  ],
+);
+
+export const workspaceCredentials = pgTable(
+  'workspace_credentials',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    sealed: text().notNull(),
+    updatedAt: date('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('workspace_credential_name').on(table.businessId, table.name),
+  ],
+);
+
+export const workspaceDomains = pgTable(
+  'workspace_domains',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    hostname: text().notNull(),
+    challenge: text().notNull(),
+    verifiedAt: date('verified_at'),
+  },
+  (table) => [
+    uniqueIndex('workspace_domain_hostname').on(
+      table.businessId,
+      table.hostname,
+    ),
+  ],
 );
 
 export type TurnPart =

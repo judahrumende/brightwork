@@ -70,6 +70,7 @@ export type Preferences = {
   background: 'plain' | 'clouds';
   reduceEffects: boolean;
   showPredictions: boolean;
+  showNotificationBadges?: boolean;
 };
 export type Company = { id: string; name: string; role: string };
 export type Session = {

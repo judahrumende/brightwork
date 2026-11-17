@@ -22,6 +22,7 @@ import { pageViewSeries } from './traffic-series';
 import { Runs } from './runs';
 import { ReceivedMail } from './received-mail';
 import { WorkspaceFiles } from './workspace-files';
+import { WorkspaceSettings } from './workspace-settings';
 import { WebSearch } from './web-search';
 import { Growth } from './growth';
 import { useTraffic, Visitors } from './visitors';
@@ -36,6 +37,7 @@ export const workspaceViews = [
   'library',
   'research',
   'growth',
+  'settings',
 ] as const;
 export type WorkspaceView = (typeof workspaceViews)[number];
 const labels: Record<WorkspaceView, string> = {
@@ -47,6 +49,7 @@ const labels: Record<WorkspaceView, string> = {
   library: 'Library',
   research: 'Research',
   growth: 'Growth',
+  settings: 'Settings',
 };
 const dock = [
   ['Research', 'search', '#007af2', 'Research history'],
@@ -100,14 +103,17 @@ function Dock({
         const other = work.filter((item) => !item.inRun);
         const tracksWork = label === 'Library' || Boolean(dockKinds[label]);
         const destination = label === 'Outreach' ? 'inbox' : view;
-        return label === 'Research' || tool ? (
+        return label === 'Research' || label === 'Settings' || tool ? (
           <a
             key={label}
             className={styles.dockButton}
             href={
               tool
                 ? `${workspacePath(company.id, 'growth')}?tool=${tool}`
-                : workspacePath(company.id, 'research')
+                : workspacePath(
+                    company.id,
+                    label === 'Settings' ? 'settings' : 'research',
+                  )
             }
           >
             <span style={{ backgroundColor: color }}>
@@ -134,9 +140,7 @@ function Dock({
             }
           >
             <h3 className={styles.popoverTitle}>{label}</h3>
-            {label === 'Settings' ? (
-              <p>Open the account menu to adjust appearance and wallpaper.</p>
-            ) : (
+            {
               <>
                 {work.length === 0 && (
                   <EmptyState
@@ -185,7 +189,7 @@ function Dock({
                   </Button>
                 )}
               </>
-            )}
+            }
           </FloatingPanel>
         );
       })}
@@ -403,7 +407,7 @@ function View({
   company,
   timezone,
 }: {
-  view: Exclude<WorkspaceView, 'home' | 'research' | 'growth'>;
+  view: Exclude<WorkspaceView, 'home' | 'research' | 'growth' | 'settings'>;
   company: Company;
   timezone: string;
 }) {
@@ -516,6 +520,9 @@ export function Workbench({
           <Button asChild variant="secondary" size="small">
             <a href="/new">New business</a>
           </Button>
+          <Button asChild variant="quiet" size="small">
+            <a href="/home?invitations=1">Workspace invitations</a>
+          </Button>
         </FloatingPanel>
         <nav className={styles.mainNav} aria-label="Main">
           <a
@@ -555,7 +562,10 @@ export function Workbench({
               <Icon name="calendar" size={20} />
             </a>
           </Button>
-          <Notifications companyId={company.id} />
+          <Notifications
+            companyId={company.id}
+            showBadge={session.profile.showNotificationBadges !== false}
+          />
         </nav>
         <Profile session={session} />
       </header>
@@ -575,6 +585,12 @@ export function Workbench({
         />
       ) : view === 'growth' ? (
         <Growth key={company.id} company={company} />
+      ) : view === 'settings' ? (
+        <WorkspaceSettings
+          key={company.id}
+          company={company}
+          accountId={session.userId}
+        />
       ) : (
         <View company={company} view={view} timezone={timezone} />
       )}
