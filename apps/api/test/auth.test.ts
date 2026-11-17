@@ -532,7 +532,69 @@ test(
       assert.equal(live.statusCode, 200);
       assert.match(live.body, /First about/);
       assert.match(String(live.headers['content-security-policy']), /sandbox/);
-      assert.equal(live.headers['set-cookie'], undefined);
+      assert.match(String(live.headers['set-cookie']), /^bw-visit=/u);
+      assert.doesNotMatch(
+        String(live.headers['set-cookie']),
+        /(?:domain=|bw-session=)/iu,
+      );
+      const tagged = await server.inject({
+        url: '/',
+        headers: {
+          host,
+          referer: 'https://launch.example.test/posts/intro?private=value',
+        },
+      });
+      assert.equal(tagged.statusCode, 200);
+      const visitSession = cookieFrom(tagged.headers['set-cookie'], 'bw-visit');
+      assert.equal((await visit('/about', visitSession)).statusCode, 200);
+      assert.equal(
+        (
+          await server.inject({
+            method: 'HEAD',
+            url: '/',
+            headers: { host, cookie: visitSession },
+          })
+        ).headers['set-cookie'],
+        undefined,
+      );
+      const reportRange = new URLSearchParams({
+        from: new Date(Date.now() - 60_000).toISOString(),
+        to: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const reportUrl =
+        `/api/companies/${studio}/traffic/visits?` + reportRange;
+      const traffic = await server.inject({
+        url: reportUrl,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(traffic.statusCode, 200);
+      const { averageDurationSeconds, ...totals } = traffic.json<
+        { averageDurationSeconds: number } & Record<string, unknown>
+      >();
+      assert.ok(averageDurationSeconds >= 0);
+      assert.deepEqual(totals, {
+        visits: 2,
+        measuredViews: 3,
+        singlePageVisits: 1,
+        sources: [
+          { label: 'Direct', count: 1 },
+          { label: 'launch.example.test', count: 1 },
+        ],
+        pages: [
+          { label: '/about', count: 2 },
+          { label: '/', count: 1 },
+        ],
+      });
+      assert.doesNotMatch(traffic.body, /posts\/intro|private=value/u);
+      assert.equal(
+        (
+          await server.inject({
+            url: reportUrl,
+            headers: { cookie: separateCookie },
+          })
+        ).statusCode,
+        404,
+      );
 
       const deployments = async () => {
         const response = await server.inject({

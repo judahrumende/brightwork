@@ -1038,6 +1038,28 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/traffic/visits', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const range = z
+        .object({
+          from: z.iso.datetime({ offset: true }),
+          to: z.iso.datetime({ offset: true }),
+        })
+        .parse(request.query);
+      const from = new Date(range.from);
+      const to = new Date(range.to);
+      const duration = to.getTime() - from.getTime();
+      if (duration < 1 || duration > 90 * 86_400_000)
+        return reply
+          .code(400)
+          .send({ message: 'Choose a visitor range up to 90 days.' });
+      return await store.reportVisits(access.id, from, to);
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/traffic', async (request, reply) => {
     try {
       const access = await authorize(request, reply);

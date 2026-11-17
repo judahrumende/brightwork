@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { websiteDocument, websitePageSlug } from '@brightwork/shared';
 import type { agentStore } from './agent-store';
+import { browserCookie, cookie } from '../auth/tokens';
 
 const hostSchema = z
   .string()
@@ -27,6 +29,8 @@ export function siteHosting(
   if (onSiteDomain(dashboard))
     throw new Error('Site hosting needs a distinct base domain');
   const url = (id: string) => scheme + '//' + id + '.' + base;
+  const secure = scheme === 'https:';
+  const visitCookie = secure ? '__Host-bw-visit' : 'bw-visit';
 
   app.addHook('onRequest', async (request, reply) => {
     if (!onSiteDomain(request.hostname.toLowerCase().replace(/\.$/u, '')))
@@ -54,9 +58,31 @@ export function siteHosting(
     if (!page) return reply.code(404).send('Site not found');
     const document = websiteDocument(page.document, page.pages ?? [], slug);
     if (document === null) return reply.code(404).send('Page not found');
-    void store
-      .visit(key.data)
-      .catch(() => app.log.warn('Could not count a website view'));
+    if (request.method === 'GET') {
+      const current = z
+        .uuid()
+        .safeParse(browserCookie(request.headers.cookie, visitCookie));
+      const session = current.success ? current.data : randomUUID();
+      const referrer = request.headers.referer;
+      const referringUrl =
+        !current.success &&
+        referrer &&
+        referrer.length <= 2048 &&
+        URL.canParse(referrer)
+          ? new URL(referrer)
+          : null;
+      const source =
+        referringUrl &&
+        ['https:', 'http:'].includes(referringUrl.protocol) &&
+        referringUrl.hostname.length <= 253 &&
+        !onSiteDomain(referringUrl.hostname)
+          ? referringUrl.hostname
+          : null;
+      reply.header('Set-Cookie', cookie(visitCookie, session, secure, 30 * 60));
+      await store
+        .visit(key.data, session, '/' + slug, source)
+        .catch(() => app.log.warn('Could not count a website view'));
+    }
     return reply
       .type('text/html; charset=utf-8')
       .header('Cache-Control', 'no-store')
