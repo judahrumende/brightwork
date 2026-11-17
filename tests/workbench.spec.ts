@@ -319,6 +319,121 @@ test('Visitors shows an empty period and lets keyboard users change the range', 
   ).toBeFocused();
 });
 
+test('Build imports a draft, edits text and images, and restores a deployment', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const id = 'f0bf9474-bd27-4a59-ac98-993edae6006a';
+  const older = '509cc783-a545-44c7-aab4-fe80894a0b60';
+  const live = '93736c3a-8c3a-4cc4-9774-70d4883bb0ab';
+  const work = api + '/work/' + id;
+  const site = {
+    id,
+    title: 'Imported studio',
+    kind: 'website',
+    state: 'pending',
+    revision: 2,
+    body: '<!doctype html><html><head><title>Studio</title></head><body class="studio"><h1>Old heading</h1></body></html>',
+    pages: [],
+  };
+  let imported = false;
+  let rolledBack = false;
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: imported ? [site] : [], hosting: true } }),
+  );
+  await page.route('**' + api + '/work/websites/import', (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      url: 'https://example.test/',
+    });
+    imported = true;
+    return route.fulfill({ status: 201, json: { item: { id } } });
+  });
+  await page.route('**' + work + '/website', (route) => {
+    const payload = route.request().postDataJSON();
+    expect(payload.revision).toBe(2);
+    expect(payload.body).toContain(
+      '<head><title>Studio</title></head><body class="studio"><h1>Refined heading</h1>',
+    );
+    expect(payload.body).toContain('data:image/png;base64,');
+    site.body = payload.body;
+    site.revision = 3;
+    return route.fulfill({ json: { item: site } });
+  });
+  const stamp = '2026-11-17T04:00:00.000Z';
+  await page.route('**' + work + '/deployments', (route) =>
+    route.fulfill({
+      json: {
+        deployments: [
+          {
+            id: live,
+            revision: 2,
+            publishedAt: stamp,
+            unpublishedAt: rolledBack ? stamp : null,
+            rollbackSourceId: null,
+          },
+          {
+            id: older,
+            revision: 1,
+            publishedAt: stamp,
+            unpublishedAt: stamp,
+            rollbackSourceId: null,
+          },
+          ...(rolledBack
+            ? [
+                {
+                  id: '8079c807-b360-44f3-8664-76c65c55ecab',
+                  revision: 1,
+                  publishedAt: stamp,
+                  unpublishedAt: null,
+                  rollbackSourceId: older,
+                },
+              ]
+            : []),
+        ],
+      },
+    }),
+  );
+  await page.route(
+    '**' + work + '/deployments/' + older + '/rollback',
+    (route) => {
+      expect(route.request().postDataJSON()).toEqual({ expectedLive: live });
+      rolledBack = true;
+      return route.fulfill({ json: {} });
+    },
+  );
+  await page.goto(workbench + '/build');
+  await page.getByText('Import website', { exact: true }).click();
+  await page.getByLabel('Website URL').fill('https://example.test/');
+  await page.getByRole('button', { name: 'Import page text' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Imported studio' });
+  await dialog.getByRole('button', { name: 'Edit website' }).click();
+  await dialog.getByText('Visual editing', { exact: true }).click();
+  await dialog.getByLabel('Element text').fill('Refined heading');
+  await dialog.getByLabel('Image description').fill('Studio logo');
+  const pixel =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
+  await dialog.getByLabel('Image file').setInputFiles({
+    name: 'logo.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(pixel, 'base64'),
+  });
+  await expect(
+    dialog.getByRole('textbox', { name: 'HTML', exact: true }),
+  ).toHaveValue(/data:image\/png;base64/u);
+  await dialog.getByRole('button', { name: 'Save for review' }).click();
+  await dialog.getByText('Site tools', { exact: true }).click();
+  const history = dialog.getByRole('region', { name: 'Deployment history' });
+  await history
+    .getByRole('button', { name: 'Restore revision 1 live' })
+    .click();
+  await history
+    .getByRole('button', { name: 'Restore live deployment' })
+    .click();
+  await expect(
+    history.getByText('Revision 1 · Live · Rolled back'),
+  ).toBeVisible();
+});
+
 test('restoring a saved version creates a pending draft and keeps the live snapshot', async ({
   page,
 }) => {

@@ -14,6 +14,8 @@ import { CalendarEventFields } from './calendar-event';
 import { WebsitePreview } from './website-preview';
 import { WebsiteVersions } from './website-versions';
 import { WebsiteEditor } from './website-editor';
+import { WebsiteDeployments } from './website-deployments';
+import { WebsiteImport } from './website-import';
 import { BuildCanvas } from './build-canvas';
 import type { WebsiteDraft } from './website-editor';
 import type { WebsitePage } from '@brightwork/shared';
@@ -771,13 +773,24 @@ export function WorkList({
           <p role="status">Opening item…</p>
         ))}
       {kind === 'website' && work.data && (
-        <BuildCanvas
-          websites={items}
-          open={(id) => {
-            setError('');
-            setOpen(id);
-          }}
-        />
+        <>
+          {role !== 'viewer' && (
+            <WebsiteImport
+              endpoint={root(id) + '/work/websites/import'}
+              onImport={async (siteId) => {
+                await cache.invalidateQueries({ queryKey: workKey(id) });
+                setOpen(siteId);
+              }}
+            />
+          )}
+          <BuildCanvas
+            websites={items}
+            open={(id) => {
+              setError('');
+              setOpen(id);
+            }}
+          />
+        </>
       )}
       {!showCalendar && kind !== 'website' && (
         <ul>
@@ -897,6 +910,18 @@ export function WorkList({
                       queryKey={workKey(id)}
                       currentRevision={selected.revision}
                       readOnly={role === 'viewer'}
+                    />
+                  )}
+                  {!editing && (
+                    <SiteTools
+                      endpoint={
+                        root(id) + '/work/' + selected.id + '/deployments'
+                      }
+                      queryKey={workKey(id)}
+                      canRollback={
+                        ['owner', 'admin'].includes(role) &&
+                        Boolean(work.data?.hosting)
+                      }
                     />
                   )}
                 </>
@@ -1108,5 +1133,15 @@ export function WorkList({
         )}
       </Dialog.Root>
     </section>
+  );
+}
+
+function SiteTools(props: Parameters<typeof WebsiteDeployments>[0]) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>Site tools</summary>
+      {open && <WebsiteDeployments {...props} />}
+    </details>
   );
 }

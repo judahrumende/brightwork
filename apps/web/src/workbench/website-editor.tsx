@@ -4,6 +4,7 @@ import { websitePages } from '@brightwork/shared';
 import type { WebsitePage } from '@brightwork/shared';
 import { Button } from '../ui/primitives';
 import { WebsitePreview } from './website-preview';
+import { WebsiteVisual } from './website-visual';
 import styles from './workbench.module.css';
 
 export type WebsiteDraft = {
@@ -139,6 +140,16 @@ export function WebsiteEditor({
             </label>
           </>
         )}
+        <WebsiteVisual
+          key={index}
+          html={html}
+          maxLength={page ? 60_000 : 80_000}
+          busy={busy}
+          onChange={(updated) => {
+            if (page) changePage({ html: updated });
+            else onChange({ ...draft, body: updated });
+          }}
+        />
         <label>
           HTML
           <textarea

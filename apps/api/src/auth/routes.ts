@@ -15,6 +15,7 @@ import type { Account, ProfileUpdate } from './store';
 import { llmClient } from '../llm';
 import { ResearchFailure, researchAnswer } from '../research/answer';
 import { pageReader, publicPageUrl } from '../research/page';
+import { siteHosting } from '../workspace/publication';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
 import { searxngEndpoint, searxngSearch } from '../research/searxng';
@@ -251,6 +252,7 @@ export function registerAuth(
   });
 
   const workspace = agentStore(database.db);
+  const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
   registerGrowth(app, {
     env,
     db: database.db,
@@ -262,6 +264,7 @@ export function registerAuth(
   });
   const llmBase = env.LLM_BASE_URL ?? 'https://api.openai.com/v1';
   const pageUrl = publicPageUrl(origin, env.SITE_BASE_DOMAIN);
+  const readPage = pageReader(pageUrl);
   const research =
     env.SEARXNG_BASE_URL && env.LLM_MODEL && env.LLM_API_KEY
       ? {
@@ -275,7 +278,7 @@ export function registerAuth(
             modelTimeoutMs: env.RESEARCH_MODEL_TIMEOUT_SECONDS * 1000,
             pageUrl,
             search: searxngSearch(searxngEndpoint(env.SEARXNG_BASE_URL)),
-            read: pageReader(pageUrl),
+            read: readPage,
             complete: llmClient({
               key: env.LLM_API_KEY,
               model: env.LLM_MODEL,
@@ -335,8 +338,9 @@ export function registerAuth(
         ? env.OUTREACH_FROM_EMAIL
         : undefined,
     redis: cache,
-    appOrigin: origin,
-    siteDomain: env.SITE_BASE_DOMAIN,
+    hosting,
+    readPage,
+    limit: allow,
     agentEnabled,
     identify: async (request) => (await activeSession(request)).account.id,
     requireOrigin: originTab,

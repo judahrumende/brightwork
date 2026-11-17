@@ -3,7 +3,8 @@ import { Queue } from 'bullmq';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { websitePages } from '@brightwork/shared';
-import { siteHosting } from './publication';
+import type { siteHosting } from './publication';
+import type { pageReader } from '../research/page';
 import {
   calendarEventTimes,
   recurrenceRules,
@@ -25,8 +26,14 @@ type Context = {
   outreachSender: string | undefined;
   redis: Redis;
   agentEnabled: boolean;
-  appOrigin: string;
-  siteDomain: string | undefined;
+  hosting: ReturnType<typeof siteHosting>;
+  readPage: ReturnType<typeof pageReader>;
+  limit: (
+    type: string,
+    key: string,
+    attempts: number,
+    seconds: number,
+  ) => Promise<void>;
   identify: (request: FastifyRequest) => Promise<string>;
   requireOrigin: (request: FastifyRequest) => string;
   reportError: (failure: unknown, reply: FastifyReply) => unknown;
@@ -36,6 +43,12 @@ const resourceParams = businessParams.extend({ resource: z.uuid() });
 const versionParams = resourceParams.extend({ versionId: z.uuid() });
 const path = '/api/companies/:id';
 const versionsPath = path + '/work/:resource/versions';
+const deploymentsPath = path + '/work/:resource/deployments';
+const htmlText = (value: string) =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 const timeZone = z
   .string()
   .max(100)
@@ -61,14 +74,15 @@ const eventDraft = z.strictObject({
 });
 
 export function registerWorkspace(app: FastifyInstance, context: Context) {
-  const { store, redis, agentEnabled, identify, requireOrigin, reportError } =
-    context;
-  const hosting = siteHosting(
-    app,
+  const {
     store,
-    context.appOrigin,
-    context.siteDomain,
-  );
+    redis,
+    agentEnabled,
+    identify,
+    requireOrigin,
+    reportError,
+    hosting,
+  } = context;
   const queue = new Queue<{ turnId: string }>(agentQueueName, {
     connection: redis,
   });
@@ -516,6 +530,44 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.post(path + '/work/websites/import', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return;
+      const { url } = z
+        .object({ url: z.url({ protocol: /^https?$/u }).max(2048) })
+        .parse(request.body);
+      await context.limit('site-import', access.accountId, 5, 60);
+      const page = await context.readPage(
+        new URL(url),
+        new Set(),
+        AbortSignal.timeout(3500),
+      );
+      if (!page)
+        return reply
+          .code(422)
+          .send({ message: 'Could not read public text at that address.' });
+      const title = page.title.slice(0, 160);
+      const body =
+        '<main><h1>' +
+        htmlText(title) +
+        '</h1>' +
+        page.paragraphs
+          .map((text) => '<p>' + htmlText(text) + '</p>')
+          .join('') +
+        '</main>';
+      const item = await store.saveArtifact({
+        businessId: access.id,
+        kind: 'website',
+        title,
+        body,
+        state: 'pending',
+      });
+      return reply.code(201).send({ item: { id: item.id } });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/work/:resource', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
@@ -880,6 +932,56 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(deploymentsPath, async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const site = await store.workItem(access.id, resource);
+      if (site?.kind !== 'website')
+        return reply.code(404).send({ message: 'Website not found.' });
+      return { deployments: await store.deployments(access.id, resource) };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.post(
+    deploymentsPath + '/:deploymentId/rollback',
+    async (request, reply) => {
+      try {
+        const access = await authorize(request, reply, true);
+        if (!access) return;
+        if (!canLeadRun(access.role))
+          return reply
+            .code(403)
+            .send({ message: 'An owner or admin can roll back a website.' });
+        if (!hosting)
+          return reply.code(409).send({
+            message: 'Configure a site hosting domain to restore a deployment.',
+          });
+        const { resource, deploymentId } = resourceParams
+          .extend({ deploymentId: z.uuid() })
+          .parse(request.params);
+        const { expectedLive } = z
+          .object({ expectedLive: z.uuid().nullable() })
+          .parse(request.body);
+        const restored = await store.rollbackDeployment(
+          access.id,
+          resource,
+          deploymentId,
+          expectedLive,
+        );
+        if (!restored)
+          return reply.code(409).send({
+            message:
+              'Refresh deployment history and choose an earlier deployment.',
+          });
+        return { deploymentId: restored.id, url: hosting.url(resource) };
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    },
+  );
   app.post(path + '/work/:resource/publish', async (request, reply) => {
     try {
       const access = await authorize(request, reply, true);
