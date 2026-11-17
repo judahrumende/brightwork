@@ -106,6 +106,9 @@ export const authEnv = z.object({
   SMTP_PASSWORD: optionalValue,
   SMTP_SECURE: z.enum(['true', 'false']).default('false'),
   MAIL_FROM: optionalValue,
+  OUTREACH_RESEND_WEBHOOK_SECRET: optionalValue.pipe(
+    z.string().regex(inboundSecret).optional(),
+  ),
   OUTREACH_RESEND_API_KEY: optionalValue,
   OUTREACH_FROM_EMAIL: optionalValue.pipe(z.email().optional()),
   INBOUND_EMAIL_DOMAIN: optionalValue.pipe(

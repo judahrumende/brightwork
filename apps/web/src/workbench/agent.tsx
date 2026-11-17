@@ -21,6 +21,7 @@ import type { WebsiteDraft } from './website-editor';
 import type { WebsitePage } from '@brightwork/shared';
 import { ResearchResults } from './research-results';
 import { Dictation } from './dictation';
+import { EmailDeliveryHistory } from './email-delivery-history';
 import styles from './workbench.module.css';
 
 type Chat = { enabled: boolean; turns: Turn[]; before?: string | null };
@@ -1007,6 +1008,12 @@ export function WorkList({
                     </Button>
                   )}
                 </section>
+              )}
+              {selected.kind === 'email' && (
+                <EmailDeliveryHistory
+                  path={root(id) + '/work/' + selected.id + '/email-history'}
+                  timezone={timezone}
+                />
               )}
               {selected.kind === 'email' && selected.emailState && (
                 <section aria-label="Email status">

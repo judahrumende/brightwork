@@ -434,6 +434,22 @@ export const outboundEmails = pgTable(
   ],
 );
 
+export const emailDeliveryEvents = pgTable(
+  'email_delivery_events',
+  {
+    id: text().primaryKey(),
+    providerId: text('provider_id').notNull(),
+    status: text().notNull(),
+    occurredAt: date('occurred_at').notNull(),
+  },
+  (table) => [
+    index('email_delivery_provider').on(
+      table.providerId,
+      table.occurredAt.desc(),
+    ),
+  ],
+);
+
 export const publicationRequests = pgTable(
   'publication_requests',
   {
