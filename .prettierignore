@@ -1,0 +1,11 @@
+kit/
+reference-v1/
+PROMPT.md
+pnpm-lock.yaml
+**/dist/
+**/routeTree.gen.ts
+**/api-contracts.gen.ts
+**/tokens.css
+playwright-report/
+test-results/
+docs/visual-diff.html

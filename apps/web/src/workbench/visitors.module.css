@@ -1,0 +1,111 @@
+.visitors {
+  padding: 0 13px 84px;
+  display: grid;
+  gap: 16px;
+}
+.heading,
+.toolbar,
+.chartHeading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.heading h1,
+.panel h2 {
+  font-size: var(--text-page-heading);
+  font-weight: var(--font-weight-heading);
+  margin: 0;
+}
+.backIcon {
+  display: flex;
+  transform: rotate(180deg);
+}
+.toolbar {
+  justify-content: space-between;
+  padding-block: 7px;
+}
+.toolbar small,
+.chartHeading small,
+.axis,
+.axisLabels,
+.inspect time {
+  color: var(--ink-secondary);
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 340px));
+  gap: 16px;
+}
+.panel {
+  border: 1px solid var(--control-raise);
+  border-radius: var(--radius-panel);
+  background: var(--topbar-fill);
+  padding: 18px 24px;
+}
+.summary strong {
+  font-size: 24px;
+  font-weight: 600;
+  display: block;
+  margin-top: 12px;
+}
+.plot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+.axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 142px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.graph {
+  width: 100%;
+  height: 142px;
+  display: block;
+  overflow: visible;
+  cursor: crosshair;
+}
+.gridline {
+  stroke: var(--border-subtle);
+}
+.crosshair {
+  stroke: var(--ink-secondary);
+  stroke-dasharray: 4 4;
+}
+.line {
+  stroke: var(--accent-ink);
+  stroke-width: 2;
+  fill: none;
+}
+.point {
+  stroke: var(--accent-ink);
+  stroke-width: 7;
+}
+.axisLabels,
+.inspect p {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.axisLabels {
+  padding-top: 5px;
+  font-size: 12px;
+}
+.inspect {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+.inspect input {
+  width: 108px;
+  accent-color: var(--accent-ink);
+}
+.inspect p {
+  margin: 0;
+}

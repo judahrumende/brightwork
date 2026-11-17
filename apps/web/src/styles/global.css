@@ -1,0 +1,111 @@
+:root {
+  color-scheme: light;
+  --radius-pill: 9999px;
+  --radius-control: 12px;
+  --radius-panel: 24px;
+  --radius-popover: 18px;
+  --radius-menu: 12px;
+  --solid-button-fill: #17181f;
+  --solid-button-ink: #fff;
+  font-family: 'Plus Jakarta Sans Variable', var(--font-sans);
+  font-weight: var(--font-weight-reading);
+  line-height: var(--text-body-line);
+  color: var(--ink);
+  background: var(--surface-pure);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --solid-button-fill: #f4f7fa;
+  --solid-button-ink: #17181f;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-size: var(--text-body);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-accent);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--selection-blue);
+  color: var(--color-white);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[data-reduce-effects] *,
+[data-reduce-effects] *::before,
+[data-reduce-effects] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+@keyframes bw-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes bw-overlay-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes bw-overlay-appear {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+@keyframes bw-overlay-disappear {
+  to {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+@keyframes bw-overlay-sheet-in {
+  from {
+    translate: 0 var(--sheet-travel);
+  }
+}
+@keyframes bw-overlay-sheet-out {
+  to {
+    translate: 0 var(--sheet-travel);
+  }
+}
+@keyframes bw-overlay-toast-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}

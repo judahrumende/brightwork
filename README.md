@@ -1,0 +1,156 @@
+# Brightwork
+
+Brightwork is a business workspace with an AI operator named Pip. See [PROGRESS.md](./PROGRESS.md) for the current milestone.
+
+## Local development
+
+Requires Node.js 22, pnpm, and Docker with the Compose plugin.
+
+```sh
+cp .env.example .env
+pnpm i
+docker compose up -d
+pnpm dev
+```
+
+Open [the component gallery](http://127.0.0.1:5173/dev/ui). Vite starts on port 5173 and proxies `/api` and `/health` to Fastify. The gallery and health route can run with the containers stopped.
+
+| Environment variable                                         | Purpose                                    |
+| ------------------------------------------------------------ | ------------------------------------------ |
+| `APP_ORIGIN`                                                 | Public app URL used when creating links    |
+| `API_PORT`, `API_HOST`                                       | Fastify listen address and port            |
+| `DATABASE_URL`                                               | Postgres connection                        |
+| `REDIS_URL`                                                  | Queue, presence and rate-limit storage     |
+| `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | S3-compatible site file storage            |
+| `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`                        | Development email delivery through Mailpit |
+
+Mailpit's inbox is on port 8025 and MinIO's console is on 9001. The defaults in `.env.example` are for the loopback development containers.
+
+## Workspace
+
+```mermaid
+flowchart TD
+  Web["React and Vite"] --> API["Fastify API"]
+  Web --> Shared["Shared config and contracts"]
+  API --> Shared
+  API -.-> PG["Postgres"]
+  API -.-> Queue["Redis"]
+  Queue -.-> Worker["Pip worker"]
+  Worker -.-> PG
+  Worker -.-> Store["MinIO"]
+  API -.-> Mail["Mailpit"]
+```
+
+Dotted connections show the services introduced by upcoming milestones.
+
+- `apps/web` holds the file routes, UI primitives, and original worker-rendered sky.
+- `apps/api` holds the API server.
+- `apps/worker` runs Pip turns and saves work in the active business.
+- `packages/shared` owns branding and the Zod schemas derived from the API kit. Run `pnpm contracts:generate` after updating the catalogue.
+- `kit/` and `reference-v1/` are local build references. The kit feature checklist is tracked with the implementation.
+
+## Checks
+
+```sh
+pnpm typecheck
+pnpm lint
+pnpm format:check
+pnpm contracts:check
+pnpm build
+pnpm exec playwright install chromium
+pnpm test
+pnpm visual:report
+```
+
+`pnpm test` starts the dev servers and waits for the Fastify health response through Vite. Run `docker compose up -d --wait` separately to verify the backing services.
+
+Set `BROWSER_EXECUTABLE_PATH` to use an existing Chromium-compatible browser. Visual captures are written to `test-results/visual`. Open `docs/visual-diff.html` after running the report step.
+
+Use a decompressed HAR and a local fixture instance to check captured API contracts.
+
+```sh
+pnpm contracts:replay path/to/fixture.har http://127.0.0.1:5173
+```
+
+Set `HAR_FIXTURE_SOURCE_ORIGIN` to select the captured API origin when the HAR includes several origins. Use `HAR_FIXTURE_ID_MAP` for a JSON map of captured UUIDs to local fixture UUIDs, and `HAR_FIXTURE_COOKIE` for a local test session cookie. Read-only replay is the default. Use `--write-fixtures` with synthetic request bodies, an isolated test database and fixture integrations to replay JSON mutations. The report checks status, media type and inferred schemas, and skips event streams.
+
+## Rebranding
+
+Change the product and agent names in `packages/shared/src/brand.ts`. The app mark lives in `apps/web/public/mark.svg`, and the original mascot SVG lives in `apps/web/src/ui/icons.tsx`. Generated colours and typography live in `apps/web/src/styles/tokens.css`. Regenerate them with `node scripts/generate-tokens.mjs`.
+
+## Sign-in and the Pip worker
+
+Start Docker services, copy `.env.example` to `.env`, and set `AUTH_SECRET` to a random value of at least 32 characters. Keep `APP_ORIGIN` identical to the URL you open in your browser. Apply the database migrations before signing in.
+
+```sh
+pnpm --filter @brightwork/api db:migrate
+pnpm dev
+```
+
+- Email sign-in needs `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` and SMTP. In local development, read messages in Mailpit at http://127.0.0.1:8025.
+- Google and Apple OAuth use your WorkOS project and its enabled provider connections. Register `APP_ORIGIN/auth/callback` as a redirect URL. The application routes that callback to Fastify. Direct Google One Tap uses `GOOGLE_CLIENT_ID`. Existing email accounts use email sign-in if a separate social identity has not been linked.
+- Set `LLM_API_KEY`, `LLM_MODEL` and, when needed, `LLM_BASE_URL`. Start `pnpm --filter @brightwork/worker dev` in a second terminal. Build uses the worker for Pip chat and saved drafts.
+- `STARTER_CREDITS`, `MODEL_CREDITS_PER_CALL` and `TOOL_CREDITS_PER_CALL` configure internal quotas with ten decimal places. The worker debits each model and tool attempt before it starts. Review balances and recent transactions in Settings under Credits.
+- Leave `SITE_BASE_DOMAIN` empty for private draft previews. For hosting, use a separate base domain, route its wildcard subdomains to Fastify, and provision DNS and TLS. Publishing requires approval of the current draft revision. Restoring a saved version creates a draft for review. The Visitors report counts requests for live pages by UTC date.
+- Set `API_TRUST_PROXY` to the address or range of a deployment's trusted proxy if Fastify should use its forwarded client IP for auth rate limits.
+- Run `pnpm test:unit` for auth, LLM, recurrence, exact credit arithmetic, publication, SSE, and traffic range tests.
+
+## Standalone web search API
+
+For browser reading, lead research, Google Business Profile, social drafts and publishing, Meta campaign controls, and the ad wallet, see [the Growth setup plan](docs/growth-plan.md). Run the new migration before opening these tools.
+
+Use the sign-in setup above. In `.env`, set `SEARXNG_BASE_URL=http://127.0.0.1:8080`, generate a `SEARXNG_SECRET` with `openssl rand -hex 32`, and fill `LLM_API_KEY`, `LLM_MODEL`, and `LLM_BASE_URL` for your Chat Completions provider. In production, point Fastify to a private SearXNG service. Use HTTPS for any network beyond the documented loopback or private Compose service.
+
+```sh
+pnpm install
+docker compose --profile research up -d
+pnpm --filter @brightwork/api db:migrate
+pnpm dev
+```
+
+Check that local SearXNG returns JSON with a `results` array.
+
+```sh
+curl -fsS http://127.0.0.1:8080/search \
+  --data-urlencode 'q=SearXNG JSON output documentation' \
+  -d 'format=json&categories=general&safesearch=1'
+```
+
+Sign in at `APP_ORIGIN`, open a workspace you can edit, and run this in that tab's developer console. The browser sends the session cookie and same-origin request headers.
+
+```js
+const business = location.pathname.split('/')[2];
+const response = await fetch(`/api/companies/${business}/web-search`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Session-Id':
+      sessionStorage.getItem('brightwork-tab') ?? crypto.randomUUID(),
+  },
+  body: JSON.stringify({ question: 'How do I enable JSON output in SearXNG?' }),
+});
+console.log(response.status, await response.json());
+```
+
+`200` returns `answer[]` claim blocks with `citations[]` and a `sources[]` list. Each citation carries a `sourceId` such as `s1` and a verified `evidence` quote. Display `[1]` directly after the claim and match it to source `s1`, which contains `title`, `url`, and a `snippet` from the first verified quotation. The endpoint returns `422 no_evidence` when evidence is insufficient and supplies `Retry-After` when it returns `429`. Searches use separate per-account limits and a 10-minute cache.
+
+```sh
+pnpm --filter @brightwork/api test:research
+pnpm test:unit
+pnpm lint
+```
+
+## Runs, scheduled work, and outreach
+
+- Open **Home → Runs → Open Run**. Add a goal and a credit limit, then enter up to 12 steps or have Pip plan them. Pip processes one step at a time. Answer questions in Inbox and review drafts in Run. With site hosting configured, enable **Queue website publication when I approve the draft** to publish the reviewed revision through the worker.
+- Use the checkbox in **Schedule → New task** to run a task with Pip using your credits. Open the task to pause execution. When the worker returns after several missed times, it queues one turn and advances to the next future occurrence.
+- Optional OpenAI web research uses `WEB_SEARCH_API_KEY` and `WEB_SEARCH_MODEL`. Pip displays cited findings under the search step in chat.
+- Optional outbound email uses `OUTREACH_RESEND_API_KEY` and `OUTREACH_FROM_EMAIL` with a verified Resend sender. Approve the draft in Inbox, enter the recipient, then select **Queue this email**. The Inbox records whether the provider accepted the request.
+- Optional inbound email uses a dedicated Resend receiving domain with Resend's MX record. Set `INBOUND_EMAIL_DOMAIN`, `INBOUND_RESEND_API_KEY` with permission to retrieve received mail, and `INBOUND_RESEND_WEBHOOK_SECRET` for the `email.received` webhook at `/api/webhooks/inbound-email`. Run the database migrations before enabling the webhook. Inbox displays each workspace's receiving address and the most recent 50 messages. Messages route using the recipient addresses in the verified webhook. The HTML reader blocks remote resources.
+
+Use a PostgreSQL fixture database with permission to create schemas. The integration test creates and removes its own schema and uses a fixture email receipt.
+
+```sh
+TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/brightwork_test' \
+  pnpm --filter @brightwork/api test:integration
+```

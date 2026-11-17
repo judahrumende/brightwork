@@ -1,0 +1,1046 @@
+.shell,
+.centered {
+  min-height: 100dvh;
+  position: relative;
+  isolation: isolate;
+}
+.centered {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.centerCard {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 12px;
+  background: var(--floating-fill);
+  padding: 30px;
+  border-radius: var(--radius-panel);
+  box-shadow: var(--floating-shadow);
+}
+.centerCard :is(h1, p) {
+  margin: 0;
+}
+.centerCard label {
+  display: grid;
+  gap: 6px;
+}
+.centerCard .draftChoice {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+.draftChoice input[type='checkbox'] {
+  width: auto;
+  accent-color: var(--accent-ink);
+}
+.centerCard :is(input, textarea),
+.accountCard :is(input:not([type='checkbox']), select),
+.palette input {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  padding: 9px 12px;
+}
+.centerCard a,
+.view a {
+  color: var(--accent-ink);
+}
+.topbar {
+  height: 70px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 19px 0 34px;
+}
+.companyButton,
+.dockButton,
+.menuRow,
+.identity {
+  font: inherit;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  background: none;
+}
+.companyButton {
+  font-weight: 650;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 0 0;
+  border-right: 1px solid var(--whisper);
+}
+.companyBadge {
+  display: grid;
+  place-items: center;
+  background: var(--floating-fill);
+  color: var(--accent-ink);
+  font-size: 15px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.mainNav,
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.mainNav a,
+.railLink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mainNav a[aria-current='page'],
+.mainNav a:hover,
+.railLink:hover {
+  background: var(--topbar-fill);
+}
+.headerActions {
+  margin-left: auto;
+}
+.headerActions button,
+.headerActions a {
+  background: transparent;
+}
+.notificationButton {
+  position: relative;
+}
+.notificationBadge {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding-inline: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--bad-ink);
+  background: var(--surface-raised);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+}
+.notificationControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  margin-block: 8px;
+}
+.avatar {
+  background: #d72d54;
+  color: white;
+  border: 0;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+button.avatar {
+  cursor: pointer;
+}
+.homeGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  gap: 12px;
+  padding: 0 12px;
+}
+.desktop {
+  height: max(490px, calc(100dvh - 152px));
+  position: relative;
+  border: 1px solid var(--control-raise);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 0 0 7px var(--workbench-card-fill),
+    var(--card-shadow);
+}
+.desktopToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--topbar-fill);
+  margin: 7px;
+  padding: 2px 14px;
+  border-radius: 17px 17px 0 0;
+  height: 28px;
+  font-size: 11px;
+}
+.desktopToolbar button,
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--control-fill);
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.waiting {
+  position: absolute;
+  top: 58%;
+  left: 51%;
+  background: var(--accent-grad);
+  box-shadow: var(--accent-glow);
+  color: white;
+  cursor: default;
+}
+.dock {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  max-width: calc(100% - 25px);
+  padding: 8px 7px;
+  gap: 2px;
+  background: var(--topbar-fill);
+  backdrop-filter: var(--topbar-backdrop);
+  border-radius: 24px;
+  box-shadow: var(--floating-shadow);
+}
+.dockButton {
+  display: grid;
+  color: inherit;
+  text-decoration: none;
+  justify-items: center;
+  align-items: center;
+  gap: 4px;
+  min-width: 53px;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 1px 2px;
+}
+.dockButton span {
+  color: #fff;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  box-shadow:
+    inset 0 1px 2px #ffffff70,
+    0 2px 6px #24324d30;
+  transition: transform var(--motion-dur-hover) var(--motion-ease-out);
+}
+.dockButton:hover span,
+.dockButton:focus-visible span {
+  transform: translateY(-4px) scale(1.07);
+}
+.statusRail,
+.metrics article,
+.view {
+  background: var(--workbench-panel-fill);
+  backdrop-filter: var(--panel-backdrop);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--card-shadow);
+}
+.statusRail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px 17px;
+}
+.statusRail [role='group'] {
+  display: flex;
+}
+.statusCard {
+  border-radius: 20px;
+  background: var(--workbench-card-fill);
+  box-shadow: var(--card-shadow);
+  padding: 14px;
+}
+.runShortcuts {
+  display: grid;
+  gap: 5px;
+}
+.runShortcuts button {
+  white-space: normal;
+  height: auto;
+  min-height: 30px;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.activityLinks {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.activityLinks a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.activityLinks a:hover {
+  background: var(--control-fill);
+}
+.activityLinks a > span {
+  min-width: 0;
+}
+.activityLinks a svg {
+  flex: none;
+}
+.activityLinks strong,
+.activityLinks small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.versionHistory {
+  display: grid;
+  gap: 8px;
+  padding-block: 10px;
+}
+.versionHistory > label,
+.versionList > li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.versionList {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 250px;
+  overflow-y: auto;
+}
+.versionChoice {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.versionChoice:hover,
+.versionChoice[aria-pressed='true'] {
+  background: var(--control-fill);
+}
+.versionChoice small {
+  color: var(--ink-secondary);
+}
+.activityLinks small {
+  color: var(--ink-secondary);
+  margin-top: 4px;
+}
+.statusHeading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.statusHeading svg {
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 7px #6389bd50);
+}
+.statusHeading h2,
+.metrics h2 {
+  font-size: var(--text-page-heading);
+  font-weight: var(--font-weight-heading);
+  margin: 0;
+}
+.railLink {
+  margin-top: 10px;
+  background: var(--control-fill);
+  justify-content: center;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  padding: 9px 12px 22px;
+}
+.metrics article {
+  padding: 18px 23px;
+  min-height: 151px;
+}
+.metrics article p {
+  color: var(--ink-secondary);
+}
+.view {
+  margin: 0 12px 12px;
+  padding: 25px;
+  min-height: calc(100dvh - 82px);
+}
+.view h1 {
+  margin: 0 0 30px;
+  font-size: 27px;
+  line-height: normal;
+}
+.view[data-view='schedule'] {
+  padding: 0;
+}
+.view[data-view='schedule'] .workList {
+  padding: 22px 28px 25px;
+  border-radius: var(--radius-panel);
+  background: var(--topbar-fill);
+  border: 1px solid var(--control-raise);
+}
+.view[data-view='schedule'] h1 {
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .view[data-view='schedule'] .workList {
+    padding: 16px 10px;
+  }
+}
+.popoverTitle {
+  margin: 0 0 8px;
+  font-size: var(--text-touch-field);
+}
+.switcher {
+  display: grid;
+  margin-bottom: 13px;
+}
+.switcher a,
+.palette nav a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 8px;
+}
+.palette nav a small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-secondary);
+}
+.switcher a:hover,
+.palette nav a:hover,
+.menuRow:hover,
+.identity:hover {
+  background: var(--hover-fill);
+}
+.profileMenu,
+.accountDialog,
+.palette {
+  background: var(--floating-fill);
+  color: var(--ink);
+  box-shadow: var(--floating-shadow), var(--floating-edge);
+}
+.profileMenu {
+  z-index: 40;
+  width: 254px;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+}
+.profileMenu hr {
+  margin: 3px 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.identity,
+.menuRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 5px;
+  text-align: left;
+  border-radius: 8px;
+}
+.identity span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.identity small,
+.identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.creditCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: 13px;
+  padding: 9px 14px;
+  display: grid;
+  gap: 4px;
+}
+button.creditCard {
+  color: var(--ink);
+  background: var(--surface-raised);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+button.creditCard:hover {
+  background: var(--control-fill);
+}
+.creditCard strong {
+  font-size: 27px;
+  line-height: 30px;
+}
+.creditHistory {
+  overflow-x: auto;
+}
+.creditHistory table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+  text-align: start;
+}
+.creditHistory caption {
+  text-align: start;
+  font-weight: 600;
+  padding-block: 8px;
+}
+.creditHistory :is(th, td) {
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: start;
+  padding: 10px 6px;
+}
+.creditHistory :is(th, td):last-child {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.profileMenu small,
+.accountIdentity p,
+.accountCard small {
+  color: var(--ink-secondary);
+}
+.themeChoices {
+  display: flex;
+  background: var(--control-fill);
+  border-radius: 999px;
+  padding: 2px;
+}
+.themeChoices button,
+.wallpapers button {
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.themeChoices button {
+  border-radius: 999px;
+  width: 27px;
+  height: 27px;
+}
+.themeChoices button[aria-pressed='true'] {
+  background: var(--floating-fill);
+  box-shadow: var(--card-shadow);
+}
+.wallpapers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  text-align: center;
+}
+.wallpapers button {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  padding: 3px;
+}
+.wallpaperTile {
+  display: flex;
+  align-items: end;
+  gap: 3px;
+  position: relative;
+  isolation: isolate;
+  aspect-ratio: 1.58;
+  overflow: hidden;
+  padding: 5px;
+  border-radius: 10px;
+}
+.wallpaperTile span:not([data-scene]) {
+  background: var(--workbench-panel-fill);
+  height: 85%;
+  flex: 1;
+  border-radius: 4px;
+}
+.wallpapers button[aria-pressed='true'] .wallpaperTile {
+  outline: 2px solid var(--focus-accent);
+}
+.alert {
+  color: var(--bad-ink);
+  font-size: 13px;
+  margin: 0;
+}
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-scrim);
+  z-index: 50;
+}
+.accountDialog,
+.palette {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 51;
+  border-radius: var(--radius-panel);
+  width: min(1200px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+}
+.accountDialog {
+  display: grid;
+  grid-template-columns: 255px 1fr;
+  background: var(--surface-raised);
+}
+.accountDialog aside {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+  border-right: 1px solid var(--border-subtle);
+}
+.accountDialog aside strong {
+  font-size: 18px;
+}
+.settingsNav {
+  display: grid;
+  gap: 4px;
+}
+.settingsNav button {
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  text-align: start;
+  padding: 10px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.settingsNav button:hover,
+.settingsNav button[aria-current='page'] {
+  background: var(--control-fill);
+}
+.accountBody {
+  padding: 20px 32px 32px;
+}
+.accountBody header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.accountBody header h2,
+.accountIdentity h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.accountCard {
+  background: var(--workbench-card-fill);
+  border-radius: 16px;
+  box-shadow: var(--card-shadow);
+  padding: 12px 20px;
+}
+.accountIdentity {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 15px 0 23px;
+}
+.accountIdentity p {
+  margin: 5px 0;
+}
+.accountIdentity .avatar {
+  width: 88px;
+  height: 88px;
+  font-size: 35px;
+}
+.accountCard > :is(form, label) {
+  display: grid;
+  grid-template-columns: 1fr 46%;
+  gap: 10px;
+  border-top: 1px solid var(--border-subtle);
+  align-items: center;
+  padding: 10px 0;
+  font-size: 13px;
+}
+.accountCard form span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.accountCard small {
+  display: block;
+}
+.accountCard input[type='checkbox'] {
+  justify-self: end;
+  accent-color: var(--accent-ink);
+  width: 21px;
+  height: 21px;
+}
+.preferencesHeading {
+  font-size: 17px;
+  margin: 20px 0 10px;
+}
+.palette {
+  padding: 18px;
+  width: min(550px, calc(100vw - 30px));
+}
+.palette h2 {
+  font-size: var(--text-body);
+  margin: 0 0 8px;
+}
+.palette nav {
+  display: grid;
+  margin-top: 8px;
+}
+@media (max-width: 1120px) {
+  .homeGrid {
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+  .dockButton {
+    min-width: 43px;
+  }
+  .dockButton span {
+    width: 36px;
+    height: 36px;
+  }
+}
+@media (max-width: 820px) {
+  .homeGrid {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .accountDialog {
+    grid-template-columns: 1fr;
+  }
+  .accountDialog aside {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 18px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .settingsNav {
+    display: flex;
+  }
+  .dock {
+    overflow: auto;
+  }
+}
+@media (max-width: 550px) {
+  .topbar {
+    padding-inline: 12px;
+    gap: 6px;
+  }
+  .companyButton {
+    font-size: 15px;
+    max-width: 120px;
+    overflow: hidden;
+  }
+  .headerActions {
+    gap: 0;
+  }
+  .mainNav a {
+    font-size: 0;
+    padding: 6px;
+  }
+  .accountBody {
+    padding: 18px;
+  }
+  .accountCard > :is(form, label) {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+.buildGrid {
+  display: grid;
+  grid-template-columns: minmax(290px, 420px) 1fr;
+  gap: 16px;
+}
+.chat,
+.workList {
+  background: var(--workbench-card-fill);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--card-shadow);
+}
+.chat header,
+:is(.artifactDialog, .taskDialog) header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat h2,
+:is(.artifactDialog, .taskDialog) h2 {
+  margin: 0;
+  font-size: var(--text-page-heading);
+}
+.transcript {
+  max-height: 510px;
+  overflow: auto;
+  padding-bottom: 12px;
+}
+.transcript article {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--whisper);
+}
+.transcript p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.userMessage {
+  justify-self: end;
+  max-width: 90%;
+  background: var(--control-fill);
+  padding: 9px 12px;
+  border-radius: 14px;
+}
+.tool {
+  color: var(--accent-ink);
+  font-size: var(--text-caption);
+  text-transform: capitalize;
+}
+.researchResults {
+  margin-block: 4px 8px;
+}
+.researchResults summary {
+  cursor: pointer;
+}
+.researchResults p {
+  padding-top: 6px;
+}
+.reply {
+  padding: 10px 0;
+}
+.chat form,
+.taskForm,
+.taskForm label {
+  display: grid;
+  gap: 8px;
+}
+.chat textarea,
+.taskForm :is(input, textarea, select) {
+  width: 100%;
+  resize: vertical;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--ink);
+}
+.chat form button {
+  justify-self: end;
+}
+.chat form p {
+  margin: 0;
+}
+.workList > ul {
+  list-style: none;
+  padding: 0;
+}
+.workList > ul > li + li {
+  border-top: 1px solid var(--whisper);
+}
+.workList > ul > li > button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  gap: 12px;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  padding: 13px 10px;
+  cursor: pointer;
+  border-radius: 10px;
+}
+.workList > ul > li > button:hover {
+  background: var(--hover-fill);
+}
+.workList small {
+  display: block;
+  color: var(--ink-secondary);
+}
+.inboundMail {
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.inboundMail h2 {
+  margin: 0;
+  font-size: var(--text-page-heading);
+}
+.receivedMessage {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+.receivedBody {
+  white-space: pre-wrap;
+}
+.receivedMessage iframe {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: white;
+}
+.taskForm {
+  margin: 14px 0;
+  max-width: 450px;
+}
+.taskForm .scheduleCheckbox {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.taskForm .scheduleCheckbox input {
+  width: auto;
+  accent-color: var(--accent-ink);
+}
+.taskDialog,
+.artifactDialog {
+  width: min(1000px, calc(100vw - 32px));
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  z-index: 51;
+  background: var(--floating-fill);
+  border-radius: var(--radius-panel);
+  padding: 20px;
+  box-shadow: var(--floating-shadow);
+}
+.taskDialog {
+  width: min(450px, calc(100vw - 32px));
+}
+.taskDialog header {
+  justify-content: space-between;
+}
+.scheduleScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.scheduleEditor {
+  top: 70px;
+  left: clamp(12px, 6.3vw, 120px);
+  transform: none;
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100dvh - 82px);
+}
+.scheduleEditor > [role='group'] {
+  display: flex;
+  margin-top: 12px;
+}
+.scheduleEditor header h2 {
+  font-size: var(--text-body);
+}
+.scheduleEditor .taskForm {
+  margin-bottom: 0;
+}
+.scheduleEditor .taskForm :is(input, textarea, select) {
+  padding: 7px 10px;
+}
+.scheduleEditor > [role='group'] > button {
+  flex: 1;
+}
+.eventDates {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+.eventDates label {
+  grid-template-columns: 4ch minmax(0, 1fr);
+  align-items: center;
+}
+.eventDetails {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+}
+.eventDetails dt {
+  font-weight: var(--font-weight-heading);
+}
+.eventDetails dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.artifactDialog header {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.artifactDialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.artifactDialog iframe {
+  display: block;
+  width: 100%;
+  height: min(570px, 65dvh);
+  border: 1px solid var(--border-subtle);
+  background: white;
+  border-radius: 12px;
+}
+.artifactText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.floatingMessage {
+  position: fixed;
+  right: 22px;
+  bottom: 21px;
+  z-index: 8;
+}
+@media (max-width: 760px) {
+  .buildGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

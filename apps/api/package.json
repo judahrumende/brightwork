@@ -1,0 +1,40 @@
+{
+  "name": "@brightwork/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "db:migrate": "tsx --env-file-if-exists=../../.env src/db/migrate.ts",
+    "test:integration": "tsx --test test/automation.test.ts",
+    "test:research": "tsx --test test/research.test.ts",
+    "test:growth": "node --import tsx --test test/growth.test.ts"
+  },
+  "dependencies": {
+    "@brightwork/shared": "workspace:*",
+    "fastify": "^5.6.1",
+    "zod": "^4.1.12",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.7",
+    "nodemailer": "^7.0.10",
+    "jose": "^6.1.0",
+    "ioredis": "^5.8.2",
+    "bullmq": "^5.81.3",
+    "cheerio": "1.1.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "@types/nodemailer": "^7.0.2"
+  },
+  "exports": {
+    "./agent": "./src/workspace/agent-store.ts",
+    "./database": "./src/db/database.ts",
+    "./credits": "./src/workspace/credits.ts",
+    "./runs": "./src/workspace/run-store.ts",
+    "./run-plan": "./src/workspace/run-plan.ts",
+    "./schedule": "./src/workspace/task-automation.ts",
+    "./mail": "./src/workspace/mail-store.ts",
+    "./llm": "./src/llm.ts"
+  }
+}

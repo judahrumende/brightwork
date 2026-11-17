@@ -1,0 +1,64 @@
+name: brightwork
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: brightwork
+      POSTGRES_USER: brightwork
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brightwork-local}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U brightwork -d brightwork']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-brightwork-local}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-brightwork-local-storage}
+    ports:
+      - '127.0.0.1:${S3_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  mailpit:
+    image: axllent/mailpit:v1.26.0
+    ports:
+      - '127.0.0.1:${SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+  searxng:
+    image: docker.io/searxng/searxng:2026.11.15-2d500cb6b
+    profiles: [research]
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
+      FORCE_OWNERSHIP: 'false'
+    ports:
+      - '127.0.0.1:8080:8080'
+    volumes:
+      - ./infra/searxng/settings.yml:/etc/searxng/settings.yml:ro
+volumes:
+  postgres:
+  redis:
+  minio:

@@ -1,0 +1,66 @@
+.growth {
+  width: min(100%, 780px);
+  margin: clamp(18px, 5vh, 42px) auto 100px;
+  padding: clamp(16px, 4vw, 32px);
+  display: grid;
+  gap: 16px;
+  background: var(--workbench-panel-fill);
+  backdrop-filter: var(--panel-backdrop);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--card-shadow);
+  overflow-wrap: anywhere;
+}
+.growth :is(h1, h2, h3, p) {
+  margin: 0;
+}
+.growth h2 {
+  font-size: var(--text-page-heading);
+}
+.growth h3 {
+  font-size: var(--text-body);
+}
+.growth a {
+  color: var(--accent-ink);
+}
+.growth :is(form, article, section, label) {
+  display: grid;
+  gap: 9px;
+}
+.growth article {
+  padding: 12px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-control);
+}
+.growth nav,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.growth nav a {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  text-decoration: none;
+  padding: 7px 11px;
+}
+.growth nav a[aria-current] {
+  background: var(--surface-pure);
+  font-weight: 700;
+}
+.growth button {
+  justify-self: start;
+}
+.growth label :is(input, textarea) {
+  min-height: 44px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-pure);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.post {
+  white-space: pre-wrap;
+}

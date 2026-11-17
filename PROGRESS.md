@@ -1,0 +1,82 @@
+# Brightwork progress
+
+## 1. Foundation
+
+Status — Implemented and checked in an offline browser build. The normal runtime, pixel-diff report and milestone commit are pending.
+
+- Created a pnpm workspace for React 19 and Vite, Fastify, the agent worker, and shared branding and contracts. Added strict TypeScript, ESLint, Prettier, local configuration and Docker Compose services.
+- Generated Zod request and response schemas for the 147 observed method/path pairs. Listed the 70 referenced paths, which have no observed contracts. Only the foundation health endpoint is implemented at this milestone.
+- Generated light and dark tokens with the captured scalar values. The sky assets are original procedural artwork and use the captured gradients. The worker draws a drifting cloud layer with the same art as the static fallback.
+- Added the `/dev/ui` route and component gallery for buttons, pills, segmented controls, menus, popovers, sheets, modals, toasts, keyboard-hint tooltips, skeletons and empty states.
+- Added Playwright coverage for the component interactions, the Vite-to-Fastify health request, sky motion preferences, accessibility and screenshots. The visual report generator compares the browser popover against the corresponding kit crop.
+
+### Reference findings
+
+- The public sign-in capture uses a split sky and form layout. The workbench screenshots show a frosted shell and rounded overlay surfaces, with approval actions and alert status using different component treatments. Screens 005, 013, 051 and 075 are the component references for this milestone. The kit has no reference for the gallery itself.
+- REA parsed the sky worker in the original and prettified asset collections. The worker receives a transferred canvas and draws cloud layers. Wider bundle analysis timed out. The independently inspected controller and screenshot notes support a still fallback for reduced motion.
+- Direct HAR inspection exceeded REA's file-size limit. Both captures already had expanded copies. REA decoded the 7 public and 985 signed-in first-party API records from scoped copies. The signed-in copy excludes IPv6 metadata rejected by the validator. The public route projection confirmed the observed status and JSON media type for email-code setup, Google One Tap, plans and the landing test. The broader signed-in route projection exceeded its memory budget.
+- The workbench UI nests company-scoped views and overlays under one application shell. Appearance and effects are account preferences. The API and screenshots support separate owner, business, membership, run, turn, approval and versioned site records. These are implementation inferences, with persistence and mutations scoped to their milestones.
+
+### Local verification
+
+- Passed lint and formatting with cached tools. Passed isolated strict TypeScript for the shared contracts, gallery primitives and OffscreenCanvas worker. A worker harness verified first frames, device-pixel sizing, drift and hidden-tab pause.
+- Checked generated token and schema files against their inputs, the catalogue's counts, query keys and statuses, and the observed auth examples against the generated schemas.
+- Parsed Compose YAML and checked the service list and loopback bindings. The installed Docker CLI has no working Compose plugin, and the selected Docker daemon socket is absent.
+- Compared the original static sky drawings with the desktop, landing and sign-in references and softened the cloud edges.
+- Ran the gallery in Chrome as a temporary offline build of the React and Radix components. Fixed overlay exit animations by making the shared keyframe names available to the stylesheet bundler. Verified keyboard menu selection and focus restoration, modal dismissal, sheet approval, toast undo, segmented controls, dark mode and the static sky fallback. The offline axe-core scan found no serious or critical issues.
+- Compared the browser popover with the kit image and adjusted the title, spacing and text measure. The browser measured 464 × 247 CSS pixels against the 464 × 248 reference crop. The offline build used a system font fallback. Playwright screenshots and the normal-runtime pixel-diff report are pending.
+- Configured Vite to use the expected port and Playwright to wait for the Fastify health response through Vite. The visual report now fails on absent inputs and measures differences outside the text and illustration regions. A fixture smoke check confirmed missing, identical, excluded and visibly changed inputs are handled correctly.
+- Registry DNS resolution still fails. The local caches lack several direct dependencies, including the router and API server. Loopback binds return `EPERM`, and the Colima Docker socket is inaccessible from this session. The normal Vite/Fastify run, full build and Playwright suite require an environment with registry and localhost access.
+- Git rejected creating `.git/index.lock` because the repository metadata is read-only in this session. The work remains in the project directory.
+
+## Implementation since the foundation
+
+| Milestone                      | Implemented                                                                                                                                                                                                | Open work                                                                                                                                                                |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2. Auth and account            | Sign-in and signup, OTP and magic links, OAuth wiring, session and profile storage, workspace creation, and a landing-to-signup flow that can queue the first plan and home page.                          | Live provider and database verification, and the remaining account endpoints.                                                                                            |
+| 3. Shell and Home              | Workspace switcher, docks, search, dashboard cards, recent Pip activity, work deep links, and per-account read status, workspace-scoped saved-work search, and a Home Run summary.                         | Remaining dock states, floating windows, full notification history, and Home visual parity.                                                                              |
+| 4. Agent core                  | Persisted step-based Runs, optional Pip planning from a goal, pause and resume, approval and question gates, per-Run credit caps, SSE, and optional cited web search.                                      | Automatic execution modes, attachments, dictation, remaining tools, live concurrency checks and API parity.                                                              |
+| 5. Build                       | Pannable and zoomable website canvas, HTML editing, multi-page previews, draft revisions, bookmarks, restore as a new draft, immutable live snapshots and durable Run publication requests.                | File tree and object storage, visual editor, site imports, remaining canvas tools, Tools panel and live publication verification.                                        |
+| 6. Library, Schedule and Inbox | Saved work, approvals, Day/Week/Month/Year calendars with hourly lanes, workspace calendar events, recurring tasks with opt-in Pip execution, approved outbound delivery queue and inbound mailbox reader. | Event editing and deletion, automation triggers, remaining Library views, email threads and replies, attachments, delivery webhooks, and live inbound mail verification. |
+| 7. Settings                    | Account and appearance settings, available credits and the last 50 credit transactions.                                                                                                                    | Stripe test-mode billing, team, domains, vault, notification preferences and remaining tabs.                                                                             |
+| 8. Insights and Visitors       | Daily published-page request counts, UTC range menu and pointer/keyboard chart inspection.                                                                                                                 | Captured Visitors endpoint, visit sessions, rolling 24-hour totals, globe, breakdowns, Insights and visual parity.                                                       |
+| 9. Marketing                   | Public landing and auth pages.                                                                                                                                                                             | Remaining pages and server rendering.                                                                                                                                    |
+| 10. Polish                     | Shared responsive styles and gallery keyboard/a11y checks.                                                                                                                                                 | Full visual comparison, accessibility and performance validation.                                                                                                        |
+
+### Run and provider work
+
+- A Run executes up to 12 instructions in sequence. A user can enter steps or ask Pip to produce an ordered plan from the goal. Planning and execution use the same Run credit limit. A blocking question can continue the same step after an answer. Pause holds future turns and Run publication requests.
+- Build supports panning and zooming around website cards. Extra pages have unique slugs and are included in draft history, restoration, and published snapshots. Existing homepage-only drafts remain usable.
+- Owners and admins can opt into publication on approval when hosting is configured. Approval saves an exact-revision request. The worker checks that revision and the approver’s role and writes the live snapshot and result in one transaction.
+- Scheduled execution is opt-in. The scheduler creates one durable turn per dispatched occurrence and rolls forward to the next future recurrence when several occurrences were missed.
+- Inbox queues explicitly addressed approved drafts for a configured Resend sender. The message, recipient and provider idempotency key stay fixed across retries. Uncertain outcomes are flagged for review.
+- On a configured receiving domain, each workspace has a receiving address. Brightwork verifies webhook signatures before retrieving message bodies and deduplicates by provider delivery and workspace. Members can read the latest 50 messages, including HTML email in an isolated preview. Previously received messages stay accessible if mail reception is disconnected.
+- Day and Week place tasks by local time, reserve separate lanes for overlapping tasks and mark the current time. Year shows scheduled days and opens the corresponding month. Year uses four calendar requests that stay within the existing range limit.
+- Schedule saves events with local start and end times, a location or meeting link, attendees and notes. Events are visible on each local day they occupy. The attendees field records participants for workspace reference.
+- Pip can use optional OpenAI web search. The UI links to source annotations and the existing ledger charges the tool call. Workspace search filters titles through the account’s memberships.
+
+### Verification notes
+
+- Offline Chrome fixture checks covered sign-in challenge, account settings, keyboard search and the Visitors chart. The Visitors fixture displayed the expected 21 views and focused the back button. Reference 084 has additional metrics and a globe. The fixture used a system font and could not load the sky image.
+- All 36 unit tests passed with cached dependencies. Coverage includes Run planning, multi-page routing, webhook signatures, annual calendar ranges, daylight-saving gaps and overlaps, and multi-day events with an exact midnight end. Handler fixtures checked inbound retry and deduplication, event validation, workspace roles, write-origin checks and event range boundaries. Full typechecking still requires the project's missing dependencies.
+- Compared the Week calendar fixture in Chrome with reference 053 and corrected the current-time colours, empty-state surface, icon and workspace time-zone label. The fixture exercised Year-to-Month navigation, selecting an overlapping timed task and reading a sandboxed HTML email. It substituted local fixtures for the API and calendar controls and used a fallback font.
+- Ran the worker with a fixture store and completion provider. It used a saved answer, charged two model calls and one tool call, and persisted one pending website draft. A second attempt did not claim the completed turn.
+- Ran the workspace route handlers with fixture dependencies. Checked recurrence window and result limits, rejected cross-company access, and accepted only visible notification keys. A later mocked route check verified Run authorization and budget validation, exact email recipient and revision, and scheduled opt-in.
+- Added Playwright scenarios for Visitors, Schedule calendar and event creation, and restoring a draft while another version is live. The visual report includes Schedule screenshots 052, 053, 056 and 057, Run summary screenshot 077, and Visitors screenshots 084 and 085. The Chrome event fixture confirmed validation, successful save and opening the saved details, with mock API responses and substitute Radix controls. The full scenarios and pixel diffs need the normal dev runtime.
+- Added a local HAR replay command. A synthetic fixture verified schema matching, read-only replay, explicit fixture mutations and mapping captured UUIDs to local fixture records. Full replay against Brightwork is pending.
+- The staging PostgreSQL test covers paused and restarted Runs, single-revision publication, schedule dispatch, email leasing and accessible search. It now also includes a signed Fastify webhook fixture and received-message workspace isolation. This environment has neither the required package cache nor a running fixture database.
+- Dependency installation fails at npm registry DNS. The offline dependency cache lacks required packages. Docker Compose is unavailable, PostgreSQL startup was denied shared memory, and the sandbox denies Git index writes. The full runtime, screenshot diffs and milestone commits require those capabilities.
+
+## Remaining milestones
+
+- [ ] 2. Auth and account
+- [ ] 3. Shell and Home
+- [ ] 4. Agent core
+- [ ] 5. Build
+- [ ] 6. Library, Schedule and Inbox
+- [ ] 7. Settings modal
+- [ ] 8. Insights and Visitors
+- [ ] 9. Marketing site
+- [ ] 10. Polish pass
+
+Continue with the unimplemented items above. Run the full foundation and subsequent milestone checks and commit when the environment permits.

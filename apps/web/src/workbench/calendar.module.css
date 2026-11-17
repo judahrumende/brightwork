@@ -1,0 +1,354 @@
+.calendar {
+  position: relative;
+  min-width: 0;
+}
+.toolbar,
+.navigation,
+.buttons,
+.timezone {
+  display: flex;
+  align-items: center;
+}
+.toolbar,
+.navigation {
+  justify-content: space-between;
+  gap: 12px;
+}
+.toolbar {
+  position: relative;
+  margin-bottom: 12px;
+}
+.toolbar > [role='group'] {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.timezone,
+.buttons {
+  gap: 6px;
+}
+.timezone {
+  font-size: 13px;
+}
+.navigation {
+  margin-bottom: 10px;
+}
+.navigation h1 {
+  margin: 0;
+  font-size: 27px;
+  line-height: 1.2;
+}
+.previous {
+  transform: rotate(180deg);
+  display: flex;
+}
+.status {
+  margin: 10px 0;
+}
+.calendarBody {
+  position: relative;
+}
+.weekdays,
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.weekdays {
+  text-align: end;
+  font-size: 12px;
+}
+.weekdays span {
+  padding: 8px 14px;
+}
+.days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border-subtle);
+  min-height: max(350px, calc(100dvh - 246px));
+}
+.day {
+  min-width: 0;
+  min-height: 64px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+}
+.day:nth-child(7n) {
+  border-right: 0;
+}
+.day:nth-child(7n + 6),
+.day:nth-child(7n),
+.timeLane[data-weekend='true'] {
+  background-color: var(--control-fill);
+}
+.day[data-muted='true'] {
+  color: var(--ink-secondary);
+}
+.day > time {
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  margin-bottom: 3px;
+  width: 26px;
+  height: 26px;
+  font-size: 14px;
+  border-radius: 999px;
+}
+.day > time[aria-current='date'] {
+  background: var(--destructive-fill);
+  color: var(--destructive-ink);
+}
+.day button {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: var(--topbar-fill);
+  color: var(--ink);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 3px 6px;
+  margin-bottom: 4px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.day button:hover {
+  background: var(--surface-raised);
+}
+:is(.day button, .timedTask)[data-event='true'] {
+  border-inline-start: 3px solid var(--accent-ink);
+}
+.day button :is(time, span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.empty {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: min(362px, 90%);
+  transform: translate(-50%, -50%);
+  background: var(--surface-pure);
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--card-shadow);
+  padding: 4px;
+}
+.emptyCalendarIcon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  background: var(--control-fill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+}
+.timedScroll {
+  height: max(360px, calc(100dvh - 219px));
+  overflow: auto;
+  padding-bottom: 26px;
+}
+.timedCalendar {
+  --hour-row: 52px;
+  --time-gutter: 60px;
+  --lane-columns: minmax(0, 1fr);
+}
+.timedCalendar[data-week='true'] {
+  --lane-columns: repeat(7, minmax(0, 1fr));
+  min-width: 590px;
+}
+.timedHeader,
+.timedGrid {
+  display: grid;
+  grid-template-columns: var(--time-gutter) var(--lane-columns);
+}
+.timedHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--topbar-fill);
+  backdrop-filter: blur(16px);
+}
+.timedHeader > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  font-size: var(--text-caption);
+}
+.timedHeader > span:first-child,
+.hourLabels {
+  color: var(--ink-secondary);
+}
+.timedHeader time,
+.year time {
+  border-radius: 999px;
+}
+.timedHeader time {
+  min-width: 23px;
+  padding: 4px;
+  text-align: center;
+}
+.timedHeader time[aria-current='date'],
+.year time[aria-current='date'],
+.clockLabel {
+  color: var(--destructive-ink);
+  background: var(--destructive-fill);
+}
+.hourLabels,
+.timeLane {
+  position: relative;
+  height: calc(24 * var(--hour-row));
+}
+.hourLabels > span {
+  display: block;
+  text-align: end;
+  padding: 3px 7px 0 0;
+  height: var(--hour-row);
+  font-size: var(--text-caption);
+}
+.timeLane {
+  min-width: 0;
+  border-left: 1px solid var(--border-subtle);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(var(--hour-row) - 1px),
+    var(--border-subtle) calc(var(--hour-row) - 1px) var(--hour-row)
+  );
+}
+.timedTask {
+  position: absolute;
+  z-index: 1;
+  min-width: 0;
+  height: 26px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: start;
+  padding-inline: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+.timedTask:hover {
+  background: var(--hover-fill);
+}
+.timedTask time {
+  margin-inline-end: 6px;
+}
+.clockLabel,
+.clockLine {
+  position: absolute;
+  pointer-events: none;
+}
+.hourLabels .clockLabel {
+  right: 3px;
+  height: auto;
+  padding: 1px 4px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+}
+.clockLine {
+  inset-inline-start: 0;
+  width: 100%;
+  border-top: 1px solid var(--destructive-fill);
+  opacity: 0.25;
+}
+.clockLine[data-today='true'] {
+  opacity: 1;
+}
+.clockLine[data-today='true']::before {
+  content: '';
+  position: absolute;
+  inset: -3px auto auto -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--destructive-fill);
+}
+.year {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.year section {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  padding: 8px 10px;
+}
+.year h2 {
+  margin: 0 0 5px;
+}
+.year h2 button {
+  background: none;
+  color: var(--ink);
+  border: 0;
+  padding: 4px 7px;
+  font: inherit;
+  font-size: var(--text-body);
+  text-align: start;
+  cursor: pointer;
+}
+.year h2 button:hover {
+  background: var(--hover-fill);
+  border-radius: 999px;
+}
+.year ol {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+  font-size: var(--text-caption);
+}
+.year li[data-muted='true'] {
+  visibility: hidden;
+}
+.year time {
+  display: inline-block;
+  min-width: 23px;
+  padding: 3px;
+}
+.year time[data-busy='true']:not([aria-current='date']) {
+  background: var(--control-fill);
+  color: var(--accent-ink);
+}
+.taskCount {
+  position: absolute;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+@media (max-width: 700px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .toolbar > [role='group'] {
+    position: static;
+    transform: none;
+  }
+  .day {
+    padding-inline: 3px;
+  }
+  .day button {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: start;
+    gap: 2px;
+    padding-inline: 3px;
+  }
+  .weekdays span {
+    padding-inline: 4px;
+  }
+}

@@ -1,0 +1,49 @@
+.sky,
+.still,
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.sky {
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--sky-fade-studio-day);
+}
+
+:global([data-theme='dark']) .sky {
+  background: var(--sky-fade-studio-night);
+}
+.sky[data-scene='quiet'] {
+  background: var(--sky-fade-studio-day);
+}
+:global([data-theme='dark']) .sky[data-scene='quiet'] {
+  background: var(--sky-fade-studio-night);
+}
+
+.still {
+  object-fit: cover;
+}
+.layer {
+  visibility: hidden;
+}
+.layer canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sky[data-animated='true'] .layer {
+  visibility: visible;
+}
+.sky[data-animated='true'] .still {
+  visibility: hidden;
+}
+
+:global([data-theme='dark']) .still,
+:global([data-theme='dark']) .layer {
+  opacity: 0.3;
+  filter: brightness(0.6) saturate(0.6) hue-rotate(12deg);
+}

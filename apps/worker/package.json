@@ -1,0 +1,20 @@
+{
+  "name": "@brightwork/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts"
+  },
+  "dependencies": {
+    "@brightwork/shared": "workspace:*",
+    "bullmq": "^5.81.3",
+    "@brightwork/api": "workspace:*",
+    "zod": "^4.1.12",
+    "ioredis": "^5.8.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}
