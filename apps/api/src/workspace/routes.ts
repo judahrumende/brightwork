@@ -685,6 +685,16 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/work/:resource/email-history', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      return { events: await context.mail.history(access.id, resource) };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.post(path + '/work/:resource/send-email', async (request, reply) => {
     try {
       const access = await authorize(request, reply, true);

@@ -764,3 +764,47 @@ test('Commerce connects a store, shows its order total and disconnects', async (
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(page.getByText('Disconnected', { exact: true })).toBeVisible();
 });
+
+test('Inbox distinguishes provider acceptance from delivery', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const message = {
+    id: '29065fd3-312d-4821-8405-a6a488c2f457',
+    title: 'Approved introduction',
+    body: 'Hello',
+    kind: 'email',
+    state: 'approved',
+    revision: 1,
+    emailState: 'accepted',
+    emailRecipient: 'recipient@example.test',
+  };
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [message], hosting: false } }),
+  );
+  await page.route(
+    '**' + api + '/work/' + message.id + '/email-history',
+    (route) =>
+      route.fulfill({
+        json: {
+          events: [
+            {
+              id: 'event_1',
+              status: 'delivered',
+              recipient: message.emailRecipient,
+              revision: 1,
+              occurredAt: '2026-11-18T02:00:02Z',
+            },
+          ],
+        },
+      }),
+  );
+  await page.route('**' + api + '/work/inbound', (route) =>
+    route.fulfill({ json: { emails: [] } }),
+  );
+  await page.goto(workbench + '/inbox?item=' + message.id);
+  await expect(page.getByText(/Accepted by the email provider/)).toBeVisible();
+  const history = page.getByRole('region', { name: 'Email delivery history' });
+  await expect(history).toContainText('Delivered to recipient’s mail server');
+  await expect(history).toContainText('Revision 1');
+});

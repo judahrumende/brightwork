@@ -13,6 +13,7 @@ import postgres from 'postgres';
 import { accounts, businesses, members, publications } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
 import { creditConfig, creditLedger } from '../src/workspace/credits';
+import { registerEmailDelivery } from '../src/workspace/email-delivery';
 import { inboundMail } from '../src/workspace/inbound-mail';
 import { mailStore } from '../src/workspace/mail-store';
 import { runStore } from '../src/workspace/run-store';
@@ -668,11 +669,84 @@ test(
         (await agent.searchWork(account.id, business.id, '50%_')).length,
         1,
       );
-      await mail.record(
-        attempt,
-        { kind: 'accepted', id: 'fixture-receipt' },
-        clock(),
-      );
+      const providerId = randomUUID();
+      const deliveryServer = Fastify();
+      try {
+        registerEmailDelivery(
+          deliveryServer,
+          db,
+          'whsec_' + signingKey.toString('base64'),
+        );
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        function deliver(
+          id: string,
+          type: string,
+          time: string,
+          key = signingKey,
+        ) {
+          const payload = JSON.stringify({
+            type,
+            created_at: time,
+            data: { email_id: providerId, to: ['hello@example.test'] },
+          });
+          const signature = createHmac('sha256', key)
+            .update(id + '.' + timestamp + '.' + payload)
+            .digest('base64');
+          return deliveryServer.inject({
+            method: 'POST',
+            url: '/api/webhooks/email-delivery',
+            payload,
+            headers: {
+              'content-type': 'application/json',
+              'svix-id': id,
+              'svix-timestamp': timestamp,
+              'svix-signature': 'v1,' + signature,
+            },
+          });
+        }
+        const sent = '2026-11-18T02:00:00Z';
+        const delivered = '2026-11-18T02:00:02Z';
+        assert.equal(
+          (
+            await deliver(
+              'delivery_wrong',
+              'email.bounced',
+              delivered,
+              Buffer.alloc(32),
+            )
+          ).statusCode,
+          401,
+        );
+        assert.equal(
+          (await deliver('delivery_final', 'email.delivered', delivered))
+            .statusCode,
+          200,
+        );
+        assert.deepEqual(await mail.history(business.id, draft.id), []);
+        await mail.record(
+          attempt,
+          { kind: 'accepted', id: providerId },
+          clock(),
+        );
+        assert.equal(
+          (await deliver('delivery_final', 'email.delivered', delivered))
+            .statusCode,
+          200,
+        );
+        assert.equal(
+          (await deliver('delivery_sent', 'email.sent', sent)).statusCode,
+          200,
+        );
+        const history = await mailStore(db).history(business.id, draft.id);
+        assert.deepEqual(
+          history.map((event) => event.status),
+          ['delivered', 'sent'],
+        );
+        assert.equal(history[0]?.revision, draft.revision);
+        assert.deepEqual(await mail.history(other.id, draft.id), []);
+      } finally {
+        await deliveryServer.close();
+      }
       assert.equal(
         (await agent.workItem(business.id, draft.id))?.emailState,
         'accepted',

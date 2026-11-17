@@ -1,6 +1,11 @@
-import { and, asc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
 import type { Database } from '../db/database';
-import { artifacts, members, outboundEmails } from '../db/schema';
+import {
+  artifacts,
+  emailDeliveryEvents,
+  members,
+  outboundEmails,
+} from '../db/schema';
 import { canLeadRun } from './run-store';
 import { emailOutcome, mayAttemptEmail } from './mail-policy';
 import type { EmailResult } from './mail-policy';
@@ -20,6 +25,34 @@ export type EmailAttempt = {
 
 export function mailStore(db: Database) {
   return {
+    history(businessId: string, artifactId: string) {
+      return db
+        .select({
+          id: emailDeliveryEvents.id,
+          status: emailDeliveryEvents.status,
+          occurredAt: emailDeliveryEvents.occurredAt,
+          revision: outboundEmails.revision,
+          recipient: outboundEmails.recipient,
+        })
+        .from(outboundEmails)
+        .innerJoin(artifacts, eq(artifacts.id, outboundEmails.artifactId))
+        .innerJoin(
+          emailDeliveryEvents,
+          eq(emailDeliveryEvents.providerId, outboundEmails.providerId),
+        )
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.id, artifactId),
+          ),
+        )
+        .orderBy(
+          desc(emailDeliveryEvents.occurredAt),
+          desc(emailDeliveryEvents.id),
+        )
+        .limit(50);
+    },
+
     async queue(input: {
       businessId: string;
       artifactId: string;

@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import { agentStore } from '../workspace/agent-store';
 import { registerWorkspace } from '../workspace/routes';
 import { runStore } from '../workspace/run-store';
+import { registerEmailDelivery } from '../workspace/email-delivery';
 import { mailStore } from '../workspace/mail-store';
 import { inboundMail } from '../workspace/inbound-mail';
 import { z } from 'zod';
@@ -353,6 +354,8 @@ export function registerAuth(
       : undefined,
   );
   inbound.register(app);
+  if (env.OUTREACH_RESEND_WEBHOOK_SECRET)
+    registerEmailDelivery(app, database.db, env.OUTREACH_RESEND_WEBHOOK_SECRET);
   registerWorkspace(app, {
     store: workspace,
     team,
