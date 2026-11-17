@@ -1,0 +1,604 @@
+[
+  {
+    "number": 1,
+    "title": "Public landing page (/)",
+    "file": "001-landing-hero.png",
+    "surface": "public",
+    "localComparison": false
+  },
+  {
+    "number": 2,
+    "title": "Home: dashboard, Ted waiting",
+    "file": "002-home-waiting-for-you.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 3,
+    "title": "Home: Research app history popover",
+    "file": "003-home-research-history.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 4,
+    "title": "Home: Research browser window",
+    "file": "004-home-research-browser-window.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 5,
+    "title": "Home: Browser app empty state",
+    "file": "005-home-browser-empty.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 6,
+    "title": "Home: Outreach popover",
+    "file": "006-home-dock-outreach.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 7,
+    "title": "Home: Social popover",
+    "file": "007-home-dock-social.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 8,
+    "title": "Home: Build popover",
+    "file": "008-home-dock-build.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 9,
+    "title": "Home: Ads popover and dashboard cards",
+    "file": "009-home-dock-ads-and-cards.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 10,
+    "title": "Home: Messages popover",
+    "file": "010-home-dock-messages.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 11,
+    "title": "Home: Ted panel with goal and live activity",
+    "file": "011-home-ted-goal-activity.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 12,
+    "title": "Home: Documents popover",
+    "file": "012-home-dock-documents.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 13,
+    "title": "Home: Documents tone dropdown",
+    "file": "013-home-documents-tone-menu.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 14,
+    "title": "Home: Image popover",
+    "file": "014-home-dock-image.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 15,
+    "title": "Home: Videos popover",
+    "file": "015-home-dock-videos.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 16,
+    "title": "Home: Schedule popover",
+    "file": "016-home-dock-schedule.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 17,
+    "title": "Home: Schedule repeat options",
+    "file": "017-home-schedule-repeat-menu.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 18,
+    "title": "Home: Library popover",
+    "file": "018-home-library-popover.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 19,
+    "title": "Library window",
+    "file": "019-library-window.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 20,
+    "title": "Library search, no results",
+    "file": "020-library-search-empty.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 21,
+    "title": "Library > Documents (Gallery)",
+    "file": "021-library-documents.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 22,
+    "title": "Document viewer: business plan",
+    "file": "022-document-viewer-business-plan.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 23,
+    "title": "Home: Settings dock popover",
+    "file": "023-home-settings-popover.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 24,
+    "title": "Run settings: approval modes",
+    "file": "024-settings-popover-approval.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 25,
+    "title": "Run settings: credit limit",
+    "file": "025-settings-popover-credit-limit.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 26,
+    "title": "Run settings: power tiers",
+    "file": "026-settings-popover-power.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 27,
+    "title": "Build view: canvas and chat",
+    "file": "027-build-canvas.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 28,
+    "title": "Build: chat transcript and Tools opening",
+    "file": "028-build-tools-opening.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 29,
+    "title": "Build Tools: Payments",
+    "file": "029-build-tools-payments.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 30,
+    "title": "Build Tools: Security",
+    "file": "030-build-tools-security.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 31,
+    "title": "Build Tools: GitHub",
+    "file": "031-build-tools-github.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 32,
+    "title": "Build Tools: AI usage",
+    "file": "032-build-tools-ai.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 33,
+    "title": "Build Tools: AI settings",
+    "file": "033-build-tools-ai-settings.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 34,
+    "title": "Build Tools: Database tables",
+    "file": "034-build-tools-database.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 35,
+    "title": "Build Tools: Database users",
+    "file": "035-build-tools-database-users.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 36,
+    "title": "Build Tools: RLS policies",
+    "file": "036-build-tools-rls-policies.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 37,
+    "title": "Build Tools: Emails",
+    "file": "037-build-tools-emails.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 38,
+    "title": "Build canvas (no chat focus)",
+    "file": "038-build-canvas-live.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 39,
+    "title": "Build: Your work panel",
+    "file": "039-build-your-work.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 40,
+    "title": "Build: Import your site",
+    "file": "040-build-import-site.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 41,
+    "title": "Build: composer attach menu",
+    "file": "041-build-chat-attach-menu.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 42,
+    "title": "Build: chat title menu",
+    "file": "042-build-chat-title-menu.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 43,
+    "title": "Build: chats sidebar",
+    "file": "043-build-chats-sidebar.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 44,
+    "title": "Build: History modal",
+    "file": "044-build-chat-history-modal.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 45,
+    "title": "Build: site editor (live preview)",
+    "file": "045-build-site-editor.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 46,
+    "title": "Build: site page picker",
+    "file": "046-build-site-page-picker.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 47,
+    "title": "Home: waiting for approval",
+    "file": "047-home-waiting-approval.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 48,
+    "title": "Home: Needs your OK card",
+    "file": "048-home-needs-your-ok.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 49,
+    "title": "Search palette (Cmd/Ctrl+K)",
+    "file": "049-search-palette.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 50,
+    "title": "Search palette with query",
+    "file": "050-search-palette-query.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 51,
+    "title": "Approval sheet: website change",
+    "file": "051-approval-website-change.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 52,
+    "title": "Schedule: Month view",
+    "file": "052-schedule-month.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 53,
+    "title": "Schedule: Week view",
+    "file": "053-schedule-week.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 54,
+    "title": "Schedule: Day view",
+    "file": "054-schedule-day.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 55,
+    "title": "Schedule: All tasks (list)",
+    "file": "055-schedule-all-tasks.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 56,
+    "title": "Schedule: New task modal",
+    "file": "056-schedule-new-task.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 57,
+    "title": "Schedule: New event modal",
+    "file": "057-schedule-new-event.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 58,
+    "title": "Notifications panel",
+    "file": "058-notifications-panel.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 59,
+    "title": "Settings modal: Earn credits (gift)",
+    "file": "059-settings-earn-credits.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 60,
+    "title": "Settings: Team",
+    "file": "060-settings-team.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 61,
+    "title": "Settings: Integrations",
+    "file": "061-settings-integrations.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 62,
+    "title": "Settings: Vault (empty)",
+    "file": "062-settings-vault.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 63,
+    "title": "Settings: Domains",
+    "file": "063-settings-domains.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 64,
+    "title": "Settings: Plans & credit usage",
+    "file": "064-settings-plans.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 65,
+    "title": "Settings: plan prices and comparison",
+    "file": "065-settings-plans-prices.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 66,
+    "title": "Settings: feature table and usage",
+    "file": "066-settings-plans-features-usage.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 67,
+    "title": "Settings: Notifications",
+    "file": "067-settings-notifications.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 68,
+    "title": "Settings: Privacy & security",
+    "file": "068-settings-privacy.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 69,
+    "title": "Settings: General",
+    "file": "069-settings-general.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 70,
+    "title": "Settings: Account",
+    "file": "070-settings-account.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 71,
+    "title": "Settings: All domains",
+    "file": "071-settings-all-domains.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 72,
+    "title": "Profile menu",
+    "file": "072-profile-menu.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 73,
+    "title": "Profile: Help submenu",
+    "file": "073-profile-help-submenu.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 74,
+    "title": "Company switcher",
+    "file": "074-company-switcher.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 75,
+    "title": "Text Ted modal",
+    "file": "075-text-ted-qr.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 76,
+    "title": "Ted panel: Runs tab",
+    "file": "076-home-ted-runs-tab.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 77,
+    "title": "Run summary window",
+    "file": "077-run-summary-window.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 78,
+    "title": "Home: dashboard cards with chart hover",
+    "file": "078-home-cards-revenue-hover.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 79,
+    "title": "Home: 12M range and Insights Sales tab",
+    "file": "079-home-revenue-12m-insights-sales.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 80,
+    "title": "Home: Insights Customers tab",
+    "file": "080-home-insights-customers.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 81,
+    "title": "Insights page: Analytics",
+    "file": "081-insights-analytics.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 82,
+    "title": "Insights page: Customers",
+    "file": "082-insights-customers.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 83,
+    "title": "Insights page: Social",
+    "file": "083-insights-social.png",
+    "surface": "signed-in",
+    "localComparison": false
+  },
+  {
+    "number": 84,
+    "title": "Visitors page",
+    "file": "084-visitors-overview.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 85,
+    "title": "Visitors: date range menu",
+    "file": "085-visitors-range-menu.png",
+    "surface": "signed-in",
+    "localComparison": true
+  },
+  {
+    "number": 86,
+    "title": "Visitors: breakdown panels",
+    "file": "086-visitors-breakdowns.png",
+    "surface": "signed-in",
+    "localComparison": false
+  }
+]

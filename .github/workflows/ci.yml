@@ -28,7 +28,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check && pnpm lint && pnpm contracts:check
+      - run: pnpm format:check && pnpm lint && pnpm contracts:check && pnpm parity:check
       - run: pnpm typecheck && pnpm build && pnpm test:unit
       - run: pnpm --filter @brightwork/api test:research && pnpm --filter @brightwork/api test:growth
       - name: Start disposable services and apply migrations

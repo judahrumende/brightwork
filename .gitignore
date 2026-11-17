@@ -10,6 +10,7 @@ dist/
 /kit/*
 !/kit/features.md
 !/kit/api-shapes.json
+!/kit/screen-index.json
 /reference-v1/
 /PROMPT.md
 /.tanstack/
