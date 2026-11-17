@@ -11,6 +11,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  serial,
   text,
   timestamp,
   uuid,
@@ -381,6 +382,20 @@ export const publicationRequests = pgTable(
       .where(sql`${t.state} = 'queued'`),
   ],
 );
+
+export const workspaceNotifications = pgTable('workspace_notifications', {
+  id: serial().primaryKey(),
+  businessId: uuid('business_id')
+    .notNull()
+    .references(() => businesses.id, { onDelete: 'cascade' }),
+  artifactId: uuid('artifact_id')
+    .notNull()
+    .references(() => artifacts.id, { onDelete: 'cascade' }),
+  key: text().notNull(),
+  title: text().notNull(),
+  createdAt: date('created_at').defaultNow().notNull(),
+  resolvedAt: date('resolved_at'),
+});
 
 export const notificationReads = pgTable(
   'notification_reads',

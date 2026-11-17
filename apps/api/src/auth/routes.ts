@@ -124,7 +124,11 @@ function locale(value: string | undefined) {
   }
 }
 
-export function registerAuth(app: FastifyInstance, env: AuthEnv) {
+export function registerAuth(
+  app: FastifyInstance,
+  env: AuthEnv,
+  providerRequest?: typeof fetch,
+) {
   if (!(env.DATABASE_URL && env.AUTH_SECRET && env.REDIS_URL)) {
     app.all('/api/auth/*', async (_request, reply) =>
       reply
@@ -146,7 +150,7 @@ export function registerAuth(app: FastifyInstance, env: AuthEnv) {
     maxRetriesPerRequest: 1,
     connectTimeout: 5000,
   });
-  const auth = authProviders(env);
+  const auth = authProviders(env, providerRequest);
   const origin = new URL(env.APP_ORIGIN).origin;
   const secure = origin.startsWith('https:');
   const cook = (name: string) => (secure ? '__Host-' : '') + 'bw-' + name;

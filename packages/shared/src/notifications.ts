@@ -5,7 +5,8 @@ export function workNotificationKey(item: {
   revision: number;
   answered: boolean;
 }) {
-  if (item.kind === 'question' && !item.answered) return 'question:' + item.id;
+  if (item.kind === 'question')
+    return item.answered ? null : 'question:' + item.id;
   if (item.state === 'pending') return `creation:${item.id}:${item.revision}`;
   return null;
 }

@@ -42,7 +42,87 @@ async function seedWorkbench(page: Page) {
   await page.route('**' + api + '/work/summary', (route) =>
     route.fulfill({ json: { items: [] } }),
   );
+  await page.route('**' + api + '/notifications', (route) =>
+    route.fulfill({ json: { items: [], unread: 0, before: null } }),
+  );
 }
+
+test('Home shows Run work in the dock and keeps read notifications in history', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const work = {
+    id: 'f0bf9474-bd27-4a59-ac98-993edae6006a',
+    kind: 'document',
+    title: 'Launch brief',
+    state: 'pending',
+    revision: 1,
+    answered: false,
+    inRun: true,
+  };
+  const notice = {
+    id: 1,
+    artifactId: work.id,
+    kind: work.kind,
+    title: work.title,
+    createdAt: '2026-11-17T04:00:00.000Z',
+    resolvedAt: null,
+  };
+  let readAt: string | null = null;
+  await page.route('**' + api + '/work/summary', (route) =>
+    route.fulfill({ json: { items: [work] } }),
+  );
+  await page.route('**' + api + '/notifications', (route) =>
+    route.fulfill({
+      json: {
+        items: [{ ...notice, readAt }],
+        unread: readAt ? 0 : 1,
+        before: null,
+      },
+    }),
+  );
+  await page.route('**' + api + '/run/read', (route) => {
+    expect(route.request().postDataJSON()).toEqual({ all: true });
+    readAt = notice.createdAt;
+    return route.fulfill({ json: { items: [] } });
+  });
+  await page.route('**/api/me/search-work?*', (route) =>
+    route.fulfill({
+      json: {
+        items: [{ ...work, businessId: work.id, businessName: 'Demo Shop' }],
+      },
+    }),
+  );
+  await page.goto(workbench);
+
+  const dock = page.getByRole('navigation', { name: 'Workspace applications' });
+  await dock.getByRole('button', { name: 'Documents' }).press('Enter');
+  await expect(
+    page
+      .getByRole('region', { name: 'In Run' })
+      .getByRole('link', { name: 'Launch brief' }),
+  ).toHaveAttribute('href', workbench + '/library?item=' + work.id);
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Notifications, 1 unread' }).click();
+  const notifications = page.getByRole('dialog', { name: 'Notifications' });
+  await notifications.getByRole('button', { name: 'Mark all read' }).click();
+  await expect(
+    notifications.getByRole('link', { name: /Launch brief.*Read/ }),
+  ).toBeVisible();
+  await notifications.getByRole('radio', { name: 'Unread' }).click();
+  await expect(
+    notifications.getByText('No unread notifications on this page'),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.keyboard.press('Control+k');
+  const search = page.getByRole('dialog', { name: 'Search your workspaces' });
+  await search.getByRole('textbox').fill('Launch');
+  await expect(
+    search.getByRole('link', { name: /Launch brief.*Demo Shop/ }),
+  ).toHaveAttribute('href', `/f/${work.id}/library?item=${work.id}`);
+});
 
 test('Home opens a Run summary and Run controls can pause it', async ({
   page,

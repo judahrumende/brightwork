@@ -3,12 +3,14 @@ import { upcomingOccurrences } from './recurrence';
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   getTableColumns,
   gt,
   gte,
   ilike,
+  inArray,
   isNull,
   lt,
   ne,
@@ -30,6 +32,7 @@ import {
   taskAutomations,
   visitDays,
   websiteVersions,
+  workspaceNotifications,
 } from '../db/schema';
 export type { TurnPart } from '../db/schema';
 
@@ -419,8 +422,18 @@ export function agentStore(db: Database) {
           state: artifacts.state,
           revision: artifacts.revision,
           answered: sql<boolean>`${artifacts.answer} is not null`,
+          inRun: sql<boolean>`${businessRuns.id} is not null`,
         })
         .from(artifacts)
+        .leftJoin(agentTurns, eq(agentTurns.id, artifacts.turnId))
+        .leftJoin(
+          businessRuns,
+          and(
+            eq(businessRuns.id, agentTurns.runId),
+            eq(businessRuns.businessId, artifacts.businessId),
+            inArray(businessRuns.state, ['active', 'paused']),
+          ),
+        )
         .where(eq(artifacts.businessId, businessId))
         .orderBy(desc(artifacts.createdAt), desc(artifacts.id))
         .limit(200);
@@ -472,13 +485,66 @@ export function agentStore(db: Database) {
     async markNotifications(
       accountId: string,
       businessId: string,
-      keys: string[],
+      keys: string[] | null,
     ) {
-      if (!keys.length) return;
-      await db
-        .insert(notificationReads)
-        .values(keys.map((key) => ({ accountId, businessId, key })))
-        .onConflictDoNothing();
+      if (keys?.length === 0) return;
+      const rows = workspaceNotifications;
+      const selected = keys ? inArray(rows.key, keys) : isNull(rows.resolvedAt);
+      await db.execute(sql`
+        insert into ${notificationReads} (account_id, business_id, key)
+        select ${accountId}::uuid, ${rows.businessId}, ${rows.key} from ${rows}
+        where ${eq(rows.businessId, businessId)} and ${selected}
+        on conflict do nothing
+      `);
+    },
+    async notificationHistory(
+      accountId: string,
+      businessId: string,
+      before?: number,
+    ) {
+      const rows = workspaceNotifications;
+      const readForAccount = and(
+        eq(notificationReads.accountId, accountId),
+        eq(notificationReads.businessId, rows.businessId),
+        eq(notificationReads.key, rows.key),
+      );
+      const owned = eq(rows.businessId, businessId);
+      const limit = 50;
+      const [items, counts] = await Promise.all([
+        db
+          .select({
+            id: rows.id,
+            artifactId: rows.artifactId,
+            kind: artifacts.kind,
+            key: rows.key,
+            title: rows.title,
+            createdAt: rows.createdAt,
+            resolvedAt: rows.resolvedAt,
+            readAt: notificationReads.readAt,
+          })
+          .from(rows)
+          .innerJoin(artifacts, eq(artifacts.id, rows.artifactId))
+          .leftJoin(notificationReads, readForAccount)
+          .where(and(owned, before ? lt(rows.id, before) : undefined))
+          .orderBy(desc(rows.id))
+          .limit(limit + 1),
+        db
+          .select({ total: count() })
+          .from(rows)
+          .leftJoin(notificationReads, readForAccount)
+          .where(
+            and(
+              owned,
+              isNull(rows.resolvedAt),
+              isNull(notificationReads.readAt),
+            ),
+          ),
+      ]);
+      return {
+        items: items.slice(0, limit),
+        before: items.length > limit ? (items[limit - 1]?.id ?? null) : null,
+        unread: counts[0]?.total ?? 0,
+      };
     },
     async readNotifications(accountId: string, businessId: string) {
       return db

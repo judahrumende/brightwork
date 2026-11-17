@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { brand, workNotificationKey } from '@brightwork/shared';
 import { api, errorMessage, write } from '../auth/client';
 import { Icon, Mascot } from '../ui/icons';
@@ -14,7 +14,7 @@ import styles from './workbench.module.css';
 const noItems: WorkSummary[] = [];
 const needsAttention = (item: WorkSummary) =>
   workNotificationKey(item) !== null;
-const action = (item: WorkSummary) =>
+const action = (item: Pick<WorkSummary, 'kind'>) =>
   item.kind === 'question' ? 'Question from Pip' : 'Review requested';
 const turnStatus = {
   queued: 'Queued',
@@ -40,7 +40,7 @@ function WorkLinks({
             href={artifactLink(
               companyId,
               item,
-              actionable && item.state === 'pending',
+              actionable && item.state === 'pending' && item.inRun,
             )}
           >
             <span>
@@ -89,7 +89,7 @@ export function PipActivity({
       <div className={styles.statusCard}>
         <div className={styles.statusHeading}>
           <Mascot size={56} />
-          <h2>{display}</h2>
+          <h2 aria-live="polite">{display}</h2>
         </div>
         <a className={styles.railLink} href={workspacePath(companyId, 'build')}>
           Message {brand.agent} <Icon name="arrow" />
@@ -177,47 +177,53 @@ export function PipActivity({
   );
 }
 
-export function Notifications({
-  companyId,
-  items,
-  unavailable,
-}: {
-  companyId: string;
-  items: readonly WorkSummary[] | undefined;
-  unavailable: boolean;
-}) {
-  const attention = items?.filter(needsAttention) ?? noItems;
+type NotificationPage = {
+  items: (Pick<WorkSummary, 'kind' | 'title'> & {
+    id: number;
+    artifactId: string;
+    createdAt: string;
+    resolvedAt: string | null;
+    readAt: string | null;
+  })[];
+  unread: number;
+  before: number | null;
+};
+
+export function Notifications({ companyId }: { companyId: string }) {
   const cache = useQueryClient();
   const [filter, setFilter] = useState('all');
   const [marking, setMarking] = useState(false);
   const [error, setError] = useState('');
-  const endpoint =
-    '/api/companies/' + encodeURIComponent(companyId) + '/run/read';
-  const readKey = ['company', companyId, 'notification-reads'];
-  type Reads = { items: { key: string; readAt: string }[] };
-  const read = useQuery({
-    enabled: attention.length > 0,
-    queryKey: readKey,
-    queryFn: ({ signal }) => api<Reads>(endpoint, { signal }),
+  const root = '/api/companies/' + encodeURIComponent(companyId);
+  const queryKey = ['company', companyId, 'notifications'] as const;
+  const history = useInfiniteQuery({
+    queryKey,
+    initialPageParam: null as number | null,
+    getNextPageParam: (last: NotificationPage) => last.before ?? undefined,
+    queryFn: ({ signal, pageParam }) =>
+      api<NotificationPage>(
+        root +
+          '/notifications' +
+          (pageParam === null ? '' : '?before=' + pageParam),
+        { signal },
+      ),
+    refetchInterval: 15_000,
   });
-  const readKeys = new Set(read.data?.items.map((entry) => entry.key));
-  const unread = attention.filter(
-    (item) => !readKeys.has(workNotificationKey(item) ?? ''),
-  );
-  const visible = filter === 'unread' ? unread : attention;
-  const badge = read.data ? unread.length : 0;
+  const items = history.data?.pages.flatMap((page) => page.items) ?? [];
+  const badge = history.data?.pages[0]?.unread ?? 0;
+  const visible =
+    filter === 'unread'
+      ? items.filter((item) => !item.readAt && !item.resolvedAt)
+      : items;
   const label = badge ? `Notifications, ${badge} unread` : 'Notifications';
 
   async function markAllRead() {
-    if (marking || !unread.length) return;
+    if (marking || !badge) return;
     setMarking(true);
     setError('');
     try {
-      const keys = unread
-        .map(workNotificationKey)
-        .filter((key) => key !== null);
-      const updated = await write<Reads>(endpoint, { keys });
-      cache.setQueryData(readKey, updated);
+      await write(root + '/run/read', { all: true });
+      await cache.invalidateQueries({ queryKey });
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -245,7 +251,7 @@ export function Notifications({
       }
     >
       <h3 className={styles.popoverTitle}>Notifications</h3>
-      {attention.length > 0 && (
+      {items.length > 0 && (
         <div className={styles.notificationControls}>
           <Segmented
             label="Filter notifications"
@@ -267,23 +273,62 @@ export function Notifications({
         </div>
       )}
       {visible.length > 0 ? (
-        <WorkLinks items={visible} companyId={companyId} actionable />
+        <ul className={styles.activityLinks}>
+          {visible.map((item) => (
+            <li key={item.id}>
+              <a
+                href={artifactLink(companyId, {
+                  id: item.artifactId,
+                  kind: item.kind,
+                })}
+              >
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {action(item)} ·{' '}
+                    {item.resolvedAt
+                      ? 'Resolved'
+                      : item.readAt
+                        ? 'Read'
+                        : 'Unread'}
+                  </small>
+                  <small>
+                    <time dateTime={item.createdAt}>
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </time>
+                  </small>
+                </span>
+                <Icon name="arrow" />
+              </a>
+            </li>
+          ))}
+        </ul>
       ) : (
         <EmptyState
           title={
-            unavailable
+            history.isError
               ? 'Notifications are unavailable'
-              : items
-                ? filter === 'unread'
-                  ? 'No unread notifications'
+              : history.isPending
+                ? 'Loading notifications…'
+                : filter === 'unread'
+                  ? 'No unread notifications on this page'
                   : 'You’re up to date'
-                : 'Loading notifications…'
           }
         />
       )}
-      {(error || read.isError) && (
+      {history.hasNextPage && (
+        <Button
+          size="small"
+          variant="secondary"
+          disabled={history.isFetching}
+          onClick={() => void history.fetchNextPage()}
+        >
+          Load earlier notifications
+        </Button>
+      )}
+      {(error || history.isFetchNextPageError) && (
         <p className={styles.alert} role="alert">
-          {error || 'Read status is unavailable.'}
+          {error || 'Earlier notifications are unavailable.'}
         </p>
       )}
     </FloatingPanel>
