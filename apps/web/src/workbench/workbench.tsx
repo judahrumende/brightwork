@@ -412,7 +412,11 @@ function View({
       {view !== 'schedule' && <h1>{labels[view]}</h1>}
       {view === 'build' ? (
         <div className={styles.buildGrid}>
-          <PipChat id={company.id} />
+          <PipChat
+            key={company.id}
+            id={company.id}
+            readOnly={company.role === 'viewer'}
+          />
           <WorkList id={company.id} role={company.role} kind={kind} />
         </div>
       ) : view === 'run' ? (

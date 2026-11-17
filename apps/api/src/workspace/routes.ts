@@ -145,15 +145,47 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
   app.get(path + '/pip/turns', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
-      if (access)
-        return {
-          enabled: agentEnabled,
-          turns: (await store.turns(access.id)).map(turnSnapshot),
-        };
+      if (!access) return;
+      const { before } = z
+        .object({ before: z.uuid().optional() })
+        .parse(request.query);
+      return {
+        enabled: agentEnabled,
+        ...(await store.turns(access.id, before)),
+      };
     } catch (error) {
       return reportError(error, reply);
     }
   });
+  app.get(
+    path + '/pip/turns/:resource/attachments/:attachmentId',
+    async (request, reply) => {
+      try {
+        const access = await authorize(request, reply);
+        if (!access) return;
+        const { resource, attachmentId } = resourceParams
+          .extend({ attachmentId: z.uuid() })
+          .parse(request.params);
+        const [file] = await store.attachments(
+          access.id,
+          resource,
+          attachmentId,
+        );
+        if (!file)
+          return reply.code(404).send({ message: 'Attachment not found.' });
+        return reply
+          .type('text/plain; charset=UTF-8')
+          .header(
+            'Content-Disposition',
+            "attachment; filename*=UTF-8''" + encodeURIComponent(file.name),
+          )
+          .header('X-Content-Type-Options', 'nosniff')
+          .send(file.content);
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    },
+  );
   app.post(path + '/pip/turns', async (request, reply) => {
     try {
       const access = await authorize(request, reply, true);
@@ -162,8 +194,30 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         return reply
           .code(503)
           .send({ message: 'Connect an LLM provider to message Pip.' });
-      const { prompt } = z
-        .object({ prompt: z.string().trim().min(1).max(12000) })
+      const { prompt, attachments } = z
+        .object({
+          prompt: z.string().trim().min(1).max(12000),
+          attachments: z
+            .array(
+              z.object({
+                name: z
+                  .string()
+                  .max(160)
+                  .regex(/^[\p{L}\p{N}_. -]+\.(?:txt|md|csv|json|log)$/iu),
+                content: z
+                  .string()
+                  .min(1)
+                  .max(24576)
+                  .refine(
+                    (value) =>
+                      !value.includes('\0') &&
+                      Buffer.byteLength(value) <= 24576,
+                  ),
+              }),
+            )
+            .max(3)
+            .default([]),
+        })
         .parse(request.body);
       const pace = await redis.set(
         'brightwork:agent-pace:' + access.accountId,
@@ -176,7 +230,12 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         return reply
           .code(429)
           .send({ message: 'Wait a moment before sending again.' });
-      const turn = await store.addTurn(access.id, access.accountId, prompt);
+      const turn = await store.addTurn(
+        access.id,
+        access.accountId,
+        prompt,
+        attachments,
+      );
       try {
         await queue.add(
           'turn',
@@ -251,6 +310,21 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
           .code(409)
           .send({ message: 'This workspace already has an open Run.' });
       return reply.code(201).send({ run });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/pip/runs/:resource/history', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const { before } = z
+        .object({ before: z.coerce.number().int().positive().optional() })
+        .parse(request.query);
+      const history = await context.runs.history(access.id, resource, before);
+      if (!history) return reply.code(404).send({ message: 'Run not found.' });
+      return history;
     } catch (error) {
       return reportError(error, reply);
     }

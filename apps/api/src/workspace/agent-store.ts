@@ -24,6 +24,7 @@ import {
   businesses,
   businessRuns,
   calendarEvents,
+  chatAttachments,
   members,
   notificationReads,
   outboundEmails,
@@ -39,8 +40,13 @@ export type { TurnPart } from '../db/schema';
 export const agentQueueName = 'brightwork-agent';
 type Turn = typeof agentTurns.$inferSelect;
 type Artifact = typeof artifacts.$inferInsert;
+type ChatAttachment = Pick<
+  typeof chatAttachments.$inferInsert,
+  'name' | 'content'
+>;
+type AttachmentLink = { id: string; name: string };
 
-export function turnSnapshot(row: Turn) {
+export function turnSnapshot(row: Turn & { attachments?: AttachmentLink[] }) {
   return {
     id: row.id,
     label: 'Work on your request',
@@ -52,6 +58,7 @@ export function turnSnapshot(row: Turn) {
     usage: row.usage,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    ...(row.attachments?.length ? { attachments: row.attachments } : {}),
   };
 }
 
@@ -164,22 +171,84 @@ export function agentStore(db: Database) {
         );
       return record;
     },
-    async addTurn(businessId: string, creatorId: string, prompt: string) {
-      const [row] = await db
-        .insert(agentTurns)
-        .values({ businessId, creatorId, prompt })
-        .returning();
-      if (!row) throw new Error('Could not create turn');
-      return row;
+    async addTurn(
+      businessId: string,
+      creatorId: string,
+      prompt: string,
+      files: ChatAttachment[] = [],
+    ) {
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(agentTurns)
+          .values({ businessId, creatorId, prompt })
+          .returning();
+        if (!row) throw new Error('Could not create turn');
+        const attachments = files.length
+          ? await tx
+              .insert(chatAttachments)
+              .values(files.map((file) => ({ ...file, turnId: row.id })))
+              .returning({ id: chatAttachments.id, name: chatAttachments.name })
+          : [];
+        return { ...row, attachments };
+      });
     },
-    async turns(businessId: string) {
+    async turns(businessId: string, before?: string) {
+      const cursor = before
+        ? db
+            .select({ createdAt: agentTurns.createdAt, id: agentTurns.id })
+            .from(agentTurns)
+            .where(
+              and(
+                eq(agentTurns.businessId, businessId),
+                eq(agentTurns.id, before),
+              ),
+            )
+        : null;
+      const size = 100;
       const rows = await db
-        .select()
+        .select({
+          ...getTableColumns(agentTurns),
+          attachments: sql<
+            AttachmentLink[]
+          >`coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name, id) from ${chatAttachments} where turn_id = ${agentTurns.id}), '[]'::jsonb)`,
+        })
         .from(agentTurns)
-        .where(eq(agentTurns.businessId, businessId))
-        .orderBy(desc(agentTurns.createdAt))
-        .limit(100);
-      return rows.reverse();
+        .where(
+          and(
+            eq(agentTurns.businessId, businessId),
+            cursor
+              ? sql`(${agentTurns.createdAt}, ${agentTurns.id}) < (${cursor})`
+              : undefined,
+          ),
+        )
+        .orderBy(desc(agentTurns.createdAt), desc(agentTurns.id))
+        .limit(size + 1);
+      const page = rows.slice(0, size);
+      return {
+        turns: page.map(turnSnapshot).reverse(),
+        before: rows.length > size ? (page.at(-1)?.id ?? null) : null,
+      };
+    },
+    async attachments(
+      businessId: string,
+      turnId: string,
+      attachmentId?: string,
+    ) {
+      return db
+        .select({
+          name: chatAttachments.name,
+          content: chatAttachments.content,
+        })
+        .from(chatAttachments)
+        .innerJoin(agentTurns, eq(chatAttachments.turnId, agentTurns.id))
+        .where(
+          and(
+            eq(agentTurns.businessId, businessId),
+            eq(agentTurns.id, turnId),
+            attachmentId ? eq(chatAttachments.id, attachmentId) : undefined,
+          ),
+        )
+        .orderBy(asc(chatAttachments.name), asc(chatAttachments.id));
     },
     async readTurn(businessId: string, id: string) {
       const [row] = await db

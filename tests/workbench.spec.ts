@@ -160,6 +160,21 @@ test('Home opens a Run summary and Run controls can pause it', async ({
   await page.route('**' + api + '/pip/runs', (route) =>
     route.fulfill({ json: { enabled: true, canPublish: true, runs: [run] } }),
   );
+  await page.route('**' + api + '/pip/runs/' + run.id + '/history', (route) =>
+    route.fulfill({
+      json: {
+        before: null,
+        events: [
+          {
+            id: 1,
+            kind: 'waiting',
+            detail: 'approval',
+            createdAt: run.createdAt,
+          },
+        ],
+      },
+    }),
+  );
   await page.route('**' + api + '/pip/runs/' + run.id + '/control', (route) => {
     expect(route.request().postDataJSON()).toEqual({ action: 'pause' });
     run.state = 'paused';
@@ -176,11 +191,92 @@ test('Home opens a Run summary and Run controls can pause it', async ({
   await page.screenshot({
     path: 'test-results/visual/077-run-summary-window.png',
   });
+  await summary.getByText('Run history', { exact: true }).click();
+  await expect(
+    summary.getByText('Waiting for owner · approval', { exact: false }),
+  ).toBeVisible();
   await summary.getByRole('link', { name: 'Open Run controls' }).click();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Resume', exact: true }),
   ).toBeVisible();
+});
+
+test('Build loads earlier chat, dictates into the composer and sends text attachments', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const previous = {
+    id: 'f0bf9474-bd27-4a59-ac98-993edae6006a',
+    prompt: 'Earlier draft',
+    text: 'Saved.',
+    parts: [],
+    status: 'completed',
+    revision: 2,
+  };
+  const cutoff = '509cc783-a545-44c7-aab4-fe80894a0b60';
+  const attachmentId = '93736c3a-8c3a-4cc4-9774-70d4883bb0ab';
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**' + api + '/pip/turns?before=' + cutoff, (route) =>
+    route.fulfill({ json: { turns: [previous], before: null } }),
+  );
+  await page.route('**' + api + '/pip/turns', (route) => {
+    if (route.request().method() === 'GET')
+      return route.fulfill({
+        json: { enabled: true, turns: [], before: cutoff },
+      });
+    expect(route.request().postDataJSON()).toEqual({
+      prompt: 'Read my brief',
+      attachments: [{ name: 'brief.txt', content: 'Synthetic brief' }],
+    });
+    return route.fulfill({
+      status: 202,
+      json: {
+        ...previous,
+        id: cutoff,
+        prompt: 'Read my brief',
+        attachments: [{ id: attachmentId, name: 'brief.txt' }],
+      },
+    });
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'SpeechRecognition', {
+      value: class {
+        onresult?: (event: { results: { transcript: string }[][] }) => void;
+        onend?: () => void;
+        start() {
+          setTimeout(() => {
+            this.onresult?.({ results: [[{ transcript: 'Read my brief' }]] });
+            this.onend?.();
+          }, 10);
+        }
+        stop() {
+          this.onend?.();
+        }
+        abort() {}
+      },
+    });
+  });
+  await page.goto(workbench + '/build');
+  const chat = page.getByRole('region', { name: 'Chat with Pip' });
+  await chat.getByRole('button', { name: 'Load earlier messages' }).click();
+  await expect(chat.getByText('Earlier draft', { exact: true })).toBeVisible();
+  await chat.getByRole('button', { name: 'Dictate' }).click();
+  await expect(chat.getByRole('textbox', { name: 'Message Pip' })).toHaveValue(
+    'Read my brief',
+  );
+  await chat.getByLabel('Attach text files').setInputFiles({
+    name: 'brief.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Synthetic brief'),
+  });
+  await chat.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(chat.getByRole('link', { name: 'brief.txt' })).toHaveAttribute(
+    'href',
+    api + '/pip/turns/' + cutoff + '/attachments/' + attachmentId,
+  );
 });
 
 test('Visitors shows an empty period and lets keyboard users change the range', async ({

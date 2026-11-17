@@ -1,4 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, errorMessage, write } from '../auth/client';
@@ -339,6 +343,78 @@ export function RunSummary({
         </section>
       )}
       {run.failure && <p>{run.failure}</p>}
+      <RunHistory run={run} companyId={companyId} />
     </div>
+  );
+}
+
+type RunHistoryPage = {
+  before: number | null;
+  events: { id: number; kind: string; detail: string; createdAt: string }[];
+};
+
+const eventLabels: Record<string, string> = {
+  started: 'Run started',
+  planned: 'Step added',
+  paused: 'Run paused',
+  resumed: 'Run resumed',
+  waiting: 'Waiting for owner',
+  unblocked: 'Run continued',
+  step_queued: 'Step queued',
+  step_finished: 'Step completed',
+  completed: 'Run completed',
+  failed: 'Run stopped',
+};
+
+function RunHistory({ run, companyId }: { run: Run; companyId: string }) {
+  const [open, setOpen] = useState(false);
+  const history = useInfiniteQuery({
+    queryKey: [...runsKey(companyId), run.id, 'history'],
+    enabled: open,
+    initialPageParam: 0,
+    getNextPageParam: (last: RunHistoryPage) => last.before ?? undefined,
+    queryFn: ({ pageParam, signal }) =>
+      api<RunHistoryPage>(
+        runsPath(companyId) +
+          '/' +
+          run.id +
+          '/history' +
+          (pageParam ? '?before=' + pageParam : ''),
+        { signal },
+      ),
+    refetchInterval: open && run.state === 'active' ? 3_000 : false,
+  });
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>Run history</summary>
+      {open && history.isPending && <p role="status">Loading Run history…</p>}
+      {open && history.isError && (
+        <p role="alert">{errorMessage(history.error)}</p>
+      )}
+      <ul>
+        {history.data?.pages.flatMap((page) =>
+          page.events.map((event) => (
+            <li key={event.id}>
+              <time dateTime={event.createdAt}>
+                {new Date(event.createdAt).toLocaleString()}
+              </time>
+              {' · '}
+              {eventLabels[event.kind] ?? event.kind}
+              {event.detail && ' · ' + event.detail}
+            </li>
+          )),
+        )}
+      </ul>
+      {history.hasNextPage && (
+        <Button
+          size="small"
+          variant="secondary"
+          disabled={history.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}
+        >
+          Load earlier events
+        </Button>
+      )}
+    </details>
   );
 }

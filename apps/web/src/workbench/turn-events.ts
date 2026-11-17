@@ -15,6 +15,7 @@ export type Turn = {
   parts: Part[];
   status: 'queued' | 'running' | 'completed' | 'failed';
   revision: number;
+  attachments?: { id: string; name: string }[];
   usage?: { inputTokens: number; outputTokens: number };
 };
 

@@ -35,6 +35,7 @@
     "./run-plan": "./src/workspace/run-plan.ts",
     "./schedule": "./src/workspace/task-automation.ts",
     "./mail": "./src/workspace/mail-store.ts",
-    "./llm": "./src/llm.ts"
+    "./llm": "./src/llm.ts",
+    "./public-page": "./src/research/page.ts"
   }
 }

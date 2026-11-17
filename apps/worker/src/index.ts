@@ -10,6 +10,7 @@ import { taskAutomationStore } from '@brightwork/api/schedule';
 import { mailStore } from '@brightwork/api/mail';
 import { agentRunner } from './agent';
 import { llmClient } from '@brightwork/api/llm';
+import { pageReader, publicPageUrl } from '@brightwork/api/public-page';
 import { webSearch } from './web-search';
 import { resendMail } from './resend-mail';
 
@@ -20,6 +21,10 @@ const env = z
     LLM_API_KEY: z.string().min(1),
     LLM_MODEL: z.string().min(1),
     LLM_BASE_URL: z.url().default('https://api.openai.com/v1'),
+    APP_ORIGIN: z
+      .url({ protocol: /^https?$/u })
+      .default('http://127.0.0.1:5173'),
+    SITE_BASE_DOMAIN: z.string().optional(),
     WEB_SEARCH_API_KEY: z.string().optional(),
     WEB_SEARCH_MODEL: z.string().optional(),
     OUTREACH_RESEND_API_KEY: z.string().optional(),
@@ -42,6 +47,7 @@ const run = agentRunner(
   env.WEB_SEARCH_API_KEY && env.WEB_SEARCH_MODEL
     ? webSearch({ key: env.WEB_SEARCH_API_KEY, model: env.WEB_SEARCH_MODEL })
     : undefined,
+  pageReader(publicPageUrl(env.APP_ORIGIN, env.SITE_BASE_DOMAIN)),
 );
 const worker = new Worker<{ turnId: string }>(
   agentQueueName,
