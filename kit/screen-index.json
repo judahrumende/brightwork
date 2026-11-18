@@ -298,14 +298,14 @@
     "title": "Build: chats sidebar",
     "file": "043-build-chats-sidebar.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 44,
     "title": "Build: History modal",
     "file": "044-build-chat-history-modal.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 45,

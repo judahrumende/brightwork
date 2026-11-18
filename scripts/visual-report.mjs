@@ -73,6 +73,8 @@ const cases = [
     ['Company switcher', '074-company-switcher.png'],
     ['Pip panel: Runs tab', '076-home-ted-runs-tab.png'],
     ['Visitors: breakdown panels', '086-visitors-breakdowns.png'],
+    ['Build conversations', '043-build-chats-sidebar.png'],
+    ['Build chat history', '044-build-chat-history-modal.png'],
     ['Build site import', '040-build-import-site.png'],
     ['Build site editor', '045-build-site-editor.png'],
     ['Schedule month', '052-schedule-month.png'],

@@ -9,6 +9,7 @@ import {
   runEvents,
   runSteps,
 } from '../db/schema';
+import { turnWithAttachmentLinks } from './agent-store';
 import { publishWebsite } from './publish-website';
 import { nextRunStep } from './run-policy';
 import { runPlan } from './run-plan';
@@ -237,7 +238,7 @@ export function runStore(db: Database) {
         );
       if (!run) return null;
       const turns = await db
-        .select()
+        .select(turnWithAttachmentLinks)
         .from(agentTurns)
         .where(
           and(

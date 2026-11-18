@@ -19,7 +19,8 @@ import { WebsiteImport } from './website-import';
 import { BuildCanvas } from './build-canvas';
 import type { WebsiteDraft } from './website-editor';
 import type { WebsitePage } from '@brightwork/shared';
-import { ResearchResults } from './research-results';
+import { ChatTurn } from './chat-turn';
+import { ChatHistory } from './chat-history';
 import { Dictation } from './dictation';
 import { EmailDeliveryHistory } from './email-delivery-history';
 import styles from './workbench.module.css';
@@ -240,6 +241,7 @@ export function PipChat({ id, readOnly }: { id: string; readOnly: boolean }) {
       <header>
         <Mascot size={32} />
         <h2>Talk to {brand.agent}</h2>
+        <ChatHistory key={id} companyId={id} />
       </header>
       <div className={styles.transcript}>
         {before && (
@@ -262,44 +264,7 @@ export function PipChat({ id, readOnly }: { id: string; readOnly: boolean }) {
           />
         )}
         {transcript.map((turn) => (
-          <article key={turn.id}>
-            <p className={styles.userMessage}>{turn.prompt}</p>
-            {turn.attachments?.map((file) => (
-              <a
-                key={file.id}
-                href={
-                  root(id) + '/pip/turns/' + turn.id + '/attachments/' + file.id
-                }
-                download={file.name}
-              >
-                {file.name}
-              </a>
-            ))}
-            {turn.parts
-              .filter((part) => part.type === 'tool')
-              .map((part) => (
-                <div key={part.toolCallId}>
-                  <p className={styles.tool}>
-                    {part.name.replace(/_/gu, ' ')} · {part.status}
-                  </p>
-                  {(part.name === 'web_search' ||
-                    part.name === 'read_public_page') && (
-                    <ResearchResults output={part.output} />
-                  )}
-                </div>
-              ))}
-            {turn.text ? (
-              <p className={styles.reply}>{turn.text}</p>
-            ) : (
-              <p role="status">
-                {turn.status === 'queued'
-                  ? 'Queued'
-                  : turn.status === 'failed'
-                    ? 'This turn couldn’t finish.'
-                    : 'Working…'}
-              </p>
-            )}
-          </article>
+          <ChatTurn key={turn.id} turn={turn} companyId={id} />
         ))}
       </div>
       <form

@@ -557,6 +557,33 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/ted/chats', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { limit } = z
+        .object({ limit: z.coerce.number().int().min(1).max(100).default(25) })
+        .parse(request.query);
+      return { conversations: await store.conversations(access.id, { limit }) };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/ted/chats/:resource/title', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const [conversation] = await store.conversations(access.id, {
+        id: resource,
+      });
+      if (!conversation)
+        return reply.code(404).send({ message: 'Chat not found.' });
+      return conversation;
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/ted/chats/:resource/queue', async (request, reply) => {
     try {
       const access = await authorize(request, reply);

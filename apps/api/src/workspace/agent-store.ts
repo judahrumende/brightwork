@@ -49,6 +49,13 @@ type ChatAttachment = Pick<
 >;
 type AttachmentLink = { id: string; name: string };
 
+export const turnWithAttachmentLinks = {
+  ...getTableColumns(agentTurns),
+  attachments: sql<
+    AttachmentLink[]
+  >`coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name, id) from ${chatAttachments} where turn_id = ${agentTurns}."id"), '[]'::jsonb)`,
+};
+
 export function turnSnapshot(row: Turn & { attachments?: AttachmentLink[] }) {
   return {
     id: row.id,
@@ -203,6 +210,41 @@ export function agentStore(db: Database) {
         return { ...row, attachments };
       });
     },
+    async conversations(
+      businessId: string,
+      { id, limit = 25 }: { id?: string; limit?: number } = {},
+    ) {
+      const rows = await db.execute<{
+        id: string;
+        updated_at: string | Date;
+        title: string;
+      }>(sql`
+        SELECT id, updated_at, left(regexp_replace(trim(title), '[[:space:]]+', ' ', 'g'), 120) AS title
+        FROM (
+          SELECT turn.id, turn.updated_at, turn.prompt AS title
+          FROM agent_turns AS turn
+          WHERE turn.business_id = ${businessId} AND turn.run_id IS NULL
+            ${id ? sql`AND turn.id = ${id}` : sql.empty()}
+          UNION ALL
+          SELECT run.id, greatest(run.created_at, run.ended_at, last_turn.updated_at), run.goal
+          FROM business_runs AS run
+          LEFT JOIN LATERAL (
+            SELECT max(turn.updated_at) AS updated_at
+            FROM agent_turns AS turn
+            WHERE turn.business_id = run.business_id AND turn.run_id = run.id
+          ) AS last_turn ON true
+          WHERE run.business_id = ${businessId}
+            ${id ? sql`AND run.id = ${id}` : sql.empty()}
+        ) AS chat
+        ORDER BY updated_at DESC, id DESC
+        LIMIT ${id ? 1 : limit}
+      `);
+      return rows.map(({ id, updated_at, title }) => ({
+        id,
+        updatedAt: new Date(updated_at).toISOString(),
+        title,
+      }));
+    },
     async turns(businessId: string, before?: string) {
       const cursor = before
         ? db
@@ -218,10 +260,7 @@ export function agentStore(db: Database) {
       const size = 100;
       const rows = await db
         .select({
-          ...getTableColumns(agentTurns),
-          attachments: sql<
-            AttachmentLink[]
-          >`coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name, id) from ${chatAttachments} where turn_id = ${agentTurns.id}), '[]'::jsonb)`,
+          ...turnWithAttachmentLinks,
         })
         .from(agentTurns)
         .where(
@@ -288,7 +327,7 @@ export function agentStore(db: Database) {
     },
     async readTurn(businessId: string, id: string) {
       const [row] = await db
-        .select()
+        .select(turnWithAttachmentLinks)
         .from(agentTurns)
         .where(
           and(eq(agentTurns.businessId, businessId), eq(agentTurns.id, id)),

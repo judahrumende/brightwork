@@ -1297,3 +1297,71 @@ test('the signed-in workspace fits mobile and the search dialog works with the k
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(320);
 });
+
+test('Build opens saved conversations, links authorized attachments and returns focus', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  const endpoint = api + '/ted/chats';
+  const savedId = '509cc783-a545-44c7-aab4-fe80894a0b60';
+  const file = '93736c3a-8c3a-4cc4-9774-70d4883bb0ab';
+  await page.route('**' + endpoint + '?limit=50', (route) =>
+    route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: savedId,
+            title: 'Launch conversation',
+            updatedAt: '2026-11-17T04:00:00Z',
+          },
+        ],
+      },
+    }),
+  );
+  await page.route('**' + endpoint + '/' + savedId, (route) =>
+    route.fulfill({
+      json: {
+        turns: [
+          {
+            id: savedId,
+            prompt: 'Prepare the launch',
+            text: 'The brief is ready.',
+            parts: [],
+            status: 'completed',
+            revision: 1,
+            attachments: [{ id: file, name: 'launch.txt' }],
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto(workbench + '/build');
+  const trigger = page.getByRole('button', { name: 'Chat history' });
+  await trigger.click();
+  const chatList = page.getByRole('dialog', { name: 'Chat history' });
+  const entry = chatList.getByRole('button', { name: 'Launch conversation' });
+  await expect(entry).toBeVisible();
+  await captureWorkspace(page, '043-build-chats-sidebar.png');
+  await entry.click();
+  const detail = page.getByRole('dialog', { name: 'Launch conversation' });
+  await expect(
+    detail.getByRole('button', { name: 'Back to conversations' }),
+  ).toBeFocused();
+  await expect(detail.getByText('The brief is ready.')).toBeVisible();
+  await expect(
+    detail.getByRole('link', { name: 'launch.txt' }),
+  ).toHaveAttribute(
+    'href',
+    api + '/pip/turns/' + savedId + '/attachments/' + file,
+  );
+  await captureWorkspace(page, '044-build-chat-history-modal.png');
+  await detail
+    .getByRole('button', { name: 'Back to conversations' })
+    .press('Enter');
+  await expect(entry).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(trigger).toBeFocused();
+});
