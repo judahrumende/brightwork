@@ -1,3 +1,5 @@
+import { productEdit } from '../src/workspace/generated-store';
+import { siteHosting } from '../src/workspace/publication';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -28,6 +30,10 @@ import { agentRunner } from '../../worker/src/agent';
 import type { ToolCall } from '../src/llm';
 
 const url = process.env.TEST_DATABASE_URL;
+
+function fixturePage(title: string, links = '') {
+  return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"><title>${title}</title><style>main{max-width:60rem;margin:auto}</style></head><body><main><h1>${title}</h1>${links}</main></body></html>`;
+}
 
 test(
   'Run and Schedule persist work through pause, restart and repeated dispatch',
@@ -420,7 +426,15 @@ test(
           name: 'build',
           input: {
             title: 'Research homepage',
-            body: '<h1>Chosen headline</h1>',
+            design: 'Editorial typography and a restrained palette.',
+            changes: [
+              {
+                slug: '',
+                action: 'write',
+                title: 'Research homepage',
+                brief: 'Use the headline supplied by the owner.',
+              },
+            ],
           },
         },
         null,
@@ -429,7 +443,18 @@ test(
       const run = agentRunner(
         agent,
         credits,
-        async (messages, tools) => {
+        async (messages, tools, options) => {
+          if (!tools.length) {
+            llmCalls += 1;
+            assert.match(JSON.stringify(messages), /Chosen headline/);
+            return {
+              text: options?.json
+                ? JSON.stringify(completions[3]?.input)
+                : fixturePage('Chosen headline'),
+              calls: [],
+              usage: undefined,
+            };
+          }
           assert.ok(
             tools.some((tool) => tool.function.name === 'read_public_page'),
           );
@@ -447,7 +472,9 @@ test(
                   id: 'fixture-' + llmCalls,
                   function: {
                     name: fixture.name,
-                    arguments: JSON.stringify(fixture.input),
+                    arguments: JSON.stringify(
+                      fixture.name === 'build' ? {} : fixture.input,
+                    ),
                   },
                 },
               ]
@@ -528,7 +555,7 @@ test(
       } else {
         await run(next.turnId);
       }
-      assert.equal(llmCalls, 5);
+      assert.equal(llmCalls, 6);
       const reviewed = (await agent.listArtifacts(business.id)).find(
         (item) => item.turnId === next.turnId && item.kind === 'website',
       );
@@ -575,7 +602,7 @@ test(
       const denied = await restarted.advance(clock());
       assert.ok(denied?.turnId);
       await run(denied.turnId);
-      assert.equal(llmCalls, 5);
+      assert.equal(llmCalls, 6);
       await restarted.advance(clock());
       assert.equal(
         (await runs.history(business.id, lowBudget.id))?.run.state,
@@ -585,6 +612,683 @@ test(
         (await runs.history(business.id, lowBudget.id))?.run.failure ?? '',
         /credit limit/,
       );
+
+      async function websiteTurn(
+        workspaceId: string,
+        input: {
+          storeCurrency?: 'AUD';
+          targetId?: string;
+          title?: string;
+          design: string;
+          changes: object[];
+        },
+        pages: Array<string | (() => Promise<string>)>,
+        denyPage = false,
+      ) {
+        const turn = await agent.addTurn(
+          workspaceId,
+          account.id,
+          'Build the requested website changes.',
+        );
+        const modelKeys: string[] = [];
+        let pageCalls = 0;
+        let planned = false;
+        const build = agentRunner(
+          agent,
+          {
+            async debit(accountId, turnId, key, kind) {
+              if (kind === 'model') modelKeys.push(key);
+              if (denyPage && key === 'website:0:0:1') return false;
+              return credits.debit(accountId, turnId, key, kind);
+            },
+          },
+          async (messages, tools, options) => {
+            if (!tools.length) {
+              if (options?.json)
+                return {
+                  calls: [],
+                  text: JSON.stringify(input),
+                  usage: { prompt_tokens: 10, completion_tokens: 12 },
+                };
+              assert.equal(options?.maxTokens, 8192);
+              const page = pages[pageCalls++];
+              assert.ok(page);
+              if (
+                pageCalls === 2 &&
+                typeof page === 'string' &&
+                page.includes('First page')
+              ) {
+                assert.match(
+                  messages[0]?.content ?? '',
+                  /Fix navigation targets/,
+                );
+              }
+              return {
+                calls: [],
+                text: typeof page === 'string' ? page : await page(),
+                usage: { prompt_tokens: 10, completion_tokens: 12 },
+              };
+            }
+            if (planned)
+              return { text: 'Turn finished.', calls: [], usage: undefined };
+            planned = true;
+            return {
+              text: '',
+              calls: [
+                {
+                  id: turn.id,
+                  type: 'function',
+                  function: {
+                    name: 'build',
+                    arguments: JSON.stringify({ targetId: input.targetId }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 10, completion_tokens: 12 },
+            };
+          },
+        );
+        await build(turn.id);
+        return {
+          turn: await agent.readTurn(workspaceId, turn.id),
+          pageCalls,
+          modelKeys,
+        };
+      }
+
+      const writePage = (slug: string, title: string) => ({
+        slug,
+        title,
+        action: 'write',
+        brief: 'Write ' + title,
+      });
+      const newSite = {
+        title: 'Website fixture',
+        design: 'One consistent editorial design.',
+        changes: [writePage('', 'Home'), writePage('about', 'About')],
+      };
+      const home = fixturePage('First page', '<a href="/about">About</a>');
+      const about = fixturePage('About', '<a href="/">Home</a>');
+      const initial = await websiteTurn(business.id, newSite, [
+        fixturePage('Broken first attempt', '<a href="/missing">Broken</a>'),
+        home,
+        about,
+      ]);
+      assert.equal(initial.pageCalls, 3);
+      assert.equal(new Set(initial.modelKeys).size, 5);
+      assert.equal(initial.turn?.state, 'completed');
+      assert.deepEqual(initial.turn?.usage, {
+        inputTokens: 50,
+        outputTokens: 60,
+      });
+      assert.ok(initial.turn);
+      const [firstBuild] = await agent.buildActivity(business.id, {
+        chatId: initial.turn.id,
+      });
+      assert.equal(firstBuild?.revision, 1);
+      assert.ok(firstBuild?.creation_id);
+      const siteId = firstBuild.creation_id;
+      const chosen = await agent.workItem(business.id, siteId);
+      assert.equal(chosen?.body, home);
+      assert.equal(chosen?.pages[0]?.html, about);
+      assert.ok(await agent.decide(business.id, siteId, 1, true, account.id));
+      assert.ok(await agent.publish(business.id, siteId, 1, true));
+
+      const target = {
+        targetId: siteId,
+        design: newSite.design,
+        changes: [writePage('about', 'New About')],
+      };
+      const newAbout = fixturePage('New About');
+      const updated = await websiteTurn(business.id, target, [newAbout]);
+      assert.equal(updated.turn?.state, 'completed');
+      assert.ok(updated.turn);
+      const [secondBuild] = await agent.buildActivity(business.id, {
+        chatId: updated.turn.id,
+      });
+      assert.equal(secondBuild?.revision, 2);
+      assert.equal(secondBuild?.creation_id, siteId);
+      assert.equal(secondBuild?.state, 'completed');
+      assert.notEqual(secondBuild?.version_id, firstBuild.version_id);
+      assert.notEqual(secondBuild?.source_hash, firstBuild.source_hash);
+      assert.equal(
+        (await agent.buildActivity(business.id, { chatId: initial.turn.id }))[0]
+          ?.version_id,
+        firstBuild.version_id,
+      );
+      assert.equal((await agent.workItem(business.id, siteId))?.body, home);
+      assert.equal(
+        (await agent.workItem(business.id, siteId))?.pages[0]?.html,
+        newAbout,
+      );
+      assert.equal((await agent.published(siteId))?.pages[0]?.html, about);
+      assert.deepEqual(
+        (await agent.websiteHistory(business.id, siteId)).map(
+          ({ revision }) => revision,
+        ),
+        [2, 1],
+      );
+
+      const failed = await websiteTurn(business.id, target, [
+        fixturePage(
+          'Unverified contact',
+          '<a href="mailto:fake@example.test">Email us</a>',
+        ),
+        fixturePage(
+          'Unverified contact',
+          '<a href="tel:0412345678">Call us</a>',
+        ),
+      ]);
+      assert.equal(failed.turn?.state, 'failed');
+      assert.match(failed.turn?.answer ?? '', /Omit invented contact/);
+      const deniedSite = await websiteTurn(business.id, newSite, [], true);
+      assert.equal(deniedSite.turn?.state, 'failed');
+      assert.equal(deniedSite.pageCalls, 0);
+      const removal = await websiteTurn(
+        business.id,
+        { ...target, changes: [{ slug: 'about', action: 'remove' }] },
+        [],
+      );
+      assert.match(removal.turn?.answer ?? '', /Update navigation/);
+      const foreign = await websiteTurn(otherBusiness.id, target, []);
+      assert.match(foreign.turn?.answer ?? '', /not found in this workspace/);
+      assert.equal((await agent.workItem(business.id, siteId))?.revision, 2);
+      assert.equal(
+        (await agent.creations(business.id)).filter(
+          (item) => item.title === newSite.title,
+        ).length,
+        1,
+      );
+
+      const concurrent = await websiteTurn(business.id, target, [
+        async () => {
+          assert.ok(
+            await agent.editWebsite(
+              business.id,
+              siteId,
+              2,
+              'Manual edit',
+              home,
+            ),
+          );
+          return fixturePage('Outdated edit');
+        },
+      ]);
+      assert.equal(concurrent.turn?.state, 'failed');
+      assert.match(concurrent.turn?.answer ?? '', /draft changed/);
+      assert.equal(
+        (await agent.workItem(business.id, siteId))?.title,
+        'Manual edit',
+      );
+      assert.equal((await agent.published(siteId))?.pages[0]?.html, about);
+
+      const shop = await websiteTurn(
+        business.id,
+        {
+          title: 'Fieldwork store',
+          design: 'Warm paper and strong type',
+          storeCurrency: 'AUD',
+          changes: [writePage('', 'Home')],
+        },
+        [fixturePage('Fieldwork')],
+      );
+      assert.equal(shop.turn?.state, 'completed');
+      const shopId = (await agent.listArtifacts(business.id)).find(
+        (item) => item.turnId === shop.turn?.id,
+      )?.id;
+      assert.ok(shopId);
+      assert.equal((await agent.workItem(business.id, shopId))?.isStore, true);
+      assert.equal(
+        (await agent.generatedStore.read(business.id, shopId))?.currency,
+        'AUD',
+      );
+      assert.equal(
+        await agent.generatedStore.read(otherBusiness.id, shopId),
+        null,
+      );
+      const product = {
+        name: 'Copper <Kettle>',
+        description: 'Pour-over kettle.',
+        price: 4500,
+        stock: 1,
+        active: true,
+      };
+      assert.equal(
+        await agent.generatedStore.saveProduct(
+          otherBusiness.id,
+          shopId,
+          product,
+        ),
+        false,
+      );
+      assert.ok(
+        await agent.generatedStore.saveProduct(business.id, shopId, product),
+      );
+      const shopApp = Fastify();
+      siteHosting(
+        shopApp,
+        agent,
+        'https://studio.example.test',
+        'sites.example.test',
+        async () => {},
+      );
+      try {
+        const host = shopId + '.sites.example.test';
+        const browser = { host, origin: 'https://' + host };
+        const catalogPath = '/store/catalog';
+        assert.equal(
+          (await shopApp.inject({ url: catalogPath, headers: { host } }))
+            .statusCode,
+          404,
+        );
+        assert.ok(await agent.decide(business.id, shopId, 1, true, account.id));
+        assert.ok(await agent.publish(business.id, shopId, 1, true));
+        const listing = await shopApp.inject({
+          url: catalogPath,
+          headers: { host },
+        });
+        assert.equal(listing.statusCode, 200);
+        assert.match(listing.body, /Copper &lt;Kettle&gt;/u);
+        assert.equal(
+          (
+            await shopApp.inject({
+              url: catalogPath,
+              headers: { host: 'studio.example.test' },
+            })
+          ).statusCode,
+          404,
+        );
+        const [savedProduct] = (await agent.generatedStore.read(
+          business.id,
+          shopId,
+        ))!.products;
+        assert.ok(savedProduct);
+        function placeOrder(id: string, headers = browser) {
+          return shopApp.inject({
+            method: 'POST',
+            url: '/store/orders',
+            headers: {
+              ...headers,
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+            payload: new URLSearchParams({
+              id,
+              productId: savedProduct!.id,
+              revision: '1',
+              email: 'buyer@example.test',
+              quantity: '1',
+            }).toString(),
+          });
+        }
+        const firstId = randomUUID();
+        const secondId = randomUUID();
+        assert.equal(
+          (
+            await placeOrder(firstId, {
+              ...browser,
+              origin: 'https://other.example.test',
+            })
+          ).statusCode,
+          403,
+        );
+        assert.equal((await placeOrder(firstId)).statusCode, 200);
+        assert.equal((await placeOrder(firstId)).statusCode, 200);
+        assert.equal((await placeOrder(secondId)).statusCode, 200);
+        assert.equal(
+          (await agent.generatedStore.read(business.id, shopId))?.orders.length,
+          2,
+        );
+        const confirmations = await Promise.all(
+          [firstId, secondId].map((id) =>
+            agent.generatedStore.changeOrder(
+              business.id,
+              shopId,
+              id,
+              'confirmed',
+            ),
+          ),
+        );
+        assert.equal(confirmations.filter(Boolean).length, 1);
+        const confirmed = confirmations[0] ? firstId : secondId;
+        assert.equal(
+          await agent.generatedStore.changeOrder(
+            otherBusiness.id,
+            shopId,
+            confirmed,
+            'fulfilled',
+          ),
+          false,
+        );
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            confirmed,
+            'cancelled',
+          ),
+        );
+        assert.equal(
+          (await agent.generatedStore.read(business.id, shopId))?.products[0]
+            ?.stock,
+          1,
+        );
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            confirmed === firstId ? secondId : firstId,
+            'confirmed',
+          ),
+        );
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            confirmed === firstId ? secondId : firstId,
+            'fulfilled',
+          ),
+        );
+        assert.equal(
+          (await agent.generatedStore.read(business.id, shopId))?.products[0]
+            ?.stock,
+          0,
+        );
+
+        const [kettle] = (await agent.generatedStore.read(business.id, shopId))!
+          .products;
+        assert.ok(kettle);
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...kettle,
+            stock: 1,
+          }),
+        );
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            name: 'Filters',
+            description: '',
+            price: 700,
+            stock: 2,
+            active: true,
+          }),
+        );
+        const productsNow = (await agent.generatedStore.read(
+          business.id,
+          shopId,
+        ))!.products;
+        const cartId = randomUUID();
+        const cartFields = new URLSearchParams({
+          id: cartId,
+          email: 'cart@example.test',
+        });
+        for (const current of productsNow)
+          cartFields.set(`cart:${current.id}:${current.revision}`, '1');
+        function postCart(payload: URLSearchParams) {
+          return shopApp.inject({
+            method: 'POST',
+            url: '/store/orders',
+            headers: {
+              ...browser,
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+            payload: payload.toString(),
+          });
+        }
+        const currentListing = await shopApp.inject({
+          url: catalogPath,
+          headers: { host },
+        });
+        assert.match(currentListing.body, /name="cart:/u);
+        assert.equal(currentListing.headers['referrer-policy'], 'same-origin');
+        assert.equal((await postCart(cartFields)).statusCode, 200);
+        assert.equal((await postCart(cartFields)).statusCode, 200);
+        const cart = (
+          await agent.generatedStore.read(business.id, shopId)
+        )?.orders.find((order) => order.id === cartId);
+        assert.deepEqual(
+          cart?.items.map((item) => item.unitPrice).sort((a, b) => a - b),
+          [700, 4500],
+        );
+
+        const currentKettle = productsNow.find(
+          (entry) => entry.id === kettle.id,
+        );
+        assert.ok(currentKettle);
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...currentKettle,
+            stock: 0,
+          }),
+        );
+        assert.equal(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            cartId,
+            'confirmed',
+          ),
+          false,
+        );
+        assert.equal(
+          (await agent.generatedStore.read(business.id, shopId))?.products.find(
+            (entry) => entry.name === 'Filters',
+          )?.stock,
+          2,
+        );
+        const freshKettle = (
+          await agent.generatedStore.read(business.id, shopId)
+        )?.products.find((entry) => entry.id === kettle.id);
+        assert.ok(freshKettle);
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...freshKettle,
+            stock: 1,
+            price: 5000,
+          }),
+        );
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            cartId,
+            'confirmed',
+          ),
+        );
+        assert.deepEqual(
+          (await agent.generatedStore.read(business.id, shopId))?.products
+            .map(({ stock }) => stock)
+            .sort((a, b) => a - b),
+          [0, 1],
+        );
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            cartId,
+            'cancelled',
+          ),
+        );
+        assert.deepEqual(
+          (await agent.generatedStore.read(business.id, shopId))?.products
+            .map(({ stock }) => stock)
+            .sort((a, b) => a - b),
+          [1, 2],
+        );
+
+        const initial = (await agent.generatedStore.read(
+          business.id,
+          shopId,
+        ))!.products.find((p) => p.id === kettle.id);
+        assert.ok(initial);
+        const png =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
+        assert.equal(
+          productEdit.safeParse({
+            ...initial,
+            photo: {
+              data: 'data:image/png;base64,PGh0bWw+',
+              alt: 'Invalid',
+            },
+          }).success,
+          false,
+        );
+        assert.ok(
+          await agent.generatedStore.saveProduct(
+            business.id,
+            shopId,
+            productEdit.parse({
+              ...initial,
+              photo: {
+                data: 'data:image/png;base64,' + png,
+                alt: 'Copper kettle',
+              },
+            }),
+          ),
+        );
+        const variant = {
+          parentId: kettle.id,
+          name: 'Large',
+          description: '',
+          price: 6200,
+          stock: 3,
+          active: true,
+          sku: 'KETTLE-L',
+        };
+        assert.equal(
+          await agent.generatedStore.saveProduct(
+            otherBusiness.id,
+            shopId,
+            variant,
+          ),
+          false,
+        );
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, variant),
+        );
+        assert.equal(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...variant,
+            name: 'large',
+            sku: 'another',
+          }),
+          false,
+        );
+        assert.equal(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...variant,
+            name: 'Medium',
+            sku: 'kettle-l',
+          }),
+          false,
+        );
+        const withVariant = (await agent.generatedStore.read(
+          business.id,
+          shopId,
+        ))!.products;
+        const large = withVariant.find((p) => p.parentId === kettle.id);
+        const parent = withVariant.find((p) => p.id === kettle.id);
+        assert.ok(large && parent);
+        assert.equal(parent.photoAlt, 'Copper kettle');
+        assert.equal(large.sku, 'KETTLE-L');
+        assert.equal(
+          await agent.generatedStore.photo(shopId, kettle.id, otherBusiness.id),
+          undefined,
+        );
+        const variantListing = await shopApp.inject({
+          url: catalogPath,
+          headers: { host },
+        });
+        assert.match(variantListing.body, /<h3>Large<\/h3>/u);
+        assert.match(variantListing.body, new RegExp('cart:' + large.id, 'u'));
+        assert.doesNotMatch(
+          variantListing.body,
+          new RegExp('cart:' + kettle.id, 'u'),
+        );
+        const imagePath = '/store/photos/' + kettle.id;
+        const image = await shopApp.inject({
+          url: imagePath,
+          headers: { host },
+        });
+        assert.equal(image.statusCode, 200);
+        assert.equal(image.headers['content-type'], 'image/png');
+        assert.ok(image.rawPayload.equals(Buffer.from(png, 'base64')));
+        assert.equal(
+          (
+            await shopApp.inject({
+              url: imagePath,
+              headers: { host: 'studio.example.test' },
+            })
+          ).statusCode,
+          404,
+        );
+
+        const staleRoot = new URLSearchParams({
+          id: randomUUID(),
+          email: 'variant@example.test',
+          [`cart:${parent.id}:${parent.revision}`]: '1',
+        });
+        assert.equal((await postCart(staleRoot)).statusCode, 409);
+        const variantOrder = randomUUID();
+        const buyVariant = new URLSearchParams({
+          id: variantOrder,
+          email: 'variant@example.test',
+          [`cart:${large.id}:${large.revision}`]: '2',
+        });
+        assert.equal((await postCart(buyVariant)).statusCode, 200);
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            variantOrder,
+            'confirmed',
+          ),
+        );
+        const variantDashboard = await agent.generatedStore.read(
+          business.id,
+          shopId,
+        );
+        assert.equal(
+          variantDashboard?.orders.find((order) => order.id === variantOrder)
+            ?.items[0]?.productName,
+          'Copper <Kettle> · Large',
+        );
+        assert.equal(
+          variantDashboard?.products.find((product) => product.id === large.id)
+            ?.stock,
+          1,
+        );
+        assert.equal(
+          variantDashboard?.products.find((product) => product.id === parent.id)
+            ?.stock,
+          1,
+        );
+        assert.ok(
+          await agent.generatedStore.changeOrder(
+            business.id,
+            shopId,
+            variantOrder,
+            'cancelled',
+          ),
+        );
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...parent,
+            active: false,
+          }),
+        );
+        const hidden = await shopApp.inject({
+          url: catalogPath,
+          headers: { host },
+        });
+        assert.doesNotMatch(hidden.body, /Copper &lt;Kettle&gt;/u);
+        assert.equal(
+          (await shopApp.inject({ url: imagePath, headers: { host } }))
+            .statusCode,
+          404,
+        );
+      } finally {
+        await shopApp.close();
+      }
 
       const task = await agent.saveArtifact(
         {

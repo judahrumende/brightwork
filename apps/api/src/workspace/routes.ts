@@ -1,3 +1,6 @@
+import { sendStorePhoto } from './store-product-photo';
+import { orderAction, productEdit } from './generated-store';
+import { storeCurrency } from '@brightwork/shared';
 import { buildSummary } from './build-activity';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -1213,6 +1216,119 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         item: describeWork(item, new Date()),
         outreachSender: context.outreachSender ?? null,
       };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  const storePath = path + '/work/:resource/store';
+  app.get(storePath, async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const dashboard = await store.generatedStore.read(access.id, resource);
+      if (!dashboard)
+        return reply.code(404).send({ message: 'Store not found.' });
+      return {
+        ...dashboard,
+        paymentReady:
+          (await context.sellerPayments?.readyForCheckout(access.id)) ?? false,
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/photos/:product', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource, product } = resourceParams
+        .extend({ product: z.uuid() })
+        .parse(request.params);
+      return sendStorePhoto(
+        reply,
+        await store.generatedStore.photo(resource, product, access.id),
+      );
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  const storeUpdate = z.discriminatedUnion('action', [
+    z.object({ action: z.literal('product'), product: productEdit }),
+    z.object({ action: z.literal('currency'), currency: storeCurrency }),
+    z.object({ action: z.literal('order'), id: z.uuid(), status: orderAction }),
+    z.object({ action: z.literal('payment'), id: z.uuid() }),
+    z.object({ action: z.literal('close_payment'), id: z.uuid() }),
+  ]);
+  app.post(storePath, async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return;
+      if (!canLeadRun(access.role))
+        return reply
+          .code(403)
+          .send({ message: 'Only owners and admins can manage stores.' });
+      const { resource } = resourceParams.parse(request.params);
+      const update = storeUpdate.parse(request.body);
+      const dashboard = await store.generatedStore.scopedStore(
+        access.id,
+        resource,
+      );
+      if (!dashboard)
+        return reply.code(404).send({ message: 'Store not found.' });
+      if (update.action === 'payment' || update.action === 'close_payment') {
+        if (!context.sellerPayments)
+          return reply
+            .code(503)
+            .send({ message: 'Stripe test payments are unavailable.' });
+        if (update.action === 'payment') {
+          const sale = await store.generatedStore.createPayment(
+            access.id,
+            resource,
+            update.id,
+          );
+          if (sale) return { saved: true };
+        } else if (
+          await context.sellerPayments.closeStoreCheckout(
+            access.id,
+            resource,
+            update.id,
+          )
+        ) {
+          return { saved: true };
+        }
+        return reply.code(409).send({
+          message:
+            update.action === 'payment'
+              ? 'Confirm the order and check your Stripe seller settings before creating a payment link.'
+              : 'Checkout could not be closed. Check the payment in Stripe before cancelling the order.',
+        });
+      }
+      const changed =
+        update.action === 'product'
+          ? await store.generatedStore.saveProduct(
+              access.id,
+              resource,
+              update.product,
+            )
+          : update.action === 'currency'
+            ? await store.generatedStore.setCurrency(
+                access.id,
+                resource,
+                update.currency,
+              )
+            : await store.generatedStore.changeOrder(
+                access.id,
+                resource,
+                update.id,
+                update.status,
+              );
+      if (!changed)
+        return reply.code(409).send({
+          message:
+            'This change conflicts with the current store. Refresh and try again.',
+        });
+      return { saved: true };
     } catch (error) {
       return reportError(error, reply);
     }

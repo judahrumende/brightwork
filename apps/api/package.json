@@ -36,6 +36,7 @@
     "./run-plan": "./src/workspace/run-plan.ts",
     "./schedule": "./src/workspace/task-automation.ts",
     "./mail": "./src/workspace/mail-store.ts",
+    "./website-checks": "./src/workspace/website-checks.ts",
     "./llm": "./src/llm.ts",
     "./public-page": "./src/research/page.ts",
     "./media-store": "./src/workspace/media-store.ts",

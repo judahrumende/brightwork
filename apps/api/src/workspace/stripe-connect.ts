@@ -45,6 +45,11 @@ const sales = pgTable('stripe_sales', {
   amount: integer().notNull(),
   amountRefunded: integer('amount_refunded').notNull().default(0),
   checkoutId: text('checkout_id'),
+  checkoutAttemptedAt: timestamp('checkout_attempted_at', {
+    withTimezone: true,
+    mode: 'date',
+  }),
+  closedAt: timestamp('closed_at', { withTimezone: true, mode: 'date' }),
   paymentId: text('payment_id'),
   customerKey: text('customer_key'),
   paidAt: timestamp('paid_at', { withTimezone: true, mode: 'date' }),
@@ -244,6 +249,61 @@ export function stripeConnect(
         sale.currency === input.currency,
       );
     },
+    async readyForCheckout(businessId: string) {
+      const [seller] = await db
+        .select()
+        .from(sellers)
+        .where(sellerScope(businessId));
+      return Boolean(seller && ready(seller));
+    },
+    async closeStoreCheckout(
+      businessId: string,
+      siteId: string,
+      orderId: string,
+    ) {
+      return db.transaction(async (tx) => {
+        const [sale] = await tx
+          .select()
+          .from(sales)
+          .where(
+            and(
+              eq(sales.businessId, businessId),
+              sql`exists (
+            select 1 from generated_store_orders where site_id = ${siteId}
+              and id = ${orderId} and sale_id = ${sales.id} and status = 'confirmed'
+          )`,
+            ),
+          )
+          .for('update');
+        if (!sale) return false;
+        if (sale.closedAt) return true;
+        if (sale.paidAt || sale.paymentId || sale.amountRefunded) return false;
+        if (sale.checkoutId) {
+          let session = await stripe.checkout(sale.accountId, sale.checkoutId);
+          const matches = () =>
+            session.id === sale.checkoutId &&
+            session.client_reference_id === sale.id &&
+            session.amount_total === sale.amount &&
+            session.currency === sale.currency &&
+            session.payment_status === 'unpaid';
+          if (!matches() || session.status === 'complete') return false;
+          if (session.status === 'open')
+            session = await stripe.expireCheckout(
+              sale.accountId,
+              sale.checkoutId,
+            );
+          if (!matches() || session.status !== 'expired') return false;
+        } else if (sale.checkoutAttemptedAt) {
+          // A provider timeout can leave a session whose ID hasn't been recorded.
+          return false;
+        }
+        await tx
+          .update(sales)
+          .set({ closedAt: new Date() })
+          .where(eq(sales.id, sale.id));
+        return true;
+      });
+    },
     async publicOrder(id: string) {
       const [result] = await db
         .select({
@@ -255,10 +315,30 @@ export function stripeConnect(
           amountRefunded: sales.amountRefunded,
         })
         .from(sales)
-        .where(eq(sales.id, id));
+        .where(and(eq(sales.id, id), isNull(sales.closedAt)));
       return result ?? null;
     },
     async checkout(id: string) {
+      // Record the attempt before the provider call so a lost response can't make
+      // an order appear safe to cancel while a checkout might still be open.
+      const [attempt] = await db
+        .update(sales)
+        .set({
+          checkoutAttemptedAt: sql`coalesce(${sales.checkoutAttemptedAt}, now())`,
+        })
+        .where(
+          and(
+            eq(sales.id, id),
+            isNull(sales.closedAt),
+            isNull(sales.paidAt),
+            eq(sales.amountRefunded, 0),
+            sql`exists (select 1 from stripe_sellers as seller
+            where seller.business_id = ${sales.businessId} and seller.account_id = ${sales.accountId}
+            and seller.details_submitted and seller.charges_enabled and seller.payouts_enabled)`,
+          ),
+        )
+        .returning({ id: sales.id });
+      if (!attempt) return null;
       return db.transaction(async (tx) => {
         const [record] = await tx
           .select({ order: sales, seller: sellers })
@@ -269,6 +349,8 @@ export function stripeConnect(
         if (
           !record ||
           record.order.paidAt ||
+          record.order.closedAt ||
+          record.order.amountRefunded > 0 ||
           record.seller.accountId !== record.order.accountId ||
           !ready(record.seller)
         )

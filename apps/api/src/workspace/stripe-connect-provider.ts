@@ -129,6 +129,16 @@ export function stripeConnectProvider(
           ),
         );
     },
+    async expireCheckout(connected: string, id: string) {
+      return checkoutSession.parse(
+        await stripe(
+          'checkout/sessions/' + sessionId.parse(id) + '/expire',
+          {},
+          'brightwork-expire-' + id,
+          accountId.parse(connected),
+        ),
+      );
+    },
     async charge(connected: string, id: string) {
       const chargeId = z
         .string()

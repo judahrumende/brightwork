@@ -1,3 +1,4 @@
+import { registerStorefront, storePublicRoute } from './storefront';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -17,6 +18,7 @@ export function siteHosting(
   store: ReturnType<typeof agentStore>,
   origin: string,
   domain: string | undefined,
+  limitOrder: (key: string) => Promise<void>,
 ) {
   const parsed = hostSchema.safeParse(domain);
   if (!parsed.success) return null;
@@ -29,6 +31,13 @@ export function siteHosting(
   if (onSiteDomain(dashboard))
     throw new Error('Site hosting needs a distinct base domain');
   const url = (id: string) => scheme + '//' + id + '.' + base;
+  const siteId = (hostname: string) => {
+    const suffix = '.' + baseUrl.hostname;
+    const lower = hostname.toLowerCase();
+    if (!lower.endsWith(suffix)) return null;
+    const parsed = z.uuid().safeParse(lower.slice(0, -suffix.length));
+    return parsed.success ? parsed.data : null;
+  };
   const secure = scheme === 'https:';
   const visitCookie = secure ? '__Host-bw-visit' : 'bw-visit';
 
@@ -36,6 +45,7 @@ export function siteHosting(
     if (!onSiteDomain(request.hostname.toLowerCase().replace(/\.$/u, '')))
       return;
     const route = request.routeOptions.url;
+    if (storePublicRoute(request.method, route ?? '')) return;
     if (
       !['GET', 'HEAD'].includes(request.method) ||
       (route !== '/' && route !== '/:page')
@@ -48,13 +58,9 @@ export function siteHosting(
     reply: FastifyReply,
     slug: string,
   ) {
-    const hostname = request.hostname.toLowerCase();
-    const suffix = '.' + baseUrl.hostname;
-    const key = hostname.endsWith(suffix)
-      ? z.uuid().safeParse(hostname.slice(0, -suffix.length))
-      : null;
-    if (!key?.success) return reply.code(404).send('Site not found');
-    const page = await store.published(key.data);
+    const id = siteId(request.hostname);
+    if (!id) return reply.code(404).send('Site not found');
+    const page = await store.published(id);
     if (!page) return reply.code(404).send('Site not found');
     const document = websiteDocument(page.document, page.pages ?? [], slug);
     if (document === null) return reply.code(404).send('Page not found');
@@ -80,7 +86,7 @@ export function siteHosting(
           : null;
       reply.header('Set-Cookie', cookie(visitCookie, session, secure, 30 * 60));
       await store
-        .visit(key.data, session, '/' + slug, source)
+        .visit(id, session, '/' + slug, source)
         .catch(() => app.log.warn('Could not count a website view'));
     }
     return reply
@@ -100,5 +106,6 @@ export function siteHosting(
     if (!slug.success) return reply.code(404).send('Page not found');
     return serveSite(request, reply, slug.data.page);
   });
+  registerStorefront(app, store.generatedStore, siteId, url, limitOrder);
   return { url };
 }

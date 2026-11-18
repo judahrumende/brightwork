@@ -298,7 +298,13 @@ export function registerAuth(
           referralCredits: env.STRIPE_REFERRAL_CREDITS,
         })
       : null;
-  const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
+  const hosting = siteHosting(
+    app,
+    workspace,
+    origin,
+    env.SITE_BASE_DOMAIN,
+    (key) => allow('store-order', key, 12, 600),
+  );
   billing?.register(app);
   const sellerPayments =
     env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET

@@ -6,7 +6,8 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
-import { businesses } from '../src/db/schema';
+import { artifacts, businesses, publications } from '../src/db/schema';
+import { generatedStores } from '../src/workspace/generated-store';
 import { commerceInsights } from '../src/workspace/commerce-insights';
 import { stripeConnect } from '../src/workspace/stripe-connect';
 
@@ -60,6 +61,10 @@ test(
     let checkoutStatus = 'open';
     let session = 'cs_test_Sale';
     let submissions = 0;
+    let checkoutOrder = order;
+    let paymentIntent = 'pi_Sale';
+    let storeFixture = false;
+    let failCheckoutCreation = false;
     const connect = stripeConnect(
       db,
       { origin, secret, key: 'sk_test_fixture' },
@@ -86,16 +91,32 @@ test(
           return Response.json({
             id: 'ch_Sale',
             livemode: false,
-            payment_intent: 'pi_Sale',
+            payment_intent: paymentIntent,
             paid: true,
-            amount: order.amount,
+            amount: checkoutOrder.amount,
             amount_refunded: refund,
-            currency: order.currency,
-            metadata: { brightwork_order: order.id },
+            currency: checkoutOrder.currency,
+            metadata: { brightwork_order: checkoutOrder.id },
           });
         const creating = path === '/v1/checkout/sessions';
         if (creating) {
+          if (failCheckoutCreation) {
+            failCheckoutCreation = false;
+            return new Response('temporary provider outage', { status: 503 });
+          }
           submissions++;
+          if (storeFixture) {
+            const fields = new URLSearchParams(String(request?.body));
+            assert.equal(fields.get('client_reference_id'), checkoutOrder.id);
+            assert.equal(
+              fields.get('line_items[0][price_data][unit_amount]'),
+              String(checkoutOrder.amount),
+            );
+            assert.equal(
+              fields.get('line_items[0][price_data][currency]'),
+              checkoutOrder.currency,
+            );
+          }
           if (submissions === 2) {
             assert.equal(
               headers.get('idempotency-key'),
@@ -104,6 +125,13 @@ test(
             session = 'cs_test_Replacement';
           }
           checkoutStatus = 'open';
+        } else if (path.endsWith('/expire')) {
+          assert.equal(path, '/v1/checkout/sessions/' + session + '/expire');
+          assert.equal(
+            headers.get('idempotency-key'),
+            'brightwork-expire-' + session,
+          );
+          checkoutStatus = 'expired';
         } else {
           assert.equal(path, '/v1/checkout/sessions/' + session);
           lookups++;
@@ -114,11 +142,11 @@ test(
           livemode: false,
           status: checkoutStatus,
           payment_status: complete ? 'paid' : 'unpaid',
-          client_reference_id: order.id,
-          payment_intent: complete ? 'pi_Sale' : null,
+          client_reference_id: checkoutOrder.id,
+          payment_intent: complete ? paymentIntent : null,
           customer_details: complete ? { email: 'Buyer@example.test' } : null,
-          amount_total: creating ? order.amount : capturedAmount,
-          currency: order.currency,
+          amount_total: creating ? checkoutOrder.amount : capturedAmount,
+          currency: checkoutOrder.currency,
           url: link,
         });
       },
@@ -277,5 +305,200 @@ test(
     assert.ok(!JSON.stringify(insights).includes('Buyer@example.test'));
 
     assert.equal(await connect.checkout(order.id), null);
+
+    const [site] = await db
+      .insert(artifacts)
+      .values({
+        businessId: owner.id,
+        kind: 'website',
+        title: 'Test shop',
+        body: '<h1>Test shop</h1>',
+        state: 'approved',
+      })
+      .returning();
+    assert.ok(site);
+    await db.insert(publications).values({
+      artifactId: site.id,
+      draftRevision: 1,
+      document: site.body,
+      pages: [],
+    });
+    await connection`insert into generated_stores(site_id, currency, first_revision) values (${site.id}, 'AUD', 1)`;
+    const stores = generatedStores(db);
+    assert.equal(await connect.readyForCheckout(owner.id), true);
+    assert.equal(await connect.readyForCheckout(other.id), false);
+    assert.ok(
+      await stores.saveProduct(owner.id, site.id, {
+        name: 'Kettle',
+        description: '',
+        price: 4500,
+        stock: 2,
+        active: true,
+      }),
+    );
+    assert.ok(
+      await stores.saveProduct(owner.id, site.id, {
+        name: 'Filters',
+        description: '',
+        price: 2250,
+        stock: 2,
+        active: true,
+      }),
+    );
+    storeFixture = true;
+    async function reserveOrder() {
+      const dashboard = await stores.read(owner!.id, site!.id);
+      const products = dashboard?.products;
+      assert.equal(products?.length, 2);
+      const id = randomUUID();
+      assert.ok(
+        await stores.request(site!.id, {
+          id,
+          items: products!.map(({ id, revision, name }) => ({
+            productId: id,
+            revision,
+            quantity: name === 'Kettle' ? 1 : 2,
+          })),
+          email: 'merchant-order@example.test',
+        }),
+      );
+      assert.equal(await stores.createPayment(owner!.id, site!.id, id), null);
+      assert.ok(await stores.changeOrder(owner!.id, site!.id, id, 'confirmed'));
+      const [a, b] = await Promise.all([
+        stores.createPayment(owner!.id, site!.id, id),
+        stores.createPayment(owner!.id, site!.id, id),
+      ]);
+      assert.ok(a);
+      assert.equal(a, b);
+      assert.notEqual(id, a);
+      assert.equal((await connect.publicOrder(a))?.amount, 9000);
+      assert.equal(await stores.createPayment(other!.id, site!.id, id), null);
+      return { id, saleId: a };
+    }
+
+    const abandoned = await reserveOrder();
+    checkoutOrder = {
+      id: abandoned.saleId,
+      title: 'Filters and 1 more',
+      currency: 'aud',
+      amount: 9000,
+    };
+    capturedAmount = 9000;
+    session = 'cs_test_Abandoned';
+    failCheckoutCreation = true;
+    await assert.rejects(
+      connect.checkout(abandoned.saleId),
+      /Stripe could not complete/,
+    );
+    assert.equal(
+      await connect.closeStoreCheckout(owner.id, site.id, abandoned.id),
+      false,
+    );
+    assert.equal(
+      await stores.changeOrder(owner.id, site.id, abandoned.id, 'cancelled'),
+      false,
+    );
+    assert.equal(await connect.checkout(abandoned.saleId), link);
+    assert.equal(
+      await connect.closeStoreCheckout(other.id, site.id, abandoned.id),
+      false,
+    );
+    assert.equal(
+      await connect.closeStoreCheckout(owner.id, site.id, abandoned.id),
+      true,
+    );
+    assert.equal(await connect.checkout(abandoned.saleId), null);
+    assert.equal(await connect.publicOrder(abandoned.saleId), null);
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, abandoned.id, 'cancelled'),
+    );
+
+    const purchase = await reserveOrder();
+    checkoutOrder = { ...checkoutOrder, id: purchase.saleId };
+    paymentIntent = 'pi_GeneratedStore';
+    session = 'cs_test_GeneratedStore';
+    assert.equal(await connect.checkout(purchase.saleId), link);
+    assert.equal(
+      await stores.changeOrder(owner.id, site.id, purchase.id, 'fulfilled'),
+      false,
+    );
+    checkoutStatus = 'complete';
+    assert.equal(
+      await connect.closeStoreCheckout(owner.id, site.id, purchase.id),
+      false,
+    );
+    capturedAmount = 8999;
+    assert.equal(
+      (await webhook(64, 'checkout.session.completed', session)).statusCode,
+      204,
+    );
+    assert.equal(
+      await stores.changeOrder(owner.id, site.id, purchase.id, 'fulfilled'),
+      false,
+    );
+    capturedAmount = 9000;
+    assert.equal(
+      (await webhook(65, 'checkout.session.completed', session)).statusCode,
+      204,
+    );
+    assert.equal(
+      (await webhook(65, 'checkout.session.completed', session)).statusCode,
+      204,
+    );
+    const paid = (await stores.read(owner.id, site.id))?.orders.find(
+      (value) => value.id === purchase.id,
+    );
+    assert.equal(paid?.payment, 'paid');
+    assert.equal(
+      await stores.changeOrder(owner.id, site.id, purchase.id, 'cancelled'),
+      false,
+    );
+    refund = 9000;
+    assert.equal(
+      (await webhook(66, 'charge.refunded', 'ch_Sale')).statusCode,
+      204,
+    );
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.orders.find(
+        (value) => value.id === purchase.id,
+      )?.payment,
+      'refunded',
+    );
+    assert.equal(
+      await stores.changeOrder(owner.id, site.id, purchase.id, 'fulfilled'),
+      false,
+    );
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, purchase.id, 'cancelled'),
+    );
+    assert.deepEqual(
+      (await stores.read(owner.id, site.id))?.products.map(
+        (product) => product.stock,
+      ),
+      [2, 2],
+    );
+    const shipped = await reserveOrder();
+    checkoutOrder = { ...checkoutOrder, id: shipped.saleId };
+    paymentIntent = 'pi_GeneratedStoreShipped';
+    session = 'cs_test_GeneratedStoreShipped';
+    assert.equal(await connect.checkout(shipped.saleId), link);
+    checkoutStatus = 'complete';
+    assert.equal(
+      (await webhook(67, 'checkout.session.completed', session)).statusCode,
+      204,
+    );
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, shipped.id, 'fulfilled'),
+    );
+    assert.equal(
+      await stores.changeOrder(owner.id, site.id, shipped.id, 'cancelled'),
+      false,
+    );
+    assert.deepEqual(
+      (await stores.read(owner.id, site.id))?.products.map(
+        (product) => product.stock,
+      ),
+      [0, 1],
+    );
   },
 );

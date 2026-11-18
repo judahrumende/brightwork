@@ -1396,3 +1396,165 @@ test('Build opens saved conversations, links authorized attachments and returns 
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
 });
+
+test('a generated store opens its dashboard below the preview and saves a product', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const id = 'e4674721-7544-4ce9-b7cb-9dcbd85b356a';
+  const item = {
+    id,
+    title: 'Fieldwork store',
+    kind: 'website',
+    isStore: true,
+    body: '<h1>Fieldwork store</h1>',
+    revision: 1,
+    state: 'approved',
+    publicUrl: null,
+  };
+  const products: object[] = [];
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
+  await page.route(
+    '**' + api + '/work/' + id + '/store/photos/kettle?revision=1',
+    (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(png, 'base64'),
+      }),
+  );
+  const saleId = 'fa9fbe6c-2b5e-40d1-a607-def73dc6f746';
+  const order = {
+    id: 'order',
+    email: 'buyer@example.test',
+    currency: 'AUD',
+    status: 'confirmed',
+    createdAt: '2026-11-18T08:00:00.000Z',
+    items: [
+      {
+        productId: 'kettle',
+        productName: 'Pour-over kettle',
+        quantity: 1,
+        unitPrice: 4500,
+      },
+      {
+        productId: 'filters',
+        productName: 'Filters',
+        quantity: 2,
+        unitPrice: 700,
+      },
+    ],
+    saleId: null as string | null,
+    payment: null as string | null,
+  };
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [item], hosting: true } }),
+  );
+  await page.route('**' + api + '/work/' + id + '/store', (route) => {
+    if (route.request().method() === 'POST') {
+      const data = route.request().postDataJSON();
+      if (data.action === 'payment') {
+        expect(data).toEqual({ action: 'payment', id: order.id });
+        order.saleId = saleId;
+        order.payment = 'awaiting_payment';
+        return route.fulfill({ json: { saved: true } });
+      }
+      if (data.product.parentId) {
+        expect(data.product).toMatchObject({
+          parentId: 'kettle',
+          name: 'Large',
+          price: 6000,
+          stock: 4,
+          sku: 'LARGE',
+        });
+        products.push({ ...data.product, id: 'kettle-large', revision: 1 });
+        return route.fulfill({ json: { saved: true } });
+      }
+      expect(data).toEqual({
+        action: 'product',
+        product: {
+          name: 'Pour-over kettle',
+          description: '',
+          price: 4500,
+          stock: 3,
+          active: true,
+          photo: { data: 'data:image/png;base64,' + png, alt: 'Copper kettle' },
+        },
+      });
+      products.push({
+        ...data.product,
+        photoAlt: data.product.photo.alt,
+        id: 'kettle',
+        revision: 1,
+      });
+      return route.fulfill({ json: { saved: true } });
+    }
+    return route.fulfill({
+      json: { currency: 'AUD', products, orders: [order], paymentReady: true },
+    });
+  });
+
+  await page.goto(workbench + '/build');
+  await page.getByRole('button', { name: /Fieldwork store/u }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(
+    dialog
+      .frameLocator('iframe[title="Website draft preview"]')
+      .getByRole('heading', { name: 'Fieldwork store' }),
+  ).toBeVisible();
+  await dialog.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  const dashboard = dialog.getByRole('region', { name: 'Store dashboard' });
+  await dashboard.getByRole('radio', { name: 'Products' }).click();
+  await dashboard.getByRole('button', { name: 'Add product' }).click();
+  await dashboard.getByLabel('Name', { exact: true }).fill('Pour-over kettle');
+  await dashboard.getByLabel('Price (AUD)').fill('45');
+  await dashboard.getByLabel('Stock').fill('3');
+  await dashboard.getByLabel('Product photo').setInputFiles({
+    name: 'kettle.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png, 'base64'),
+  });
+  await dashboard.getByLabel('Photo description').fill('Copper kettle');
+  await dashboard.getByRole('button', { name: 'Save product' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: 'Pour-over kettle' }),
+  ).toBeVisible();
+  const photo = dashboard.getByRole('img', { name: 'Copper kettle' });
+  await expect(photo).toBeVisible();
+  await expect
+    .poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(1);
+  await dashboard
+    .getByRole('button', { name: 'Add variant to Pour-over kettle' })
+    .click();
+  await dashboard.getByLabel('Variant name').fill('Large');
+  await dashboard.getByLabel('Price (AUD)').fill('60');
+  await dashboard.getByLabel('Stock').fill('4');
+  await dashboard.getByLabel('SKU', { exact: true }).fill('LARGE');
+  await dashboard.getByRole('button', { name: 'Save product' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: /Large/u }),
+  ).toBeVisible();
+  await expect(dashboard.getByText('By variant').first()).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Orders' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', {
+      name: 'Pour-over kettle × 1, Filters × 2',
+    }),
+  ).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Create test payment link' })
+    .click();
+  await expect(
+    dashboard.getByRole('link', { name: /Open payment link/u }),
+  ).toHaveAttribute('href', '/sale/' + saleId);
+  await expect(
+    dashboard.getByRole('button', { name: 'Fulfill', exact: true }),
+  ).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Site preview' }).click();
+  await expect(
+    dialog
+      .frameLocator('iframe[title="Website draft preview"]')
+      .getByRole('heading', { name: 'Fieldwork store' }),
+  ).toBeVisible();
+});

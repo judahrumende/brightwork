@@ -31,9 +31,12 @@ export function buildActivity(
              ELSE part ->> 'status'
            END AS state,
            turn.state = 'running' AND part ->> 'status' IN ('preparing', 'running') AS active,
-           site.id AS creation_id, coalesce(first_version.title, site.title) AS title,
-           first_version.revision, first_version.id AS version_id,
-           encode(sha256(convert_to(first_version.document, 'UTF8')), 'hex') AS source_hash,
+           site.id AS creation_id, coalesce(built_version.title, site.title) AS title,
+           built_version.revision, built_version.id AS version_id,
+           encode(sha256(convert_to(
+             CASE WHEN part -> 'output' ->> 'versionId' IS NULL THEN built_version.document
+                  ELSE jsonb_build_array(built_version.title, built_version.document, built_version.pages)::text END,
+             'UTF8')), 'hex') AS source_hash,
            CASE WHEN jsonb_typeof(part -> 'output' -> 'error') = 'string'
                 THEN part -> 'output' ->> 'error' END AS failure
     FROM agent_turns AS turn
@@ -45,11 +48,14 @@ export function buildActivity(
     LEFT JOIN workspace_artifacts AS site ON site.id = CASE
          WHEN part -> 'output' ->> 'id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
          THEN (part -> 'output' ->> 'id')::uuid END
-         AND site.turn_id = turn.id AND site.business_id = turn.business_id AND site.kind = 'website'
+         AND site.business_id = turn.business_id AND site.kind = 'website'
     LEFT JOIN LATERAL (
-      SELECT id, revision, document, title FROM website_versions
-      WHERE artifact_id = site.id ORDER BY revision LIMIT 1
-    ) AS first_version ON true
+      SELECT id, revision, document, pages, title FROM website_versions
+      WHERE artifact_id = site.id
+        AND (part -> 'output' ->> 'versionId' IS NULL
+          OR id::text = part -> 'output' ->> 'versionId')
+      ORDER BY revision LIMIT 1
+    ) AS built_version ON true
     WHERE turn.business_id = ${businessId}
       AND part ->> 'type' = 'tool' AND part ->> 'name' = 'build'
       AND coalesce(part ->> 'toolCallId', '') <> ''

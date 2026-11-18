@@ -1,3 +1,4 @@
+import { StoreDashboard } from './store-dashboard';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -40,6 +41,8 @@ type Artifact = {
   scheduleTimezone: string;
   upcoming: string[];
   publicUrl: string | null;
+  isStore?: boolean;
+  storeLive?: boolean;
   answer: string | null;
   revision: number;
   liveDraftRevision: number | null;
@@ -401,6 +404,7 @@ export function WorkList({
   const [listTasks, setListTasks] = useState(false);
   const [response, setResponse] = useState('');
   const [recipient, setRecipient] = useState('');
+  const [dashboardSite, setDashboardSite] = useState<string | null>(null);
   const [showVersions, setShowVersions] = useState(false);
   const [editing, setEditing] = useState<WebsiteDraft | null>(null);
   const recent = work.data?.items.find((item) => item.id === open);
@@ -842,6 +846,7 @@ export function WorkList({
             setResponse('');
             setRecipient('');
             setShowVersions(false);
+            setDashboardSite(null);
           }
         }}
       >
@@ -876,19 +881,51 @@ export function WorkList({
                       }}
                     />
                   ) : (
-                    <WebsitePreview
-                      title="Website draft preview"
-                      html={selected.body}
-                      pages={selected.pages ?? []}
-                    />
+                    <>
+                      {dashboardSite === selected.id ? (
+                        <StoreDashboard
+                          key={selected.id}
+                          endpoint={
+                            root(id) + '/work/' + selected.id + '/store'
+                          }
+                          publicUrl={
+                            selected.storeLive ? selected.publicUrl : null
+                          }
+                          readOnly={!['owner', 'admin'].includes(role)}
+                        />
+                      ) : (
+                        <WebsitePreview
+                          title="Website draft preview"
+                          html={selected.body}
+                          pages={selected.pages ?? []}
+                        />
+                      )}
+                      {selected.isStore && (
+                        <Button
+                          variant="secondary"
+                          aria-pressed={dashboardSite === selected.id}
+                          onClick={() =>
+                            setDashboardSite((current) =>
+                              current === selected.id ? null : selected.id,
+                            )
+                          }
+                        >
+                          {dashboardSite === selected.id
+                            ? 'Site preview'
+                            : 'Dashboard'}
+                        </Button>
+                      )}
+                    </>
                   )}
-                  {!editing && selected.state === 'pending' && (
-                    <WebsiteReview
-                      key={selected.id + ':' + selected.revision}
-                      endpoint={root(id) + '/work/' + selected.id + '/review'}
-                      revision={selected.revision}
-                    />
-                  )}
+                  {!editing &&
+                    dashboardSite !== selected.id &&
+                    selected.state === 'pending' && (
+                      <WebsiteReview
+                        key={selected.id + ':' + selected.revision}
+                        endpoint={root(id) + '/work/' + selected.id + '/review'}
+                        revision={selected.revision}
+                      />
+                    )}
                   {!editing && role !== 'viewer' && (
                     <Button
                       variant="secondary"

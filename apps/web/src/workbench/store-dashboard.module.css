@@ -1,0 +1,98 @@
+.dashboard {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+.dashboard h3,
+.dashboard p,
+.metrics dd {
+  margin: 0;
+}
+.toolbar,
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.toolbar {
+  justify-content: space-between;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.metrics div {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.metrics dd {
+  font-size: var(--text-page-heading);
+  font-variant-numeric: tabular-nums;
+}
+.table {
+  overflow-x: auto;
+}
+.table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-caption);
+}
+.table th,
+.table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: start;
+}
+.status {
+  text-transform: capitalize;
+}
+.form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.form label:has(:is(textarea, input:not([type='checkbox']))) {
+  display: grid;
+  gap: 4px;
+}
+.dashboard :is(input:not([type='checkbox']), textarea, select) {
+  color: inherit;
+  background: var(--control-fill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+.productPhoto {
+  display: block;
+  width: min(100%, 160px);
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.productThumbnail {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-inline-end: 8px;
+}
+.table .variantCell {
+  padding-inline-start: 24px;
+  font-weight: normal;
+}
+.sku {
+  font-size: var(--text-caption);
+  font-weight: normal;
+}

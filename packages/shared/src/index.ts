@@ -17,3 +17,13 @@ export type {
   WebSearchCode,
   WebSearchResponse,
 } from './web-search';
+export {
+  storeCurrency,
+  storeProductInput,
+  storeOrderStatus,
+} from './generated-store';
+export type {
+  StoreProduct,
+  StoreOrder,
+  StoreOrderLine,
+} from './generated-store';
