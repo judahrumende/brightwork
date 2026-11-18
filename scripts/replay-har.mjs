@@ -35,6 +35,15 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu;
 const ids = JSON.parse(process.env.HAR_FIXTURE_ID_MAP ?? '{}');
 const totals = { matched: 0, mismatched: 0, skipped: 0 };
 const schema = new Map(Object.entries(observedContracts));
+const failures = new Map();
+const failedRoutes = new Set();
+
+function mismatch(key, issue) {
+  totals.mismatched++;
+  failedRoutes.add(key);
+  const description = key + ': ' + issue;
+  failures.set(description, (failures.get(description) ?? 0) + 1);
+}
 
 function mapIds(value) {
   if (typeof value === 'string')
@@ -146,15 +155,16 @@ for (const entry of log.entries) {
     if (requestIssue)
       issues.unshift('recorded body differs from the inferred request schema');
     if (issues.length) {
-      totals.mismatched++;
-      console.log(`${eventKey}: ${issues.join(', ')}`);
+      mismatch(eventKey, issues.join(', '));
     } else {
       totals.matched++;
     }
   } catch {
-    totals.mismatched++;
-    console.log(`${eventKey}: local request or response parsing failed`);
+    mismatch(eventKey, 'local request or response parsing failed');
   }
 }
-console.log(JSON.stringify(totals));
+for (const [description, count] of [...failures].sort((a, b) => b[1] - a[1])) {
+  console.log(`${count} × ${description}`);
+}
+console.log(JSON.stringify({ ...totals, failedRoutes: failedRoutes.size }));
 if (!totals.matched || totals.mismatched) process.exitCode = 1;
