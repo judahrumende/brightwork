@@ -522,6 +522,56 @@ export function agentStore(db: Database) {
         .orderBy(desc(artifacts.createdAt))
         .limit(200);
     },
+    async workByKind(
+      businessId: string,
+      kind: 'email' | 'post' | 'website',
+      waiting: boolean,
+      limit: number,
+    ) {
+      return workQuery()
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.kind, kind),
+            waiting
+              ? eq(artifacts.state, 'pending')
+              : kind === 'email'
+                ? inArray(artifacts.state, ['draft', 'pending'])
+                : undefined,
+          ),
+        )
+        .orderBy(desc(artifacts.createdAt), desc(artifacts.id))
+        .limit(limit);
+    },
+    async inboxRevisionRows(businessId: string) {
+      return db
+        .select({
+          id: artifacts.id,
+          revision: artifacts.revision,
+          state: artifacts.state,
+          emailState: outboundEmails.state,
+        })
+        .from(artifacts)
+        .leftJoin(
+          outboundEmails,
+          and(
+            eq(outboundEmails.artifactId, artifacts.id),
+            eq(outboundEmails.revision, artifacts.revision),
+          ),
+        )
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.kind, 'email'),
+          ),
+        )
+        .orderBy(
+          desc(artifacts.createdAt),
+          desc(artifacts.id),
+          desc(outboundEmails.id),
+        )
+        .limit(100);
+    },
     async workItem(businessId: string, id: string) {
       const [item] = await workQuery()
         .where(and(eq(artifacts.businessId, businessId), eq(artifacts.id, id)))
