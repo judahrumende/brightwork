@@ -153,6 +153,77 @@ export function runStore(db: Database) {
       }));
     },
 
+    async current(businessId: string) {
+      const [run] = await db
+        .select()
+        .from(businessRuns)
+        .where(eq(businessRuns.businessId, businessId))
+        .orderBy(
+          sql`case when ${businessRuns.state} in ('active', 'paused') then 0 else 1 end`,
+          desc(businessRuns.createdAt),
+        )
+        .limit(1);
+      return run ? summarize(run) : null;
+    },
+
+    async turns(businessId: string, runId: string, limit: number) {
+      const [run] = await db
+        .select({ id: businessRuns.id })
+        .from(businessRuns)
+        .where(
+          and(
+            eq(businessRuns.businessId, businessId),
+            eq(businessRuns.id, runId),
+          ),
+        );
+      if (!run) return null;
+      const turns = await db
+        .select()
+        .from(agentTurns)
+        .where(
+          and(
+            eq(agentTurns.businessId, businessId),
+            eq(agentTurns.runId, runId),
+          ),
+        )
+        .orderBy(desc(agentTurns.createdAt), desc(agentTurns.id))
+        .limit(limit);
+      return turns.reverse();
+    },
+
+    async waitingApprovals(businessId: string, runId: string) {
+      const ids = {
+        emails: [] as string[],
+        posts: [] as string[],
+        siteChanges: [] as string[],
+      };
+      const pending = await db
+        .select({ id: artifacts.id, kind: artifacts.kind })
+        .from(artifacts)
+        .innerJoin(agentTurns, eq(artifacts.turnId, agentTurns.id))
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(agentTurns.businessId, businessId),
+            eq(agentTurns.runId, runId),
+            eq(artifacts.state, 'pending'),
+            inArray(artifacts.kind, ['website', 'email', 'post']),
+          ),
+        )
+        .orderBy(asc(artifacts.createdAt), asc(artifacts.id));
+      for (const item of pending) {
+        if (item.kind === 'email') ids.emails.push(item.id);
+        if (item.kind === 'post') ids.posts.push(item.id);
+        if (item.kind === 'website') ids.siteChanges.push(item.id);
+      }
+      return {
+        ids,
+        emails: ids.emails.length,
+        posts: ids.posts.length,
+        siteChanges: ids.siteChanges.length,
+      };
+    },
+
     async questions(businessId: string, runId: string) {
       const questions = await db
         .select({

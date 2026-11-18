@@ -37,6 +37,7 @@ const totals = { matched: 0, mismatched: 0, skipped: 0 };
 const schema = new Map(Object.entries(observedContracts));
 const failures = new Map();
 const failedRoutes = new Set();
+const validators = new Map();
 
 function mismatch(key, issue) {
   totals.mismatched++;
@@ -67,7 +68,7 @@ async function inspect(response, contract, expectedStatus) {
     );
   const type = response.headers.get('content-type')?.split(';')[0].trim();
   if (
-    response.status !== 204 &&
+    ![204, 304].includes(response.status) &&
     contract.responseTypes.length &&
     !contract.responseTypes.includes(type)
   )
@@ -132,6 +133,12 @@ for (const entry of log.entries) {
     destination.searchParams.append(key, mapIds(value));
   const headers = { Accept: 'application/json', 'X-Session-Id': tabId };
   if (cookie) headers.Cookie = cookie;
+  const validator = validators.get(destination.href);
+  if (
+    validator &&
+    request.headers?.some(({ name }) => name.toLowerCase() === 'if-none-match')
+  )
+    headers['If-None-Match'] = validator;
   try {
     let body;
     let requestIssue = false;
@@ -151,6 +158,11 @@ for (const entry of log.entries) {
       redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
     });
+    if (method === 'GET' && response.ok) {
+      const tag = response.headers.get('etag');
+      if (tag) validators.set(destination.href, tag);
+      else validators.delete(destination.href);
+    }
     const issues = await inspect(response, contract, captured.status);
     if (requestIssue)
       issues.unshift('recorded body differs from the inferred request schema');
