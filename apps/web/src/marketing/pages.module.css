@@ -1,0 +1,92 @@
+.page,
+.footer {
+  background: #faf8f1;
+  color: #202d27;
+}
+.header,
+.main,
+.footer nav {
+  width: min(100% - 2rem, 64rem);
+  margin-inline: auto;
+}
+.header,
+.header nav,
+.brand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+.header {
+  justify-content: space-between;
+  padding-block: 1.5rem;
+  border-bottom: 1px solid #c5cec3;
+}
+.brand,
+.action {
+  font-weight: 750;
+  text-decoration: none;
+}
+.brand {
+  font-size: 1.25rem;
+}
+.action {
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.5rem;
+  background: #21463b;
+  color: white;
+}
+.skip {
+  position: absolute;
+  inset: 1rem auto auto 1rem;
+  padding: 0.5rem;
+  background: white;
+  transform: translateY(-200%);
+}
+.skip:focus {
+  transform: none;
+}
+.main {
+  padding-block: clamp(3rem, 10vw, 8rem);
+}
+.main h1 {
+  font-size: clamp(2.5rem, 6.5vw, 5.5rem);
+  line-height: 1.06;
+  letter-spacing: -0.055em;
+  margin: 0 0 1rem;
+}
+.main p {
+  max-width: 58ch;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+.main .lead {
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+}
+.related {
+  margin-top: 2.5rem;
+}
+.related ul,
+.footer ul {
+  list-style: none;
+  padding: 0;
+}
+.related ul,
+.footer nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.75rem 1.5rem;
+}
+.footer {
+  border-top: 1px solid #c5cec3;
+}
+.footer nav {
+  padding-block: 2rem;
+}
+.footer h2,
+.related h2 {
+  font-size: 1.125rem;
+}
+.footer li + li {
+  margin-top: 0.6rem;
+}

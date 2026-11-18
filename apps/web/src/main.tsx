@@ -1,25 +1,22 @@
 import '@fontsource-variable/plus-jakarta-sans';
 import './styles/tokens.css';
 import './styles/global.css';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createRouter, RouterProvider } from '@tanstack/react-router';
-import { createRoot } from 'react-dom/client';
-import { routeTree } from './routeTree.gen';
-
-const queryClient = new QueryClient();
-const router = createRouter({ routeTree });
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router;
-  }
-}
+import { createRoot, hydrateRoot } from 'react-dom/client';
+import { MarketingPage, marketingMetadata } from './marketing/pages';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing React root');
 
-createRoot(root).render(
-  <QueryClientProvider client={queryClient}>
-    <RouterProvider router={router} />
-  </QueryClientProvider>,
-);
+const path = location.pathname.replace(/\/$/u, '') || '/';
+const marketing = marketingMetadata(path);
+if (marketing) {
+  const page = <MarketingPage path={path} />;
+  if (root.hasAttribute('data-marketing-ssr')) hydrateRoot(root, page);
+  else {
+    document.title = marketing.title;
+    createRoot(root).render(page);
+  }
+} else {
+  const { Application } = await import('./application');
+  createRoot(root).render(<Application />);
+}

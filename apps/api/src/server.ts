@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { z } from 'zod';
 import { authEnv } from './auth/config';
 import { registerAuth } from './auth/routes';
+import { registerWeb } from './web';
 
 const env = z
   .object({
@@ -16,7 +17,10 @@ const app = Fastify({
   disableRequestLogging: true,
   ...(env.API_TRUST_PROXY ? { trustProxy: env.API_TRUST_PROXY } : {}),
 });
-registerAuth(app, authEnv.parse(process.env));
+const auth = authEnv.parse(process.env);
+registerAuth(app, auth);
+if (process.argv.includes('--serve-web'))
+  await registerWeb(app, auth.APP_ORIGIN);
 const health = z.object({ status: z.literal('ok') });
 
 app.get('/health', async () => health.parse({ status: 'ok' }));

@@ -175,3 +175,7 @@ Use a PostgreSQL fixture database with permission to create schemas. The integra
 TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/brightwork_test' \
   pnpm --filter @brightwork/api test:integration
 ```
+
+### Serve the production web build
+
+Run `pnpm build` and then `pnpm --filter @brightwork/api start`. Fastify serves the built Web assets and renders the public marketing routes on the host in `APP_ORIGIN`. Keep published sites on a separate `SITE_BASE_DOMAIN`. Set `API_HOST=0.0.0.0` and `API_PORT` to the expected service port when deploying behind a proxy. The app and account shells use `Cache-Control: no-store`. Marketing HTML has a five-minute public cache and renders independently of cookies. Run `pnpm test:ssr` after the build to verify the production path.

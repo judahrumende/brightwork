@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "vite build --outDir dist/client && vite build --ssr src/marketing-server.tsx --outDir dist/server",
     "typecheck": "pnpm routes:generate && tsc -p tsconfig.json",
     "routes:generate": "tsr generate"
   },
