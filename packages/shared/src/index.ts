@@ -30,6 +30,8 @@ export type {
   StoreOrder,
   StoreOrderLine,
   StoreCustomer,
+  StoreReport,
+  StoreReportDay,
   StoreDeliveryZone,
   StoreDeliveryAddress,
   StoreDelivery,

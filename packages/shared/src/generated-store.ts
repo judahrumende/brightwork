@@ -108,3 +108,17 @@ export function storeOrderTotal(
     (delivery ? delivery.shipping + delivery.tax : 0)
   );
 }
+
+export type StoreReportDay = {
+  day: string;
+  requests: number;
+  cancelled: number;
+  paidOrders: number;
+  gross: string;
+  refunds: string;
+};
+
+export type StoreReport = {
+  currency: z.infer<typeof storeCurrency>;
+  days: StoreReportDay[];
+};

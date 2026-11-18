@@ -1,3 +1,8 @@
+import {
+  merchantCustomersQuery,
+  merchantOrdersQuery,
+  merchantReportQuery,
+} from './store-merchant-reads';
 import { sendStorePhoto } from './store-product-photo';
 import { orderAction, productEdit } from './generated-store';
 import { storeCurrency, storeDeliveryZones } from '@brightwork/shared';
@@ -1234,6 +1239,51 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         paymentReady:
           (await context.sellerPayments?.readyForCheckout(access.id)) ?? false,
       };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/orders', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const orders = await store.generatedStore.merchantOrders(
+        access.id,
+        resource,
+        merchantOrdersQuery.parse(request.query),
+      );
+      return orders ?? reply.code(404).send({ message: 'Store not found.' });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/customers', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const customers = await store.generatedStore.merchantCustomers(
+        access.id,
+        resource,
+        merchantCustomersQuery.parse(request.query),
+      );
+      return customers ?? reply.code(404).send({ message: 'Store not found.' });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/report', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const report = await store.generatedStore.merchantReport(
+        access.id,
+        resource,
+        merchantReportQuery.parse(request.query),
+      );
+      return report ?? reply.code(404).send({ message: 'Store not found.' });
     } catch (error) {
       return reportError(error, reply);
     }

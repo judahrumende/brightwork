@@ -1452,6 +1452,71 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await page.route('**' + api + '/work', (route) =>
     route.fulfill({ json: { items: [item], hosting: true } }),
   );
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/orders(?:\\?|$)', 'u'),
+    (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const q = params.get('q');
+      const next = { before: order.createdAt, id: order.id };
+      if (params.has('before')) {
+        expect(params.get('status')).toBe('confirmed');
+        expect(params.get('q')).toBe('kettle');
+        expect(params.get('before')).toBe(order.createdAt);
+        return route.fulfill({
+          json: {
+            orders: [{ ...order, id: 'older', email: 'older@example.test' }],
+            next: null,
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          orders: !q || q === 'kettle' ? [order] : [],
+          next: q === 'kettle' ? next : null,
+        },
+      });
+    },
+  );
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/customers(?:\\?|$)', 'u'),
+    (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const verified = {
+        email: 'buyer@example.test',
+        joinedAt: '2026-11-18T08:00:00.000Z',
+        lastOrderAt: null,
+        orderCount: 0,
+      };
+      return route.fulfill({
+        json: {
+          customers: params.get('kind') === 'guest' ? [] : [verified],
+          next: null,
+        },
+      });
+    },
+  );
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/report(?:\\?|$)', 'u'),
+    (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const day = params.get('from');
+      return route.fulfill({
+        json: {
+          currency: 'AUD',
+          days: [
+            {
+              day,
+              requests: 4,
+              cancelled: 1,
+              paidOrders: 2,
+              gross: '5900',
+              refunds: '500',
+            },
+          ],
+        },
+      });
+    },
+  );
   await page.route('**' + api + '/work/' + id + '/store', (route) => {
     if (route.request().method() === 'POST') {
       const data = route.request().postDataJSON();
@@ -1587,12 +1652,39 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await expect(
     dashboard.getByRole('button', { name: 'Fulfill', exact: true }),
   ).toHaveCount(0);
+  await dashboard.getByLabel('Search orders').fill('kettle');
+  await dashboard
+    .getByRole('combobox', { name: 'Order status' })
+    .selectOption('confirmed');
+  await dashboard.getByRole('button', { name: 'Search', exact: true }).click();
+  await dashboard.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(dashboard.getByText('older@example.test')).toBeVisible();
+  await expect(dashboard.getByText('Page 2')).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Previous', exact: true })
+    .click();
+  await expect(dashboard.getByText('buyer@example.test')).toBeVisible();
   await dashboard.getByRole('radio', { name: 'Customers' }).click();
   const buyer = dashboard.getByRole('row', { name: /buyer@example.test/u });
   await expect(buyer.getByRole('cell', { name: 'Verified' })).toBeVisible();
   await expect(
     buyer.getByRole('cell', { name: '0', exact: true }),
   ).toBeVisible();
+  await dashboard
+    .getByRole('combobox', { name: 'Account type' })
+    .selectOption('guest');
+  await dashboard.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(
+    dashboard.getByText('No customers match this search.'),
+  ).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Report' }).click();
+  await dashboard.getByLabel('From (UTC)').fill('2026-11-01');
+  await dashboard.getByLabel('Through (UTC)').fill('2026-11-02');
+  await dashboard.getByRole('button', { name: 'Apply dates' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: '2026-11-01' }),
+  ).toBeVisible();
+  await expect(dashboard.getByText(/54\.00/u)).toBeVisible();
   await dashboard.getByRole('radio', { name: 'Delivery' }).click();
   await dashboard.getByRole('button', { name: 'Add destination' }).click();
   await dashboard.getByLabel('Two-letter country code').fill('au');

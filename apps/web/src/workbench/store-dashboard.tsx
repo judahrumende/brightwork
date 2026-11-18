@@ -1,8 +1,14 @@
+import { StoreListFilters, StoreListPagination } from './store-list-controls';
+import { StoreReport } from './store-report';
 import { StoreDeliverySettings } from './store-delivery-settings';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { storeCurrency, storeOrderTotal } from '@brightwork/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  storeCurrency,
+  storeOrderTotal,
+  storeOrderStatus,
+} from '@brightwork/shared';
 import type {
   StoreCustomer,
   StoreDeliveryZone,
@@ -16,8 +22,6 @@ import styles from './store-dashboard.module.css';
 type Dashboard = {
   currency: string;
   products: StoreProduct[];
-  orders: StoreOrder[];
-  customers: StoreCustomer[];
   counts: { openRequests: number; awaitingFulfillment: number };
   paymentReady?: boolean;
   zones?: StoreDeliveryZone[];
@@ -29,6 +33,7 @@ const sections = [
   'Orders',
   'Customers',
   'Delivery',
+  'Report',
 ] as const;
 const paymentLabels = {
   awaiting_payment: 'Awaiting payment',
@@ -61,15 +66,50 @@ export function StoreDashboard({
   publicUrl: string | null;
   readOnly: boolean;
 }) {
+  const cache = useQueryClient();
+  const [section, setSection] = useState<string>('Overview');
   const query = useQuery({
     queryKey: ['store-dashboard', endpoint],
     queryFn: ({ signal }) => api<Dashboard>(endpoint, { signal }),
+  });
+  const [orderSearch, setOrderSearch] = useState<Record<string, string>>({});
+  const [customerSearch, setCustomerSearch] = useState<Record<string, string>>(
+    {},
+  );
+  const [orderPages, setOrderPages] = useState<Record<string, string>[]>([{}]);
+  const [customerPages, setCustomerPages] = useState<Record<string, string>[]>([
+    {},
+  ]);
+  const orderParams = new URLSearchParams({
+    ...orderSearch,
+    ...orderPages.at(-1),
+  }).toString();
+  const customerParams = new URLSearchParams({
+    ...customerSearch,
+    ...customerPages.at(-1),
+  }).toString();
+  const orders = useQuery({
+    queryKey: ['store-data', endpoint, 'orders', orderParams],
+    queryFn: ({ signal }) =>
+      api<{ orders: StoreOrder[]; next: Record<string, string> | null }>(
+        endpoint + '/orders?' + orderParams,
+        { signal },
+      ),
+    enabled: section === 'Orders',
     refetchInterval: ({ state }) =>
       state.data?.orders.some((order) => order.payment === 'awaiting_payment')
         ? 5000
         : false,
   });
-  const [section, setSection] = useState<string>('Overview');
+  const customers = useQuery({
+    queryKey: ['store-data', endpoint, 'customers', customerParams],
+    queryFn: ({ signal }) =>
+      api<{ customers: StoreCustomer[]; next: Record<string, string> | null }>(
+        endpoint + '/customers?' + customerParams,
+        { signal },
+      ),
+    enabled: section === 'Customers',
+  });
   const [editing, setEditing] = useState<ProductEdit | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -81,11 +121,17 @@ export function StoreDashboard({
     try {
       await write(endpoint, body);
       setEditing(null);
-      await query.refetch();
+      await Promise.all([
+        query.refetch(),
+        cache.invalidateQueries({ queryKey: ['store-data', endpoint] }),
+      ]);
       setNotice('Saved.');
     } catch (failure) {
       setError(errorMessage(failure));
-      await query.refetch();
+      await Promise.all([
+        query.refetch(),
+        cache.invalidateQueries({ queryKey: ['store-data', endpoint] }),
+      ]);
     } finally {
       setBusy(false);
     }
@@ -460,6 +506,7 @@ export function StoreDashboard({
           }
         />
       )}
+      {section === 'Report' && <StoreReport endpoint={endpoint} />}
       {section === 'Orders' && (
         <>
           <h3>Order requests</h3>
@@ -469,7 +516,27 @@ export function StoreDashboard({
               ? 'You can share a Stripe test payment link for confirmed orders.'
               : 'Arrange payment with the customer separately.'}
           </p>
-          {store.orders.length ? (
+          <StoreListFilters
+            label="Search orders"
+            filterLabel="Order status"
+            query={orderSearch.q}
+            filter={orderSearch.status}
+            placeholder="Email, reference or product"
+            options={storeOrderStatus.options.map((value) => ({
+              value,
+              label: value[0]!.toUpperCase() + value.slice(1),
+            }))}
+            onSearch={(q, status) => {
+              setOrderSearch({
+                ...(q ? { q } : {}),
+                ...(status ? { status } : {}),
+              });
+              setOrderPages([{}]);
+            }}
+          />
+          {orders.isPending && <p role="status">Loading orders…</p>}
+          {orders.error && <p role="alert">{errorMessage(orders.error)}</p>}
+          {orders.data?.orders.length ? (
             <div className={styles.table}>
               <table>
                 <thead>
@@ -482,7 +549,7 @@ export function StoreDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {store.orders.map((order) => (
+                  {orders.data.orders.map((order) => (
                     <tr key={order.id}>
                       <th scope="row">
                         {order.items
@@ -633,14 +700,52 @@ export function StoreDashboard({
               </table>
             </div>
           ) : (
-            <p>Order requests from the published catalog appear here.</p>
+            orders.data && (
+              <p>
+                {Object.keys(orderSearch).length
+                  ? 'No orders match this search.'
+                  : 'Order requests from the published catalog appear here.'}
+              </p>
+            )
           )}
+          <StoreListPagination
+            page={orderPages.length}
+            busy={orders.isFetching}
+            next={Boolean(orders.data?.next)}
+            onPrevious={() => setOrderPages(orderPages.slice(0, -1))}
+            onNext={() => {
+              if (orders.data?.next)
+                setOrderPages([...orderPages, orders.data.next]);
+            }}
+          />
         </>
       )}
       {section === 'Customers' && (
         <>
           <h3>Customers</h3>
-          {store.customers.length ? (
+          <StoreListFilters
+            label="Search customers"
+            filterLabel="Account type"
+            query={customerSearch.q}
+            filter={customerSearch.kind}
+            placeholder="Email address"
+            options={[
+              { value: 'verified', label: 'Verified' },
+              { value: 'guest', label: 'Guest' },
+            ]}
+            onSearch={(q, kind) => {
+              setCustomerSearch({
+                ...(q ? { q } : {}),
+                ...(kind ? { kind } : {}),
+              });
+              setCustomerPages([{}]);
+            }}
+          />
+          {customers.isPending && <p role="status">Loading customers…</p>}
+          {customers.error && (
+            <p role="alert">{errorMessage(customers.error)}</p>
+          )}
+          {customers.data?.customers.length ? (
             <div className={styles.table}>
               <table>
                 <thead>
@@ -652,7 +757,7 @@ export function StoreDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {store.customers.map((customer) => (
+                  {customers.data.customers.map((customer) => (
                     <tr key={customer.email}>
                       <th scope="row">{customer.email}</th>
                       <td>{customer.orderCount}</td>
@@ -668,8 +773,24 @@ export function StoreDashboard({
               </table>
             </div>
           ) : (
-            <p>Verified accounts and guest buyers will appear here.</p>
+            customers.data && (
+              <p>
+                {Object.keys(customerSearch).length
+                  ? 'No customers match this search.'
+                  : 'Verified accounts and guest buyers will appear here.'}
+              </p>
+            )
           )}
+          <StoreListPagination
+            page={customerPages.length}
+            busy={customers.isFetching}
+            next={Boolean(customers.data?.next)}
+            onPrevious={() => setCustomerPages(customerPages.slice(0, -1))}
+            onNext={() => {
+              if (customers.data?.next)
+                setCustomerPages([...customerPages, customers.data.next]);
+            }}
+          />
         </>
       )}
     </section>

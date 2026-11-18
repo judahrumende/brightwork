@@ -1,3 +1,14 @@
+import {
+  customerRows,
+  merchantPageSize,
+  orderFilter,
+  reportRows,
+} from './store-merchant-reads';
+import type {
+  merchantCustomersQuery,
+  merchantOrdersQuery,
+  merchantReportQuery,
+} from './store-merchant-reads';
 import { storeOrderRows } from './store-order-rows';
 import { productPhoto } from './store-product-photo';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +27,7 @@ import type {
   StoreOrder,
   StoreOrderLine,
   StoreProduct,
+  StoreReportDay,
 } from '@brightwork/shared';
 import { z } from 'zod';
 import type { Database } from '../db/database';
@@ -229,19 +241,7 @@ export function generatedStores(db: Database) {
         db.execute<StoreOrder>(
           storeOrderRows(sql`orders.site_id = ${siteId}`, 200),
         ),
-        db.execute<StoreCustomer>(sql`
-          with order_history as (
-            select email, count(*)::int as count, max(created_at) as latest
-            from generated_store_orders where site_id = ${siteId} group by email
-          ), verified as (
-            select email, created_at from generated_store_buyers where site_id = ${siteId}
-          )
-          select coalesce(order_history.email, verified.email) as email,
-            coalesce(order_history.count, 0) as "orderCount",
-            order_history.latest as "lastOrderAt", verified.created_at as "joinedAt"
-          from order_history full join verified on order_history.email = verified.email
-          order by greatest(order_history.latest, verified.created_at) desc, email limit 200
-        `),
+        db.execute<StoreCustomer>(customerRows(siteId, {}, 200, 'recent')),
         db.execute<{ openRequests: number; awaitingFulfillment: number }>(sql`
           select count(*) filter (where status = 'requested')::int as "openRequests",
             count(*) filter (where status = 'confirmed')::int as "awaitingFulfillment"
@@ -249,6 +249,48 @@ export function generatedStores(db: Database) {
         `),
       ]);
       return { ...store, products, orders, customers, counts: counts[0] };
+    },
+    async merchantOrders(
+      businessId: string,
+      siteId: string,
+      options: z.infer<typeof merchantOrdersQuery>,
+    ) {
+      if (!(await scopedStore(businessId, siteId))) return null;
+      const rows = await db.execute<StoreOrder>(
+        storeOrderRows(orderFilter(siteId, options), merchantPageSize + 1),
+      );
+      const orders = rows.slice(0, merchantPageSize);
+      const last = rows.length > merchantPageSize ? orders.at(-1) : undefined;
+      return {
+        orders,
+        next: last ? { before: last.createdAt, id: last.id } : null,
+      };
+    },
+    async merchantCustomers(
+      businessId: string,
+      siteId: string,
+      options: z.infer<typeof merchantCustomersQuery>,
+    ) {
+      if (!(await scopedStore(businessId, siteId))) return null;
+      const rows = await db.execute<StoreCustomer>(
+        customerRows(siteId, options, merchantPageSize + 1, 'email'),
+      );
+      const customers = rows.slice(0, merchantPageSize);
+      const last =
+        rows.length > merchantPageSize ? customers.at(-1) : undefined;
+      return { customers, next: last ? { after: last.email } : null };
+    },
+    async merchantReport(
+      businessId: string,
+      siteId: string,
+      range: z.infer<typeof merchantReportQuery>,
+    ) {
+      const store = await scopedStore(businessId, siteId);
+      if (!store) return null;
+      const days = await db.execute<StoreReportDay>(
+        reportRows(businessId, siteId, range),
+      );
+      return { currency: store.currency, days: Array.from(days) };
     },
     async saveProduct(
       businessId: string,

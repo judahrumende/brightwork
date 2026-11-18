@@ -96,3 +96,13 @@
   font-size: var(--text-caption);
   font-weight: normal;
 }
+.listFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+.listFilters label {
+  display: grid;
+  gap: 4px;
+}

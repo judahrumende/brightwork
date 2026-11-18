@@ -1589,6 +1589,122 @@ test(
           409,
         );
         assert.doesNotMatch((await history()).body, /123 Test Street/u);
+
+        await client`
+          with inserted as (
+            insert into generated_store_orders(site_id, id, product_id, product_name, unit_price, currency, quantity, email, created_at)
+            select ${shopId}, gen_random_uuid(), ${filters.id}, 'Fixture filters', 700, 'AUD', 1,
+              'page' || item || '@example.test', '2026-01-01T00:00:00.000001Z'::timestamptz
+            from generate_series(1, 27) item
+            returning site_id, id, product_id, product_name, unit_price, quantity
+          )
+          insert into generated_store_order_lines(site_id, order_id, product_id, product_name, unit_price, quantity)
+          select site_id, id, product_id, product_name, unit_price, quantity from inserted
+        `;
+        const pagedOrders = await agent.generatedStore.merchantOrders(
+          business.id,
+          shopId,
+          { q: 'page', status: 'requested' },
+        );
+        assert.equal(pagedOrders?.orders.length, 25);
+        assert.ok(pagedOrders?.next);
+        const more = await agent.generatedStore.merchantOrders(
+          business.id,
+          shopId,
+          { q: 'page', status: 'requested', ...pagedOrders.next },
+        );
+        assert.equal(more?.orders.length, 2);
+        assert.equal(more?.next, null);
+        assert.equal(
+          new Set([...pagedOrders.orders, ...more!.orders].map(({ id }) => id))
+            .size,
+          27,
+        );
+        const namedOrders = await agent.generatedStore.merchantOrders(
+          business.id,
+          shopId,
+          { q: 'kettle' },
+        );
+        assert.ok(
+          namedOrders?.orders.some((value) => value.id === variantOrder),
+        );
+        assert.equal(
+          (
+            await agent.generatedStore.merchantOrders(business.id, shopId, {
+              q: '%',
+            })
+          )?.orders.length,
+          0,
+        );
+        assert.equal(
+          await agent.generatedStore.merchantOrders(
+            otherBusiness.id,
+            shopId,
+            {},
+          ),
+          null,
+        );
+        const pagedCustomers = await agent.generatedStore.merchantCustomers(
+          business.id,
+          shopId,
+          { q: 'page', kind: 'guest' },
+        );
+        assert.equal(pagedCustomers?.customers.length, 25);
+        assert.ok(pagedCustomers?.next);
+        const moreCustomers = await agent.generatedStore.merchantCustomers(
+          business.id,
+          shopId,
+          { q: 'page', kind: 'guest', ...pagedCustomers.next },
+        );
+        assert.equal(moreCustomers?.customers.length, 2);
+        assert.ok(
+          moreCustomers?.customers.every(
+            (record) => !record.joinedAt && record.orderCount === 1,
+          ),
+        );
+        assert.equal(
+          (
+            await agent.generatedStore.merchantCustomers(business.id, shopId, {
+              q: 'page',
+              kind: 'verified',
+            })
+          )?.customers.length,
+          0,
+        );
+        assert.equal(
+          await agent.generatedStore.merchantCustomers(
+            otherBusiness.id,
+            shopId,
+            {},
+          ),
+          null,
+        );
+        const reportRange = { from: '2025-12-31', through: '2026-01-01' };
+        const merchantReport = await agent.generatedStore.merchantReport(
+          business.id,
+          shopId,
+          reportRange,
+        );
+        assert.deepEqual(
+          merchantReport?.days.map(({ day, requests }) => ({ day, requests })),
+          [
+            { day: '2025-12-31', requests: 0 },
+            { day: '2026-01-01', requests: 27 },
+          ],
+        );
+        assert.ok(
+          merchantReport?.days.every(
+            ({ gross, paidOrders }) => gross === '0' && paidOrders === 0,
+          ),
+        );
+        assert.equal(
+          await agent.generatedStore.merchantReport(
+            otherBusiness.id,
+            shopId,
+            reportRange,
+          ),
+          null,
+        );
       } finally {
         await shopApp.close();
       }

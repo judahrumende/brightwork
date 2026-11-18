@@ -538,5 +538,22 @@ test(
       ),
       [0, 1],
     );
+    const report = await stores.merchantReport(owner.id, site.id, {
+      from: day,
+      through: day,
+    });
+    assert.deepEqual(report, {
+      currency: 'AUD',
+      days: [
+        {
+          day,
+          requests: 3,
+          cancelled: 2,
+          paidOrders: 2,
+          gross: '19175',
+          refunds: '9000',
+        },
+      ],
+    });
   },
 );
