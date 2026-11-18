@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
+import { attributeReferral } from '../workspace/referrals';
 import type { Database } from '../db/database';
 import {
   accounts,
@@ -60,20 +61,33 @@ export function authStore(db: Database, secret: string) {
     return token;
   }
 
-  async function emailSession(tx: Transaction, email: string) {
-    const [account] = await tx
+  async function emailSession(
+    tx: Transaction,
+    email: string,
+    referralCode?: string,
+  ) {
+    const [created] = await tx
       .insert(accounts)
       .values({ email })
-      .onConflictDoUpdate({
-        target: accounts.email,
-        set: { email },
-      })
+      .onConflictDoNothing()
       .returning({ id: accounts.id });
+    if (created) await attributeReferral(tx, created.id, referralCode);
+    const account =
+      created ??
+      (
+        await tx
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.email, email))
+      )[0];
     if (!account) throw new Error('Could not create account');
     return issueSession(tx, account.id, 'email', account.id);
   }
 
-  async function createSocialSession(request: SocialIdentity) {
+  async function createSocialSession(
+    request: SocialIdentity,
+    referralCode?: string,
+  ) {
     return db.transaction(async (tx) => {
       const key = and(
         eq(identities.provider, request.provider),
@@ -104,6 +118,7 @@ export function authStore(db: Database, secret: string) {
         subject: request.subject,
         accountId: account.id,
       });
+      await attributeReferral(tx, account.id, referralCode);
       return issueSession(tx, account.id, request.provider, request.subject);
     });
   }
@@ -131,7 +146,12 @@ export function authStore(db: Database, secret: string) {
       await db.delete(attempts).where(eq(attempts.id, id));
     },
 
-    async verifyCode(id: string, email: string, code: string) {
+    async verifyCode(
+      id: string,
+      email: string,
+      code: string,
+      referralCode?: string,
+    ) {
       return db.transaction(async (tx) => {
         const [record] = await tx
           .select()
@@ -158,11 +178,11 @@ export function authStore(db: Database, secret: string) {
           return null;
         }
         await tx.delete(attempts).where(eq(attempts.id, id));
-        return emailSession(tx, email);
+        return emailSession(tx, email, referralCode);
       });
     },
 
-    async verifyLink(token: string) {
+    async verifyLink(token: string, referralCode?: string) {
       return db.transaction(async (tx) => {
         const [record] = await tx
           .delete(attempts)
@@ -173,7 +193,7 @@ export function authStore(db: Database, secret: string) {
             ),
           )
           .returning({ email: attempts.email });
-        return record ? emailSession(tx, record.email) : null;
+        return record ? emailSession(tx, record.email, referralCode) : null;
       });
     },
 

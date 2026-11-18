@@ -23,6 +23,7 @@ import { teamStore } from '../workspace/team';
 import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
 import { shopifyOrders } from '../workspace/shopify-orders';
+import { referralProgram } from '../workspace/referrals';
 import { stripeConnect } from '../workspace/stripe-connect';
 import { stripeBilling } from '../workspace/stripe-billing';
 import { registerResearch } from '../research/routes';
@@ -174,6 +175,11 @@ export function registerAuth(
   ) => reply.header('Set-Cookie', cookie(cook(name), value, secure, age));
   const readCookie = (request: FastifyRequest, name: string) =>
     browserCookie(request.headers.cookie, cook(name));
+  const referrals = referralProgram(database.db);
+  const referralCode = (req: FastifyRequest) => {
+    const result = uuid.safeParse(readCookie(req, 'referral'));
+    return result.success ? result.data : undefined;
+  };
   const authError = (failure: unknown, reply: FastifyReply) => {
     const status =
       failure instanceof AuthFailure
@@ -241,6 +247,7 @@ export function registerAuth(
     const previous = tokenShape.safeParse(readCookie(request, 'session'));
     if (previous.success) await store.revokeSession(previous.data);
     saveCookie(reply, 'session', token, sessionLifetimeSeconds);
+    if (referralCode(request)) saveCookie(reply, 'referral', '', 0);
     return { signedIn: true };
   };
   const profileReply = (request: FastifyRequest, reply: FastifyReply) =>
@@ -515,7 +522,12 @@ export function registerAuth(
       return await setSession(
         request,
         reply,
-        await store.verifyCode(body.attempt, body.email, body.code),
+        await store.verifyCode(
+          body.attempt,
+          body.email,
+          body.code,
+          referralCode(request),
+        ),
       );
     } catch (error) {
       return authError(error, reply);
@@ -526,7 +538,11 @@ export function registerAuth(
       originTab(request);
       const { token } = z.object({ token: tokenShape }).parse(request.body);
       await allow('link-ip', request.ip, 20, 600);
-      return await setSession(request, reply, await store.verifyLink(token));
+      return await setSession(
+        request,
+        reply,
+        await store.verifyLink(token, referralCode(request)),
+      );
     } catch (error) {
       return authError(error, reply);
     }
@@ -573,7 +589,11 @@ export function registerAuth(
         .object({ verifier: tokenShape, returnTo: z.string() })
         .parse(stored ? JSON.parse(stored) : null);
       const identity = await auth.exchangeCode(code, grant.verifier);
-      await setSession(request, reply, await store.fromSocial(identity));
+      await setSession(
+        request,
+        reply,
+        await store.fromSocial(identity, referralCode(request)),
+      );
       saveCookie(reply, 'oauth', '', 0);
       return reply.redirect(safeReturnTo(grant.returnTo, origin));
     } catch {
@@ -617,7 +637,11 @@ export function registerAuth(
         ))
       )
         throw new AuthFailure(401, 'Google sign-in expired.');
-      await setSession(request, reply, await store.fromSocial(identity));
+      await setSession(
+        request,
+        reply,
+        await store.fromSocial(identity, referralCode(request)),
+      );
       saveCookie(reply, 'google', '', 0);
       return { signedIn: true };
     } catch (error) {
@@ -732,6 +756,30 @@ export function registerAuth(
         90,
       );
       return { userId: active.account.id };
+    } catch (error) {
+      return authError(error, reply);
+    }
+  });
+  app.get('/api/referrals/visit', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    reply.header('Referrer-Policy', 'no-referrer');
+    try {
+      const query = z.object({ code: uuid }).safeParse(request.query);
+      if (query.success && !referralCode(request)) {
+        await allow('referral-visit', request.ip, 20, 60);
+        if (await referrals.valid(query.data.code))
+          saveCookie(reply, 'referral', query.data.code, 30 * 86_400);
+      }
+      return reply.redirect('/sign-up');
+    } catch (error) {
+      return authError(error, reply);
+    }
+  });
+  app.get('/api/me/referrals', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      const { account } = await activeSession(request);
+      return await referrals.status(account.id);
     } catch (error) {
       return authError(error, reply);
     }
