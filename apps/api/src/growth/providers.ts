@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const metaId = z.string().regex(/^\d+$/u);
+const metaObjectId = z.string().regex(/^\d{1,40}(?:_\d{1,40})?$/u);
 const status = z.enum(['ACTIVE', 'PAUSED']);
 const campaign = z.object({
   id: metaId,
@@ -40,6 +41,44 @@ export function metaPage(id: string, token: string, request = fetch) {
   const page = metaId.parse(id);
   return {
     id: page,
+    async verify() {
+      const profile = z
+        .object({ id: metaId, name: z.string().min(1).max(500) })
+        .parse(
+          await providerJson(
+            'https://graph.facebook.com/v27.0/me?fields=id,name',
+            token,
+            {},
+            request,
+          ),
+        );
+      return profile.id === page ? profile : null;
+    },
+    async subscribeToFeed() {
+      const response = await providerJson(
+        `https://graph.facebook.com/v27.0/${page}/subscribed_apps`,
+        token,
+        {
+          method: 'POST',
+          body: new URLSearchParams({ subscribed_fields: 'feed' }),
+        },
+        request,
+      );
+      return z.object({ success: z.literal(true) }).parse(response).success;
+    },
+    async reply(comment: string, message: string) {
+      const id = metaObjectId.parse(comment);
+      return z
+        .object({ id: metaObjectId })
+        .parse(
+          await providerJson(
+            `https://graph.facebook.com/v27.0/${id}/comments`,
+            token,
+            { method: 'POST', body: new URLSearchParams({ message }) },
+            request,
+          ),
+        ).id;
+    },
     async publish(message: string) {
       return z
         .object({ id: z.string().regex(/^\d+(?:_\d+)?$/u) })
