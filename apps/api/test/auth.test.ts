@@ -13,6 +13,7 @@ import { connectDatabase } from '../src/db/database';
 import {
   agentTurns,
   artifacts,
+  businessRuns,
   calendarEvents,
   creditEntries,
   inboundEmails,
@@ -1088,6 +1089,62 @@ test(
       const changedHistory = await readHistory(freshCookie, tag);
       assert.equal(changedHistory.statusCode, 200);
       assert.notEqual(changedHistory.headers.etag, tag);
+      {
+        const [previousRun] = await database.db
+          .insert(businessRuns)
+          .values({
+            businessId: studio,
+            goal: 'Earlier fixture goal',
+            state: 'completed',
+            endedAt: new Date(),
+            creditLimit: '1',
+          })
+          .returning({ id: businessRuns.id });
+        assert.ok(previousRun);
+        const streamPath = (runId: string, turnId: string) =>
+          `/api/companies/${studio}/ted/unattended/${runId}/turns/${turnId}/events`;
+        for (const [url, cookie] of [
+          [streamPath(previousRun.id, runTurn.turnId), freshCookie],
+          [streamPath(run.id, withFiles.id), freshCookie],
+          [streamPath(run.id, runTurn.turnId), separateCookie],
+        ]) {
+          assert.equal(
+            (await server.inject({ url, headers: { cookie } })).statusCode,
+            404,
+          );
+        }
+        const [streamed] = await database.db
+          .insert(agentTurns)
+          .values({
+            businessId: studio,
+            runId: previousRun.id,
+            state: 'running',
+            prompt: 'Stream a stored fixture turn',
+          })
+          .returning({ id: agentTurns.id });
+        assert.ok(streamed);
+        const base = await server.listen({ host: '127.0.0.1', port: 0 });
+        const sse = await fetch(
+          base + streamPath(previousRun.id, streamed.id),
+          {
+            headers: { cookie: freshCookie },
+            signal: AbortSignal.timeout(5_000),
+          },
+        );
+        assert.equal(sse.status, 200);
+        assert.match(
+          sse.headers.get('content-type') ?? '',
+          /^text\/event-stream/u,
+        );
+        await database.db
+          .update(agentTurns)
+          .set({ state: 'completed', revision: 1, answer: 'Streamed result' })
+          .where(eq(agentTurns.id, streamed.id));
+        const frames = await sse.text();
+        assert.match(frames, /event: turn\n/u);
+        assert.match(frames, /event: changes\n/u);
+        assert.match(frames, /Streamed result/u);
+      }
       const open = await readRun('questions');
       assert.equal(open.statusCode, 200);
       const questionContract =
