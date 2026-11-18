@@ -10,7 +10,13 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import Redis from 'ioredis';
 import postgres from 'postgres';
-import { accounts, businesses, members, publications } from '../src/db/schema';
+import {
+  accounts,
+  businesses,
+  inboundEmails,
+  members,
+  publications,
+} from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
 import { creditConfig, creditLedger } from '../src/workspace/credits';
 import { registerEmailDelivery } from '../src/workspace/email-delivery';
@@ -651,6 +657,88 @@ test(
         });
       }
       assert.equal(await schedule.advance(clock()), null);
+
+      const inboxTask = await agent.saveArtifact(
+        {
+          businessId: business.id,
+          kind: 'task',
+          title: 'Prepare a receipt checklist',
+          body: 'Draft a generic checklist for today.',
+        },
+        account.id,
+        true,
+      );
+      assert.equal(
+        (await agent.workItem(business.id, inboxTask.id))?.emailTriggered,
+        true,
+      );
+      const arrived = (workspace: string, deliveryId: string) =>
+        db
+          .insert(inboundEmails)
+          .values({
+            businessId: workspace,
+            providerId: deliveryId,
+            sender: 'sender@example.test',
+            subject: 'Untrusted subject',
+            body: 'Untrusted instructions',
+            receivedAt: new Date(0),
+          })
+          .onConflictDoNothing({
+            target: [inboundEmails.providerId, inboundEmails.businessId],
+          });
+      await arrived(otherBusiness.id, randomUUID());
+      assert.equal(await schedule.advance(clock()), null);
+      const newEmailId = randomUUID();
+      await arrived(business.id, newEmailId);
+      await arrived(business.id, newEmailId);
+      const results = await Promise.all([
+        schedule.advance(clock()),
+        taskAutomationStore(db).advance(clock()),
+      ]);
+      const turns = new Set(
+        results.flatMap((result) => (result?.turnId ? [result.turnId] : [])),
+      );
+      assert.equal(turns.size, 1);
+      const [inboxTurn] = turns;
+      assert.ok(inboxTurn);
+      assert.equal(
+        (await taskAutomationStore(db).advance(clock()))?.turnId,
+        inboxTurn,
+      );
+      const claimedInbox = await agent.claimTurn(inboxTurn);
+      assert.ok(claimedInbox);
+      assert.match(claimedInbox.row.prompt, /Draft a generic checklist/);
+      assert.doesNotMatch(claimedInbox.row.prompt, /Untrusted/);
+      assert.equal(await agent.claimTurn(inboxTurn), null);
+      await agent.updateTurn(inboxTurn, {
+        state: 'completed',
+        answer: 'Done.',
+      });
+      assert.equal(await schedule.advance(clock()), null);
+      assert.equal(
+        await agent.controlTaskAutomation(
+          business.id,
+          inboxTask.id,
+          account.id,
+          false,
+        ),
+        true,
+      );
+      await arrived(business.id, randomUUID());
+      assert.equal(await schedule.advance(clock()), null);
+      assert.equal(
+        await agent.controlTaskAutomation(
+          business.id,
+          inboxTask.id,
+          account.id,
+          true,
+        ),
+        true,
+      );
+      assert.equal(await schedule.advance(clock()), null);
+      await arrived(business.id, randomUUID());
+      const resumed = await schedule.advance(clock());
+      assert.ok(resumed?.turnId && resumed.turnId !== inboxTurn);
 
       const draft = await agent.saveArtifact({
         businessId: business.id,

@@ -204,6 +204,13 @@
       "when": 1794834000028,
       "tag": "0028_inbound_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794834000029,
+      "tag": "0029_inbox_task_trigger",
+      "breakpoints": true
     }
   ]
 }

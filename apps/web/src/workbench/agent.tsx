@@ -43,6 +43,7 @@ type Artifact = {
   liveDraftRevision: number | null;
   publishWithRun?: boolean | null;
   automatic?: boolean | null;
+  emailTriggered?: boolean;
   nextAutomationAt?: string | null;
   latestAutomationTurnId?: string | null;
   emailState?:
@@ -426,7 +427,9 @@ export function WorkList({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createEvent, setCreateEvent] = useState(false);
+  const [scheduleItem, setScheduleItem] = useState<'task' | 'event' | 'inbox'>(
+    'task',
+  );
   const scheduleForm = useId();
   const createOrigin = useRef<Element | null>(null);
   const [listTasks, setListTasks] = useState(false);
@@ -462,7 +465,7 @@ export function WorkList({
   function openTaskForm() {
     createOrigin.current = document.activeElement;
     setError('');
-    setCreateEvent(false);
+    setScheduleItem('task');
     setCreating(true);
   }
 
@@ -540,23 +543,28 @@ export function WorkList({
     setError('');
     const data = new FormData(event.currentTarget);
     try {
-      if (createEvent) {
+      if (scheduleItem === 'event') {
         await write(root(id) + '/schedule/events', {
           ...Object.fromEntries(data),
           timezone,
         });
       } else {
-        const date = new Date(String(data.get('dueAt')));
         await write(root(id) + '/work/tasks', {
           title: String(data.get('title')),
           body: String(data.get('body')),
-          dueAt: date.toISOString(),
-          recurrence: String(data.get('recurrence')),
-          scheduleTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          automatic: data.get('automatic') === 'on',
+          ...(scheduleItem === 'inbox'
+            ? { whenEmailArrives: true }
+            : {
+                dueAt: new Date(String(data.get('dueAt'))).toISOString(),
+                recurrence: String(data.get('recurrence')),
+                scheduleTimezone:
+                  Intl.DateTimeFormat().resolvedOptions().timeZone,
+                automatic: data.get('automatic') === 'on',
+              }),
         });
       }
       await cache.invalidateQueries({ queryKey: workKey(id) });
+      if (scheduleItem === 'inbox') setListTasks(true);
       setCreating(false);
     } catch (failure) {
       setError(errorMessage(failure));
@@ -652,7 +660,7 @@ export function WorkList({
                   </Button>
                 </Dialog.Close>
                 <Dialog.Title>
-                  {createEvent ? 'New event' : 'New task'}
+                  {scheduleItem === 'event' ? 'New event' : 'New task'}
                 </Dialog.Title>
                 <Button
                   type="submit"
@@ -660,7 +668,9 @@ export function WorkList({
                   variant="secondary"
                   size="icon"
                   disabled={busy}
-                  aria-label={createEvent ? 'Save event' : 'Save task'}
+                  aria-label={
+                    scheduleItem === 'event' ? 'Save event' : 'Save task'
+                  }
                 >
                   <Icon name="check" />
                 </Button>
@@ -670,10 +680,25 @@ export function WorkList({
                 options={[
                   { value: 'task', label: 'Task', disabled: busy },
                   { value: 'event', label: 'Event', disabled: busy },
+                  ...(['owner', 'admin'].includes(role)
+                    ? [
+                        {
+                          value: 'inbox',
+                          label: 'Inbox trigger',
+                          disabled: busy,
+                        },
+                      ]
+                    : []),
                 ]}
-                value={createEvent ? 'event' : 'task'}
+                value={scheduleItem}
                 onValueChange={(value) => {
-                  setCreateEvent(value === 'event');
+                  if (
+                    value !== 'event' &&
+                    value !== 'inbox' &&
+                    value !== 'task'
+                  )
+                    return;
+                  setScheduleItem(value);
                   setError('');
                 }}
               />
@@ -691,8 +716,19 @@ export function WorkList({
                   aria-label="Title"
                   placeholder="Title"
                 />
-                {createEvent ? (
+                {scheduleItem === 'event' ? (
                   <CalendarEventFields timezone={timezone} />
+                ) : scheduleItem === 'inbox' ? (
+                  <>
+                    <label>
+                      Instructions for Pip
+                      <textarea name="body" required maxLength={4000} />
+                    </label>
+                    <p>
+                      Pip uses your credits when a new email reaches this
+                      workspace.
+                    </p>
+                  </>
                 ) : (
                   <>
                     <label>
@@ -982,6 +1018,9 @@ export function WorkList({
               )}
               {selected.kind === 'task' && (
                 <section aria-label="Scheduled execution">
+                  {selected.emailTriggered && (
+                    <p>Runs when a new email arrives in this workspace.</p>
+                  )}
                   {selected.nextAutomationAt && selected.automatic && (
                     <p>
                       Next Pip turn{' '}
@@ -1002,9 +1041,13 @@ export function WorkList({
                       disabled={busy}
                       onClick={() => void controlSchedule(selected)}
                     >
-                      {selected.automatic
-                        ? 'Pause scheduled execution'
-                        : 'Enable scheduled execution'}
+                      {selected.emailTriggered
+                        ? selected.automatic
+                          ? 'Pause Inbox trigger'
+                          : 'Enable Inbox trigger'
+                        : selected.automatic
+                          ? 'Pause scheduled execution'
+                          : 'Enable scheduled execution'}
                     </Button>
                   )}
                 </section>

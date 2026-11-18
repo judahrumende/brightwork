@@ -1,6 +1,13 @@
-import { and, asc, eq, isNotNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Database } from '../db/database';
-import { agentTurns, artifacts, members, taskAutomations } from '../db/schema';
+import {
+  agentTurns,
+  artifacts,
+  inboundEmails,
+  members,
+  taskAutomations,
+  taskEmailOccurrences,
+} from '../db/schema';
 import { upcomingOccurrences } from './recurrence';
 import { canLeadRun } from './run-store';
 
@@ -8,9 +15,34 @@ export function taskAutomationStore(db: Database) {
   return {
     async advance(now = new Date()) {
       return db.transaction(async (tx) => {
+        const pending = tx
+          .select({
+            id: inboundEmails.id,
+            recordedAt: inboundEmails.recordedAt,
+          })
+          .from(inboundEmails)
+          .leftJoin(
+            taskEmailOccurrences,
+            and(
+              eq(taskEmailOccurrences.emailId, inboundEmails.id),
+              eq(taskEmailOccurrences.taskId, taskAutomations.taskId),
+            ),
+          )
+          .where(
+            and(
+              eq(inboundEmails.businessId, artifacts.businessId),
+              gt(inboundEmails.recordedAt, taskAutomations.emailAfter),
+              lte(inboundEmails.recordedAt, now),
+              isNull(taskEmailOccurrences.emailId),
+            ),
+          )
+          .orderBy(asc(inboundEmails.recordedAt), asc(inboundEmails.id))
+          .limit(1)
+          .as('pending_email');
         const [record] = await tx
           .select({
             automation: taskAutomations,
+            received: { id: pending.id, recordedAt: pending.recordedAt },
             task: {
               businessId: artifacts.businessId,
               title: artifacts.title,
@@ -28,12 +60,14 @@ export function taskAutomationStore(db: Database) {
           .from(taskAutomations)
           .innerJoin(artifacts, eq(artifacts.id, taskAutomations.taskId))
           .leftJoin(agentTurns, eq(agentTurns.id, taskAutomations.turnId))
+          .leftJoinLateral(pending, sql`true`)
           .where(
             and(
               eq(taskAutomations.enabled, true),
               lte(taskAutomations.checkAt, now),
               or(
                 lte(taskAutomations.nextAt, now),
+                isNotNull(pending.id),
                 sql`${agentTurns.state} in ('queued', 'running')`,
               ),
             ),
@@ -42,7 +76,7 @@ export function taskAutomationStore(db: Database) {
           .limit(1)
           .for('no key update', { of: taskAutomations, skipLocked: true });
         if (!record) return null;
-        const { automation, task, turn } = record;
+        const { automation, task, turn, received } = record;
         const scope = eq(taskAutomations.taskId, automation.taskId);
         const [member] = automation.creatorId
           ? await tx
@@ -99,32 +133,43 @@ export function taskAutomationStore(db: Database) {
           }
           return { turnId: turn.state === 'queued' ? turn.id : null };
         }
-        if (!automation.nextAt || !task.dueAt) return { turnId: null };
-        const [next] = upcomingOccurrences(
-          task.dueAt,
-          task.recurrence,
-          task.timezone,
-          new Date(automation.nextAt.getTime() + 1),
-          1,
-        );
+        let prompt: string;
+        let nextAt: Date | null = null;
+        if (received) {
+          await tx
+            .insert(taskEmailOccurrences)
+            .values({ taskId: automation.taskId, emailId: received.id });
+          prompt = `Inbox task: ${task.title}\n\n${task.body}\n\nA new email arrived at ${received.recordedAt.toISOString()}.`;
+        } else {
+          if (!automation.nextAt || !task.dueAt) return { turnId: null };
+          const [next] = upcomingOccurrences(
+            task.dueAt,
+            task.recurrence,
+            task.timezone,
+            new Date(automation.nextAt.getTime() + 1),
+            1,
+          );
+          nextAt = next ? new Date(next) : null;
+          prompt = `Scheduled task: ${task.title}\n\n${task.body}\n\nScheduled for ${automation.nextAt.toISOString()}.`;
+        }
         const [created] = await tx
           .insert(agentTurns)
           .values({
             businessId: task.businessId,
             creatorId: automation.creatorId,
-            prompt: `Scheduled task: ${task.title}\n\n${task.body}\n\nScheduled for ${automation.nextAt.toISOString()}.`,
+            prompt,
           })
           .returning({ id: agentTurns.id });
         if (!created) throw new Error('Could not create scheduled turn.');
         await tx
           .update(taskAutomations)
           .set({
-            nextAt: next ? new Date(next) : null,
+            nextAt,
             lastScheduledAt: automation.nextAt,
             turnId: created.id,
             checkAt,
           })
-          .where(and(scope, isNotNull(taskAutomations.nextAt)));
+          .where(scope);
         return { turnId: created.id };
       });
     },

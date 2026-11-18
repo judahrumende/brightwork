@@ -97,6 +97,7 @@ export function agentStore(db: Database) {
         liveDraftRevision: publications.draftRevision,
         publishWithRun: businessRuns.publishWebsites,
         automatic: taskAutomations.enabled,
+        emailTriggered: sql<boolean>`${taskAutomations.emailAfter} is not null`,
         nextAutomationAt: taskAutomations.nextAt,
         latestAutomationTurnId: taskAutomations.turnId,
         emailState: outboundEmails.state,
@@ -395,7 +396,11 @@ export function agentStore(db: Database) {
         .limit(12);
       return rows.reverse();
     },
-    async saveArtifact(item: Artifact, automaticActor?: string) {
+    async saveArtifact(
+      item: Artifact,
+      automaticActor?: string,
+      whenEmailArrives = false,
+    ) {
       if (!item.turnId && item.kind !== 'website' && !automaticActor)
         return insertArtifact(db, item);
       return db.transaction(async (tx) => {
@@ -415,11 +420,16 @@ export function agentStore(db: Database) {
         }
         const record = await insertArtifact(tx, item);
         if (item.kind === 'website') await saveWebsiteVersion(tx, record);
-        if (automaticActor && record.kind === 'task' && record.dueAt) {
+        if (
+          automaticActor &&
+          record.kind === 'task' &&
+          (record.dueAt || whenEmailArrives)
+        ) {
           await tx.insert(taskAutomations).values({
             taskId: record.id,
             creatorId: automaticActor,
             nextAt: record.dueAt,
+            emailAfter: whenEmailArrives ? sql`clock_timestamp()` : null,
           });
         }
         return record;
@@ -443,32 +453,36 @@ export function agentStore(db: Database) {
             ),
           )
           .for('no key update');
-        if (!task?.dueAt || (enabled && !task.body.trim())) return false;
+        if (!task || (enabled && !task.body.trim())) return false;
         const [existing] = await tx
           .select()
           .from(taskAutomations)
           .where(eq(taskAutomations.taskId, taskId))
           .for('no key update');
+        if (!task.dueAt && !existing?.emailAfter) return false;
         if (existing?.enabled === enabled) return true;
         const now = new Date();
         if (enabled) {
-          const [next] = upcomingOccurrences(
-            task.dueAt,
-            task.recurrence,
-            task.scheduleTimezone,
-            new Date(
-              Math.max(
-                now.getTime(),
-                (existing?.lastScheduledAt?.getTime() ?? 0) + 1,
-              ),
-            ),
-            1,
-          );
-          if (!next) return false;
+          const [next] = task.dueAt
+            ? upcomingOccurrences(
+                task.dueAt,
+                task.recurrence,
+                task.scheduleTimezone,
+                new Date(
+                  Math.max(
+                    now.getTime(),
+                    (existing?.lastScheduledAt?.getTime() ?? 0) + 1,
+                  ),
+                ),
+                1,
+              )
+            : [];
+          if (!next && !existing?.emailAfter) return false;
           const settings = {
             creatorId: actorId,
             enabled: true,
-            nextAt: new Date(next),
+            nextAt: next ? new Date(next) : null,
+            emailAfter: existing?.emailAfter ? sql`clock_timestamp()` : null,
             checkAt: now,
           };
           await tx

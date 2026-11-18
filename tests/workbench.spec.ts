@@ -838,3 +838,44 @@ test('Inbox links to downloads in the owning workspace', async ({ page }) => {
   await expect(link).toHaveAttribute('href', downloadPath);
   await expect(link).toHaveAttribute('download', '');
 });
+
+test('Schedule creates a Pip task triggered by a new Inbox message', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**' + api + '/schedule/occurrences?*', (route) =>
+    route.fulfill({
+      json: {
+        occurrences: [],
+        days: [],
+        calendarEvents: [],
+        items: [],
+        posts: [],
+      },
+    }),
+  );
+  await page.route('**' + api + '/work/tasks', (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      title: 'Prepare a receipt checklist',
+      body: 'Draft a generic checklist for today.',
+      whenEmailArrives: true,
+    });
+    return route.fulfill({ json: { item: { id: company.id } } });
+  });
+  await page.goto(workbench + '/schedule');
+  await expect(page.getByText('No tasks yet', { exact: true })).toBeVisible();
+  await page.keyboard.press('c');
+  const editor = page.getByRole('dialog', { name: 'New task' });
+  await editor.getByRole('radio', { name: 'Inbox trigger' }).click();
+  await editor
+    .getByLabel('Title', { exact: true })
+    .fill('Prepare a receipt checklist');
+  await editor
+    .getByLabel('Instructions for Pip')
+    .fill('Draft a generic checklist for today.');
+  await editor.getByRole('button', { name: 'Save task' }).click();
+  await expect(editor).toHaveCount(0);
+});
