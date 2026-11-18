@@ -1,3 +1,4 @@
+import { buildActivity } from './build-activity';
 import { publishWebsite } from './publish-website';
 import { upcomingOccurrences } from './recurrence';
 import { visitorRepository } from './visitor-events';
@@ -134,6 +135,10 @@ export function agentStore(db: Database) {
       );
 
   return {
+    buildActivity: (
+      businessId: string,
+      filter?: Parameters<typeof buildActivity>[2],
+    ) => buildActivity(db, businessId, filter),
     async searchWork(
       accountId: string,
       currentBusinessId: string,
