@@ -14,6 +14,16 @@ const authExclusions = [
 ];
 const cases = [
   {
+    title: 'Brightwork landing',
+    baseline: '001-landing-hero.png',
+    actual: '001-landing-hero.png',
+  },
+  {
+    title: 'Commerce sales and customers',
+    baseline: '079-home-revenue-12m-insights-sales.png',
+    actual: '079-home-revenue-12m-insights-sales.png',
+  },
+  {
     title: 'Browser popover empty state',
     baseline: '005-home-browser-empty.png',
     actual: 'foundation-browser-empty.png',
