@@ -121,6 +121,39 @@ export function registerWorkspaceSettings(
       return { path: '/sale/' + input.id };
     }),
   );
+  app.post(
+    base + '/stripe-connect/history/refresh',
+    handle(true, async (request, reply, access) => {
+      const { after } = z
+        .object({ after: z.uuid().optional() })
+        .parse(request.body);
+      const result = await sellerPayments?.repairHistory(access.id, after);
+      if (!result)
+        return reply.code(404).send({ message: 'Stripe seller unavailable.' });
+      return result;
+    }),
+  );
+  app.post(
+    base + '/shopify/:resource/history/refresh',
+    handle(true, async (request, reply, access) => {
+      const { resource } = target.parse(request.params);
+      const { after } = z
+        .object({
+          after: z
+            .string()
+            .regex(/^gid:\/\/shopify\/Order\/\d+$/u)
+            .max(100)
+            .optional(),
+        })
+        .parse(request.body);
+      const result = await commerce?.repairHistory(access.id, resource, after);
+      if (!result)
+        return reply
+          .code(404)
+          .send({ message: 'Shopify connection unavailable.' });
+      return result;
+    }),
+  );
   app.get(
     base + '/shopify',
     handle(false, async (_request, _reply, access) => ({

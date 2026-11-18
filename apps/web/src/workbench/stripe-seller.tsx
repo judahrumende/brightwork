@@ -1,3 +1,4 @@
+import { CommerceHistoryRefresh } from './commerce-history-refresh';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { api, errorMessage, write } from '../auth/client';
@@ -130,6 +131,9 @@ export function StripeSeller({ endpoint }: { endpoint: string }) {
             <p role="status">
               Sale link created. <a href={created}>Open the new sale</a>
             </p>
+          )}
+          {data.seller && (
+            <CommerceHistoryRefresh endpoint={endpoint} queryKey={[endpoint]} />
           )}
           <ul aria-label="Stripe sales">
             {data.orders.map((sale) => (

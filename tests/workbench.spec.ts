@@ -748,6 +748,19 @@ test('Commerce connects a store, shows its order total and disconnects', async (
       },
     });
   });
+  const cursor = 'gid://shopify/Order/24';
+  await page.route(
+    '**' + endpoint + '/' + store.id + '/history/refresh',
+    (route) => {
+      const body = route.request().postDataJSON();
+      expect(body).toEqual(body.after ? { after: cursor } : {});
+      return route.fulfill({
+        json: body.after
+          ? { checked: 2, refreshed: 1, failed: 1, next: null }
+          : { checked: 4, refreshed: 3, failed: 0, next: cursor },
+      });
+    },
+  );
   await page.route('**' + endpoint + '/' + store.id, (route) => {
     expect(route.request().method()).toBe('DELETE');
     store.connected = false;
@@ -768,6 +781,15 @@ test('Commerce connects a store, shows its order total and disconnects', async (
   await expect(
     page.getByText(/Paid order value received.*50\.00.*2 orders/),
   ).toBeVisible();
+  const commerce = page.getByRole('region', { name: 'Shopify stores' });
+  await commerce.getByRole('button', { name: 'Refresh order history' }).click();
+  await expect(commerce.getByRole('status')).toContainText(
+    'Checked 4. Refreshed 3.',
+  );
+  await commerce.getByRole('button', { name: 'Refresh next batch' }).click();
+  await expect(commerce.getByRole('status')).toContainText(
+    'Provider requests failed for 1.',
+  );
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(page.getByText('Disconnected', { exact: true })).toBeVisible();
 });

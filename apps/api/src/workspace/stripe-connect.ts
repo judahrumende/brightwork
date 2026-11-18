@@ -1,5 +1,15 @@
 import { createHmac } from 'node:crypto';
-import { and, desc, eq, or, isNull, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  or,
+  isNull,
+  isNotNull,
+  sql,
+} from 'drizzle-orm';
 import {
   boolean,
   integer,
@@ -84,6 +94,26 @@ export function stripeConnect(
   const scopedOrder = (id: string, account: string) =>
     and(eq(sales.id, id), eq(sales.accountId, account));
 
+  function buyerKey(
+    businessId: string,
+    account: string,
+    email?: string | null,
+  ) {
+    const normalized = email?.trim().toLowerCase();
+    return normalized
+      ? createHmac('sha256', options.identityKey ?? options.secret)
+          .update(
+            'stripe-customer\0' +
+              businessId +
+              '\0' +
+              account +
+              '\0' +
+              normalized,
+          )
+          .digest('hex')
+      : null;
+  }
+
   return {
     async overview(id: string) {
       const [[seller], orders] = await Promise.all([
@@ -105,6 +135,78 @@ export function stripeConnect(
       return {
         seller: seller ? { ...seller, ready: ready(seller) } : null,
         orders,
+      };
+    },
+    async repairHistory(businessId: string, after?: string) {
+      const [seller] = await db
+        .select()
+        .from(sellers)
+        .where(sellerScope(businessId));
+      if (!seller) return null;
+      const size = 4;
+      const candidates = await db
+        .select()
+        .from(sales)
+        .where(
+          and(
+            eq(sales.businessId, businessId),
+            eq(sales.accountId, seller.accountId),
+            isNotNull(sales.paidAt),
+            isNotNull(sales.checkoutId),
+            isNull(sales.customerKey),
+            after ? gt(sales.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(sales.id))
+        .limit(size + 1);
+      const results = await Promise.allSettled(
+        candidates.slice(0, size).map(async (sale) => {
+          if (!sale.checkoutId) return false;
+          const session = await stripe.checkout(
+            seller.accountId,
+            sale.checkoutId,
+          );
+          if (
+            session.id !== sale.checkoutId ||
+            session.status !== 'complete' ||
+            session.payment_status !== 'paid' ||
+            session.client_reference_id !== sale.id ||
+            session.currency !== sale.currency ||
+            session.amount_total !== sale.amount ||
+            !session.payment_intent ||
+            session.payment_intent !== sale.paymentId
+          )
+            return false;
+          const key = buyerKey(
+            businessId,
+            seller.accountId,
+            session.customer_details?.email,
+          );
+          if (!key) return false;
+          const rows = await db
+            .update(sales)
+            .set({ customerKey: key })
+            .where(
+              and(
+                scopedOrder(sale.id, seller.accountId),
+                eq(sales.businessId, businessId),
+                eq(sales.checkoutId, sale.checkoutId),
+                isNull(sales.customerKey),
+                sql`exists (select 1 from ${sellers} where ${sellers.businessId} = ${businessId} and ${sellers.accountId} = ${seller.accountId})`,
+              ),
+            )
+            .returning({ id: sales.id });
+          return rows.length > 0;
+        }),
+      );
+      return {
+        checked: results.length,
+        refreshed: results.filter(
+          (result) => result.status === 'fulfilled' && result.value,
+        ).length,
+        failed: results.filter((result) => result.status === 'rejected').length,
+        next:
+          candidates.length > size ? (candidates[size - 1]?.id ?? null) : null,
       };
     },
     async onboarding(id: string) {
@@ -284,21 +386,11 @@ export function stripeConnect(
                   !session.amount_total
                 )
                   return;
-                const email = session.customer_details?.email
-                  ?.trim()
-                  .toLowerCase();
-                const customerKey = email
-                  ? createHmac('sha256', options.identityKey ?? options.secret)
-                      .update(
-                        'stripe-customer\0' +
-                          seller.businessId +
-                          '\0' +
-                          event.account +
-                          '\0' +
-                          email,
-                      )
-                      .digest('hex')
-                  : null;
+                const customerKey = buyerKey(
+                  seller.businessId,
+                  event.account,
+                  session.customer_details?.email,
+                );
                 await tx
                   .update(sales)
                   .set({
