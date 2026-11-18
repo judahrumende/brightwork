@@ -211,3 +211,93 @@ test('browse and lead research show public evidence and save a selected website'
     hit.url,
   );
 });
+
+test('Social connects a Page, publishes a reply, and revokes workspace access', async ({
+  page,
+}) => {
+  let connected = false;
+  let added = false;
+  let reply: { id: string; commentId: string; body: string } | null = null;
+  await page.route('**/growth', (route) =>
+    route.fulfill({
+      json: {
+        socialReplies: true,
+        social: connected,
+        pageId: connected ? '500' : null,
+      },
+    }),
+  );
+  await page.route('**/growth/posts', (route) =>
+    route.fulfill({ json: { posts: [] } }),
+  );
+  await page.route('**/growth/page', (route) =>
+    route.fulfill({
+      json: {
+        connection: added
+          ? { pageId: '500', name: 'Fixture Page', connected }
+          : null,
+      },
+    }),
+  );
+  await page.route('**/growth/page/connect', (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      pageId: '500',
+      token: 'synthetic-page-token',
+    });
+    connected = true;
+    added = true;
+    return route.fulfill({ json: { connected } });
+  });
+  await page.route('**/growth/page/disconnect', (route) => {
+    connected = false;
+    return route.fulfill({ json: { disconnected: true } });
+  });
+  await page.route('**/growth/page/comments', (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          {
+            id: '500_30',
+            postId: '500_20',
+            parentId: '500_20',
+            body: 'Can I collect my order?',
+            ownPage: false,
+          },
+        ],
+        replies: reply
+          ? [{ ...reply, status: 'published', providerId: '500_41' }]
+          : [],
+      },
+    }),
+  );
+  await page.route('**/growth/page/replies', (route) => {
+    const body = route.request().postDataJSON();
+    expect(body).toMatchObject({
+      commentId: '500_30',
+      body: 'Yes, it is ready.',
+    });
+    expect(body.id).toMatch(/^[0-9a-f-]{36}$/u);
+    reply = body;
+    return route.fulfill({
+      json: { status: 'published', providerId: '500_41' },
+    });
+  });
+  await page.goto(workspace);
+  await page.getByRole('link', { name: 'Social', exact: true }).click();
+  await page.getByLabel('Facebook Page ID').fill('500');
+  await page.getByLabel('Page access token').fill('synthetic-page-token');
+  await page.getByRole('button', { name: 'Connect or reconnect Page' }).click();
+  await expect(page.getByText('Fixture Page · Connected')).toBeVisible();
+  await expect(page.getByLabel('Page access token')).toHaveValue('');
+  await page.getByLabel('Facebook comment').selectOption('500_30');
+  await page.getByLabel('Facebook reply').fill('Yes, it is ready.');
+  await page.getByRole('button', { name: 'Publish reply on Facebook' }).click();
+  await expect(
+    page.getByRole('list', { name: 'Comment thread' }),
+  ).toContainText('Yes, it is ready. · Published');
+  await page.getByRole('button', { name: 'Disconnect Page' }).click();
+  await expect(page.getByText('Fixture Page · Disconnected')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Publish reply on Facebook' }),
+  ).toHaveCount(0);
+});

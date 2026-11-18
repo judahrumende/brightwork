@@ -103,6 +103,8 @@ pnpm dev
 
 - **Workspace settings → SMS** connects a Twilio SMS-capable number. Set `SMS_ENABLED=true` and `VAULT_KEY` in a verified deployment, then configure the HTTPS incoming callback displayed in settings as a POST in Twilio. Owners and admins can reply to existing SMS conversations. Reconnecting rotates the credentials for the same number. Disconnecting stops callbacks and new replies in Brightwork. An ambiguous submission stays visible for provider review.
 
+- **Social → Page comments** connects a Facebook Page using a Page token. Configure `VAULT_KEY`, `GROWTH_META_APP_SECRET`, and `GROWTH_META_VERIFY_TOKEN`. In the Meta app dashboard select the Page object and subscribe to `feed` at `/api/webhooks/meta/pages`. The Page token needs the permissions for Page subscriptions, comment replies, and any publishing the workspace uses. Owners and admins connect or reconnect the same Page and publish replies. Disconnecting revokes Brightwork access to the Page and discards future callbacks. Remove the Page subscription in Meta if you also want to stop webhook delivery to Brightwork.
+
 ## Standalone web search API
 
 For browser reading, lead research, Google Business Profile, social drafts and publishing, Meta campaign controls, and the ad wallet, see [the Growth setup plan](docs/growth-plan.md). Run the new migration before opening these tools.
