@@ -1,6 +1,6 @@
 import { sendStorePhoto } from './store-product-photo';
 import { orderAction, productEdit } from './generated-store';
-import { storeCurrency } from '@brightwork/shared';
+import { storeCurrency, storeDeliveryZones } from '@brightwork/shared';
 import { buildSummary } from './build-activity';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -1256,6 +1256,11 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
   const storeUpdate = z.discriminatedUnion('action', [
     z.object({ action: z.literal('product'), product: productEdit }),
     z.object({ action: z.literal('currency'), currency: storeCurrency }),
+    z.object({
+      action: z.literal('delivery'),
+      revision: z.int().nonnegative(),
+      zones: storeDeliveryZones,
+    }),
     z.object({ action: z.literal('order'), id: z.uuid(), status: orderAction }),
     z.object({ action: z.literal('payment'), id: z.uuid() }),
     z.object({ action: z.literal('close_payment'), id: z.uuid() }),
@@ -1311,18 +1316,25 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
               resource,
               update.product,
             )
-          : update.action === 'currency'
-            ? await store.generatedStore.setCurrency(
+          : update.action === 'delivery'
+            ? await store.generatedStore.setDelivery(
                 access.id,
                 resource,
-                update.currency,
+                update.revision,
+                update.zones,
               )
-            : await store.generatedStore.changeOrder(
-                access.id,
-                resource,
-                update.id,
-                update.status,
-              );
+            : update.action === 'currency'
+              ? await store.generatedStore.setCurrency(
+                  access.id,
+                  resource,
+                  update.currency,
+                )
+              : await store.generatedStore.changeOrder(
+                  access.id,
+                  resource,
+                  update.id,
+                  update.status,
+                );
       if (!changed)
         return reply.code(409).send({
           message:

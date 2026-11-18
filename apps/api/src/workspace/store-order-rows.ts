@@ -3,7 +3,7 @@ import type { SQL } from 'drizzle-orm';
 
 export function storeOrderRows(filter: SQL, limit: number) {
   return sql`
-          select orders.id, orders.email, orders.currency, orders.status, to_char(orders.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",
+          select orders.id, orders.email, orders.currency, orders.status, orders.delivery, to_char(orders.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",
             (select json_agg(json_build_object('productId', product_id, 'productName', product_name,
               'unitPrice', unit_price, 'quantity', quantity) order by product_name, product_id)
              from generated_store_order_lines where site_id = orders.site_id and order_id = orders.id) as items,

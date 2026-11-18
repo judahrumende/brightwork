@@ -2,9 +2,17 @@ import { storeOrderRows } from './store-order-rows';
 import { productPhoto } from './store-product-photo';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { storeCurrency, storeProductInput } from '@brightwork/shared';
+import {
+  storeCurrency,
+  storeDeliveryZones,
+  storeOrderTotal,
+  storeProductInput,
+} from '@brightwork/shared';
 import type {
   StoreCustomer,
+  StoreDelivery,
+  StoreDeliveryAddress,
+  StoreDeliveryZone,
   StoreOrder,
   StoreOrderLine,
   StoreProduct,
@@ -77,13 +85,131 @@ const sellable = sql`${visible}
   and not exists (select 1 from generated_store_products variant
     where variant.site_id = products.site_id and variant.parent_id = products.id)`;
 
+type OrderInput = z.output<typeof orderRequest>;
+type CheckoutStore = {
+  currency: string;
+  zones: StoreDeliveryZone[];
+  deliveryRevision: number;
+};
+type CheckoutQuote = {
+  id: string;
+  input: OrderInput;
+  snapshot: { items: StoreOrderLine[]; delivery: StoreDelivery };
+  buyer_email: string | null;
+  delivery_revision: number;
+  currency: string;
+};
+
 export function generatedStores(db: Database) {
   async function scopedStore(businessId: string, siteId: string) {
-    const [store] = await db.execute<{ currency: string }>(sql`
-      select currency from generated_stores where site_id = ${siteId} and ${storeScope(businessId)}
+    const [store] = await db.execute<CheckoutStore>(sql`
+      select currency, delivery_zones as zones, delivery_revision as "deliveryRevision" from generated_stores where site_id = ${siteId} and ${storeScope(businessId)}
     `);
     return store;
   }
+  type Reader = Pick<Database, 'execute'>;
+  async function checkoutStore(tx: Reader, siteId: string) {
+    const [store] = await tx.execute<CheckoutStore>(sql`
+      select currency, delivery_zones as zones, delivery_revision as "deliveryRevision"
+      from generated_stores where site_id = ${siteId} and ${liveScope} for update
+    `);
+    return store;
+  }
+
+  async function checkoutItems(tx: Reader, siteId: string, input: OrderInput) {
+    const ids = sql.join(
+      input.items.map(({ productId }) => sql`${productId}::uuid`),
+      sql`,`,
+    );
+    const products = await tx.execute<StoreProduct>(sql`
+      select products.id, case when parent.id is null then products.name
+        else parent.name || ' · ' || products.name end as name,
+        products.price, products.stock, products.revision from generated_store_products products
+      left join generated_store_products parent on parent.site_id = products.site_id and parent.id = products.parent_id
+      where products.site_id = ${siteId} and products.id in (${ids}) and ${sellable}
+    `);
+    const items: StoreOrderLine[] = [];
+    for (const item of input.items) {
+      const product = products.find(({ id }) => id === item.productId);
+      if (
+        !product ||
+        product.revision !== item.revision ||
+        product.stock < item.quantity
+      )
+        return null;
+      items.push({
+        productId: product.id,
+        productName: product.name,
+        unitPrice: product.price,
+        quantity: item.quantity,
+      });
+    }
+    return items;
+  }
+
+  async function savedOrder(
+    tx: Reader,
+    siteId: string,
+    input: OrderInput,
+    quoted: boolean,
+  ) {
+    const [existing] = await tx.execute<{
+      email: string;
+      reviewed: boolean;
+    }>(sql`
+      select email, delivery is not null as reviewed
+      from generated_store_orders where site_id = ${siteId} and id = ${input.id}
+    `);
+    if (!existing) return undefined;
+    if (existing.email !== input.email || existing.reviewed !== quoted)
+      return false;
+    const lines = await tx.execute<{
+      product_id: string;
+      quantity: number;
+    }>(sql`
+      select product_id, quantity from generated_store_order_lines
+      where site_id = ${siteId} and order_id = ${input.id}
+    `);
+    return (
+      lines.length === input.items.length &&
+      input.items.every((item) =>
+        lines.some(
+          (line) =>
+            line.product_id === item.productId &&
+            line.quantity === item.quantity,
+        ),
+      )
+    );
+  }
+
+  async function insertOrder(
+    tx: Reader,
+    siteId: string,
+    currency: string,
+    input: OrderInput,
+    items: StoreOrderLine[],
+    delivery: StoreDelivery | null,
+  ) {
+    const first = items[0];
+    if (!first) return false;
+    await tx.execute(sql`
+      insert into generated_store_orders(site_id, id, product_id, product_name, unit_price, currency, quantity, email, delivery)
+      values (${siteId}, ${input.id}, ${first.productId}, ${first.productName}, ${first.unitPrice}, ${currency}, ${first.quantity}, ${input.email},
+        ${delivery ? JSON.stringify(delivery) : null}::jsonb)
+    `);
+    const rows = sql.join(
+      items.map(
+        (item) =>
+          sql`(${siteId}, ${input.id}, ${item.productId}, ${item.productName}, ${item.unitPrice}, ${item.quantity})`,
+      ),
+      sql`,`,
+    );
+    await tx.execute(sql`
+      insert into generated_store_order_lines(site_id, order_id, product_id, product_name, unit_price, quantity) values ${rows}
+    `);
+    return true;
+  }
+
   return {
     scopedStore,
     async read(businessId: string, siteId: string) {
@@ -220,6 +346,20 @@ export function generatedStores(db: Database) {
         return result.length === 1;
       });
     },
+    async setDelivery(
+      businessId: string,
+      siteId: string,
+      revision: number,
+      zones: StoreDeliveryZone[],
+    ) {
+      const updated = await db.execute(sql`
+        update generated_stores set delivery_zones = ${JSON.stringify(storeDeliveryZones.parse(zones))}::jsonb,
+          delivery_revision = delivery_revision + 1
+        where site_id = ${siteId} and delivery_revision = ${revision} and ${storeScope(businessId)}
+        returning site_id
+      `);
+      return updated.length === 1;
+    },
     async isPublished(siteId: string) {
       const [store] = await db.execute(
         sql`select site_id from generated_stores where site_id = ${siteId} and ${liveScope}`,
@@ -227,8 +367,8 @@ export function generatedStores(db: Database) {
       return Boolean(store);
     },
     async catalog(siteId: string) {
-      const [store] = await db.execute<{ currency: string; title: string }>(sql`
-        select generated_stores.currency, coalesce(website_versions.title, 'Store') as title from generated_stores
+      const [store] = await db.execute<CheckoutStore & { title: string }>(sql`
+        select generated_stores.currency, delivery_zones as zones, delivery_revision as "deliveryRevision", coalesce(website_versions.title, 'Store') as title from generated_stores
         join website_publications on website_publications.artifact_id = generated_stores.site_id
           and website_publications.unpublished_at is null
           and website_publications.draft_revision >= generated_stores.first_revision
@@ -262,78 +402,102 @@ export function generatedStores(db: Database) {
     async request(siteId: string, raw: z.input<typeof orderRequest>) {
       const input = orderRequest.parse(raw);
       return db.transaction(async (tx) => {
-        const [store] = await tx.execute<{ currency: string }>(sql`
-          select currency from generated_stores where site_id = ${siteId} and ${liveScope} for update
-        `);
+        const store = await checkoutStore(tx, siteId);
         if (!store) return false;
-        const [existing] = await tx.execute<{ email: string }>(sql`
-          select email from generated_store_orders where site_id = ${siteId} and id = ${input.id}
-        `);
-        if (existing) {
-          if (existing.email !== input.email) return false;
-          const lines = await tx.execute<{
-            product_id: string;
-            quantity: number;
-          }>(sql`
-            select product_id, quantity from generated_store_order_lines
-            where site_id = ${siteId} and order_id = ${input.id}
-          `);
-          return (
-            lines.length === input.items.length &&
-            input.items.every((item) =>
-              lines.some(
-                (line) =>
-                  line.product_id === item.productId &&
-                  line.quantity === item.quantity,
-              ),
-            )
-          );
-        }
-        const ids = sql.join(
-          input.items.map(({ productId }) => sql`${productId}::uuid`),
-          sql`,`,
+        const previous = await savedOrder(tx, siteId, input, false);
+        if (previous !== undefined) return previous;
+        if (store.zones.length) return false;
+        const items = await checkoutItems(tx, siteId, input);
+        return items
+          ? insertOrder(tx, siteId, store.currency, input, items, null)
+          : false;
+      });
+    },
+    async prepareDelivery(
+      siteId: string,
+      raw: z.input<typeof orderRequest>,
+      address: StoreDeliveryAddress,
+      buyer: string | null,
+    ) {
+      const input = { ...orderRequest.parse(raw), id: randomUUID() };
+      return db.transaction(async (tx) => {
+        const store = await checkoutStore(tx, siteId);
+        if (!store) return null;
+        const zone = store.zones.find(
+          ({ country }) => country === address.country,
         );
-        const products = await tx.execute<StoreProduct>(sql`
-          select products.id, case when parent.id is null then products.name
-            else parent.name || ' · ' || products.name end as name,
-            products.price, products.stock, products.revision from generated_store_products products
-          left join generated_store_products parent on parent.site_id = products.site_id and parent.id = products.parent_id
-          where products.site_id = ${siteId} and products.id in (${ids}) and ${sellable}
-        `);
-        const items: StoreOrderLine[] = [];
-        for (const item of input.items) {
-          const product = products.find(({ id }) => id === item.productId);
-          if (
-            !product ||
-            product.revision !== item.revision ||
-            product.stock < item.quantity
+        if (!zone || (buyer && buyer !== input.email)) return null;
+        const items = await checkoutItems(tx, siteId, input);
+        if (!items) return null;
+        const subtotal = storeOrderTotal(items);
+        const shipping =
+          zone.freeAbove !== null && subtotal >= zone.freeAbove
+            ? 0
+            : zone.shipping;
+        const taxable = subtotal + (zone.taxShipping ? shipping : 0);
+        const tax = Math.floor((taxable * zone.taxRate + 5000) / 10000);
+        const delivery = { address, shipping, tax };
+        const snapshot = { items, delivery };
+        const id = input.id;
+        await tx.execute(sql`
+          delete from generated_store_delivery_quotes where (site_id, id) in (
+            select site_id, id from generated_store_delivery_quotes where expires_at <= now() limit 200 for update skip locked
           )
-            return false;
-          items.push({
-            productId: product.id,
-            productName: product.name,
-            unitPrice: product.price,
-            quantity: item.quantity,
-          });
-        }
-        const first = items[0];
-        if (!first) return false;
-        await tx.execute(sql`
-          insert into generated_store_orders(site_id, id, product_id, product_name, unit_price, currency, quantity, email)
-          values (${siteId}, ${input.id}, ${first.productId}, ${first.productName}, ${first.unitPrice}, ${store.currency}, ${first.quantity}, ${input.email})
         `);
-        const rows = sql.join(
-          items.map(
-            (item) =>
-              sql`(${siteId}, ${input.id}, ${item.productId}, ${item.productName}, ${item.unitPrice}, ${item.quantity})`,
-          ),
-          sql`,`,
+        await tx.execute(sql`
+          insert into generated_store_delivery_quotes(site_id, id, input, snapshot, buyer_email, delivery_revision, currency, expires_at)
+          values (${siteId}, ${id}, ${JSON.stringify(input)}::jsonb, ${JSON.stringify(snapshot)}::jsonb, ${buyer},
+            ${store.deliveryRevision}, ${store.currency}, now() + interval '15 minutes')
+        `);
+        return {
+          id,
+          email: input.email,
+          currency: store.currency,
+          ...snapshot,
+        };
+      });
+    },
+    async placeDelivery(siteId: string, quoteId: string, buyer: string | null) {
+      return db.transaction(async (tx) => {
+        const store = await checkoutStore(tx, siteId);
+        if (!store) return null;
+        const [quote] = await tx.execute<CheckoutQuote>(sql`
+          select id, input, snapshot, buyer_email, delivery_revision, currency
+          from generated_store_delivery_quotes where id = ${quoteId} and site_id = ${siteId} and expires_at > now()
+        `);
+        if (
+          !quote ||
+          (quote.buyer_email !== null && quote.buyer_email !== buyer) ||
+          (buyer !== null && buyer !== quote.input.email)
+        )
+          return null;
+        const { input, snapshot } = quote;
+        const previous = await savedOrder(tx, siteId, input, true);
+        if (previous !== undefined) return previous ? input.id : null;
+        if (
+          quote.delivery_revision !== store.deliveryRevision ||
+          quote.currency !== store.currency
+        )
+          return null;
+        const items = await checkoutItems(tx, siteId, input);
+        if (
+          !items ||
+          items.some(
+            (item, i) =>
+              item.unitPrice !== snapshot.items[i]?.unitPrice ||
+              item.productName !== snapshot.items[i]?.productName,
+          )
+        )
+          return null;
+        await insertOrder(
+          tx,
+          siteId,
+          quote.currency,
+          input,
+          items,
+          snapshot.delivery,
         );
-        await tx.execute(sql`
-          insert into generated_store_order_lines(site_id, order_id, product_id, product_name, unit_price, quantity)
-          values ${rows}
-        `);
-        return true;
+        return input.id;
       });
     },
     async createPayment(businessId: string, siteId: string, id: string) {
@@ -345,8 +509,9 @@ export function generatedStores(db: Database) {
         const [order] = await tx.execute<{
           sale_id: string | null;
           currency: string;
+          delivery: StoreDelivery | null;
         }>(sql`
-          select sale_id, currency from generated_store_orders
+          select sale_id, currency, delivery from generated_store_orders
           where site_id = ${siteId} and id = ${id} and status = 'confirmed'
         `);
         if (!order) return null;
@@ -361,7 +526,7 @@ export function generatedStores(db: Database) {
         `);
         const amount = lines.reduce(
           (sum, item) => sum + item.unit_price * item.quantity,
-          0,
+          (order.delivery?.shipping ?? 0) + (order.delivery?.tax ?? 0),
         );
         if (amount < 1 || amount > 99_999_999) return null;
         const saleId = randomUUID();

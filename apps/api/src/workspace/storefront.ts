@@ -1,3 +1,4 @@
+import { storeDeliveryAddress, storeOrderTotal } from '@brightwork/shared';
 import {
   buyerPath,
   isBuyerRoute,
@@ -8,22 +9,33 @@ import type { BuyerAccess } from './store-buyer-routes';
 import { escape } from './storefront-html';
 import { sendStorePhoto } from './store-product-photo';
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { orderRequest } from './generated-store';
 import type { generatedStores } from './generated-store';
 
 export const catalogPath = '/store/catalog';
 const orderPath = '/store/orders';
+const quotePath = '/store/review';
+const countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
 const photoPath = '/store/photos';
 const orderBodyLimit = 128 * 1024;
 export function storePublicRoute(method: string, route: string) {
   return (
     isBuyerRoute(method, route) ||
-    (method === 'POST' && route === orderPath) ||
+    (method === 'POST' && [orderPath, quotePath].includes(route)) ||
     (['GET', 'HEAD'].includes(method) &&
       (route === catalogPath || route === photoPath + '/:product'))
   );
+}
+
+function checkoutPage(title: string, body: string) {
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${title}</title><style>
+    body{margin:0;background:#f8f7f4;color:#282724;font:1rem/1.5 system-ui}main{max-width:40rem;margin:auto;padding:2rem}
+    dl>div{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid #ddd9d0}
+    a{color:#254a3e}button{font:inherit;color:white;background:#254a3e;border:0;border-radius:.375rem;padding:.625rem 1rem}
+    </style><main><a href="${catalogPath}">Back to catalog</a><h1>${title}</h1>${body}</main></html>`;
 }
 
 export function registerStorefront(
@@ -117,6 +129,25 @@ export function registerStorefront(
           <h2>${escape(first.groupName)}</h2><p>${escape(first.groupDescription)}</p>${options}</article>`;
         })
         .join('');
+      const zones = store.zones ?? [];
+      const deliveryFields = zones.length
+        ? `<fieldset><legend>Delivery address</legend>
+        <label>Country<select required name="country" autocomplete="shipping country">
+          <option value="">Choose a destination</option>${zones
+            .map(
+              ({ country }) =>
+                `<option value="${country}">${escape(countryNames.of(country) ?? country)}</option>`,
+            )
+            .join('')}
+        </select></label>
+        <label>Recipient name<input required name="name" maxlength="120" autocomplete="shipping name"></label>
+        <label>Street address<input required name="street" maxlength="180" autocomplete="shipping address-line1"></label>
+        <label>Apartment or unit<input name="unit" maxlength="120" autocomplete="shipping address-line2"></label>
+        <label>City<input required name="city" maxlength="100" autocomplete="shipping address-level2"></label>
+        <label>State or region<input name="region" maxlength="100" autocomplete="shipping address-level1"></label>
+        <label>Postcode<input name="postalCode" maxlength="24" autocomplete="shipping postal-code"></label>
+      </fieldset>`
+        : '';
       const available = store.products.some((product) => product.stock > 0);
       return reply.type('text/html; charset=utf-8')
         .send(`<!doctype html><html lang="en"><meta charset="utf-8">
@@ -127,10 +158,10 @@ export function registerStorefront(
           section{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:1rem}
           .checkout{display:grid;gap:1rem;max-width:28rem}article{padding:1.5rem;background:white;border:1px solid #ddd9d0;border-radius:.75rem;overflow-wrap:anywhere}
           h2,h3{margin:0} img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#f8f7f4;border-radius:.5rem;margin-bottom:1rem}.option{display:grid;gap:.5rem;margin-top:1rem}.option img{max-width:12rem;margin-bottom:0} form,label{display:grid;gap:.5rem}form{margin-top:1rem;gap:1rem}
-          input,button{font:inherit;padding:.5rem .75rem;width:100%;border-radius:.375rem;border:1px solid #88867e}button{background:#254a3e;color:white;cursor:pointer}
+          input,button,select{font:inherit;padding:.5rem .75rem;width:100%;border-radius:.375rem;border:1px solid #88867e}fieldset{display:grid;gap:.5rem;border:1px solid #ddd9d0;border-radius:.5rem}button{background:#254a3e;color:white;cursor:pointer}
         </style>
         <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>Choose quantities and send one order request for the store to confirm.</p>
-        <form method="post" action="${orderPath}">
+        <form method="post" action="${zones.length ? quotePath : orderPath}">
           <input type="hidden" name="id" value="${randomUUID()}">
           <section aria-label="Products">${products || '<p>Products will appear here when they are available.</p>'}</section>
           ${
@@ -140,74 +171,134 @@ export function registerStorefront(
                     ? `<p>Order email · ${escape(buyer)}</p>`
                     : '<label>Email for your order <input type="email" required name="email" maxlength="254" autocomplete="email"></label>'
                 }
-          <button>Request order</button></div>`
+          ${deliveryFields}<button>${zones.length ? 'Review order' : 'Request order'}</button></div>`
               : ''
           }
         </form></main></html>`);
     });
-    scope.post(
-      orderPath,
-      { bodyLimit: orderBodyLimit },
-      async (request, reply) => {
-        const id = siteId(request.hostname)!;
-        if (request.headers.origin !== origin(id))
-          return reply
-            .code(403)
-            .send('Open the store catalog to request an order.');
-        const buyer = await readBuyer(
-          buyerAccess,
-          id,
-          origin(id),
-          request.headers.cookie,
-        );
-        const fields = z.record(z.string(), z.string()).safeParse(request.body);
-        const values: Record<string, string> | null = fields.success
-          ? { ...fields.data, ...(buyer ? { email: buyer } : {}) }
-          : null;
-        const cart = values
-          ? Object.entries(values).filter(([key]) => key.startsWith('cart:'))
-          : [];
-        const result = orderRequest.safeParse(
-          values && cart.length
-            ? {
-                id: values.id,
-                email: values.email,
-                items: cart
-                  .filter(([, quantity]) => quantity !== '0')
-                  .map(([key, quantity]) => {
-                    const [, productId, revision] = key.split(':');
-                    return { productId, revision, quantity };
-                  }),
-              }
-            : values,
-        );
+    async function orderForm(request: FastifyRequest, reply: FastifyReply) {
+      const id = siteId(request.hostname)!;
+      if (request.headers.origin !== origin(id))
+        return reply
+          .code(403)
+          .send('Open the store catalog to request an order.');
+      const buyer = await readBuyer(
+        buyerAccess,
+        id,
+        origin(id),
+        request.headers.cookie,
+      );
+      const fields = z.record(z.string(), z.string()).safeParse(request.body);
+      if (!fields.success)
+        return reply.code(400).send('Check your order details.');
+      const values: Record<string, string> = {
+        ...fields.data,
+        ...(buyer ? { email: buyer } : {}),
+      };
+      const reviewing = request.routeOptions.url === quotePath;
+      const quote = z.uuid().safeParse(values.quote);
+      const cart = Object.entries(values).filter(([key]) =>
+        key.startsWith('cart:'),
+      );
+      const result = orderRequest.safeParse(
+        cart.length
+          ? {
+              id: values.id,
+              email: values.email,
+              items: cart
+                .filter(([, quantity]) => quantity !== '0')
+                .map(([key, quantity]) => {
+                  const [, productId, revision] = key.split(':');
+                  return { productId, revision, quantity };
+                }),
+            }
+          : values,
+      );
+      if (reviewing || !quote.success) {
         if (!result.success)
           return reply
             .code(400)
             .send('Choose at least one product and check your order details.');
-        try {
-          await limitOrder(id + ':' + request.ip);
-        } catch (error) {
-          const status = z
-            .object({ statusCode: z.literal(429) })
-            .safeParse(error);
-          return status.success
-            ? reply.code(429).send('Too many requests.')
-            : reply.code(503).send('Orders are temporarily unavailable.');
-        }
-        if (!(await stores.request(id, result.data)))
-          return reply
-            .code(409)
-            .send(
-              'A product has changed or is unavailable. Refresh the catalog and try again.',
-            );
-        return reply
+      }
+      try {
+        await limitOrder(id + ':' + request.ip);
+      } catch (error) {
+        const status = z
+          .object({ statusCode: z.literal(429) })
+          .safeParse(error);
+        return status.success
+          ? reply.code(429).send('Too many requests.')
+          : reply.code(503).send('Orders are temporarily unavailable.');
+      }
+      const changed = () =>
+        reply
+          .code(409)
           .type('text/html; charset=utf-8')
           .send(
-            `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Order requested</title><main><h1>Order requested</h1><p>The store has received your request. No payment was taken.</p><p>Reference: ${result.data.id}</p><a href="${catalogPath}">Back to catalog</a>${buyerAccess ? ` <a href="${buyerPath}">My orders</a>` : ''}</main></html>`,
+            checkoutPage(
+              'Refresh your cart',
+              `<p>Prices, availability or delivery may have changed. Return to the catalog for an updated total.</p>`,
+            ),
           );
-      },
-    );
+      if (reviewing && result.success) {
+        const parsed = storeDeliveryAddress.safeParse(values);
+        if (!parsed.success)
+          return reply
+            .code(400)
+            .type('text/html; charset=utf-8')
+            .send(
+              checkoutPage(
+                'Check the delivery address',
+                '<p>Enter a recipient, street, city and supported destination.</p>',
+              ),
+            );
+        const review = await stores.prepareDelivery(
+          id,
+          result.data,
+          parsed.data,
+          buyer,
+        );
+        if (!review) return changed();
+        const currency = new Intl.NumberFormat('en', {
+          style: 'currency',
+          currency: review.currency,
+        });
+        const money = (value: number) => currency.format(value / 100);
+        const address = review.delivery.address;
+        return reply.type('text/html; charset=utf-8').send(
+          checkoutPage(
+            'Review your order',
+            `
+          <p>Order email · ${escape(review.email)}</p>
+          <p>Delivery to ${escape(address.name)}<br>${escape([address.street, address.unit].filter(Boolean).join(', '))}
+          <br>${escape([address.city, address.region, address.postalCode, countryNames.of(address.country)].filter(Boolean).join(', '))}</p>
+          <ul>${review.items.map((item) => `<li>${escape(item.productName)} × ${item.quantity} · ${money(item.unitPrice * item.quantity)}</li>`).join('')}</ul>
+          <dl><div><dt>Subtotal</dt><dd>${money(storeOrderTotal(review.items))}</dd></div>
+          <div><dt>Shipping</dt><dd>${money(review.delivery.shipping)}</dd></div>
+          <div><dt>Tax</dt><dd>${money(review.delivery.tax)}</dd></div>
+          <div><dt>Total</dt><dd><strong>${money(storeOrderTotal(review.items, review.delivery))}</strong></dd></div></dl>
+          <form method="post" action="${orderPath}"><input type="hidden" name="quote" value="${review.id}">
+          <button>Submit order request</button></form>`,
+          ),
+        );
+      }
+      const orderId = quote.success
+        ? await stores.placeDelivery(id, quote.data, buyer)
+        : result.success && (await stores.request(id, result.data))
+          ? result.data.id
+          : null;
+      if (!orderId) return changed();
+      return reply
+        .type('text/html; charset=utf-8')
+        .send(
+          checkoutPage(
+            'Order requested',
+            `<p>The store has received your request. No payment was taken.</p><p>Reference: ${orderId}</p>${buyerAccess ? `<a href="${buyerPath}">My orders</a>` : ''}`,
+          ),
+        );
+    }
+    scope.post(orderPath, { bodyLimit: orderBodyLimit }, orderForm);
+    scope.post(quotePath, { bodyLimit: orderBodyLimit }, orderForm);
     if (buyerAccess)
       registerBuyerRoutes(
         scope,

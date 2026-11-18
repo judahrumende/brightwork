@@ -1,9 +1,11 @@
+import { StoreDeliverySettings } from './store-delivery-settings';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { storeCurrency } from '@brightwork/shared';
+import { storeCurrency, storeOrderTotal } from '@brightwork/shared';
 import type {
   StoreCustomer,
+  StoreDeliveryZone,
   StoreOrder,
   StoreProduct,
 } from '@brightwork/shared';
@@ -18,8 +20,16 @@ type Dashboard = {
   customers: StoreCustomer[];
   counts: { openRequests: number; awaitingFulfillment: number };
   paymentReady?: boolean;
+  zones?: StoreDeliveryZone[];
+  deliveryRevision?: number;
 };
-const sections = ['Overview', 'Products', 'Orders', 'Customers'] as const;
+const sections = [
+  'Overview',
+  'Products',
+  'Orders',
+  'Customers',
+  'Delivery',
+] as const;
 const paymentLabels = {
   awaiting_payment: 'Awaiting payment',
   paid: 'Paid',
@@ -434,6 +444,22 @@ export function StoreDashboard({
           )}
         </>
       )}
+      {section === 'Delivery' && (
+        <StoreDeliverySettings
+          key={store.deliveryRevision ?? 0}
+          currency={store.currency}
+          zones={store.zones ?? []}
+          readOnly={readOnly}
+          busy={busy}
+          onSave={(zones) =>
+            void save({
+              action: 'delivery',
+              revision: store.deliveryRevision ?? 0,
+              zones,
+            })
+          }
+        />
+      )}
       {section === 'Orders' && (
         <>
           <h3>Order requests</h3>
@@ -471,10 +497,30 @@ export function StoreDashboard({
                           style: 'currency',
                           currency: order.currency,
                         }).format(
-                          order.items.reduce(
-                            (sum, item) => sum + item.unitPrice * item.quantity,
-                            0,
-                          ) / 100,
+                          storeOrderTotal(order.items, order.delivery) / 100,
+                        )}
+                        {order.delivery && (
+                          <details>
+                            <summary>Delivery and tax</summary>
+                            <p>{order.delivery.address.name}</p>
+                            <p>
+                              {[
+                                order.delivery.address.street,
+                                order.delivery.address.unit,
+                                order.delivery.address.city,
+                                order.delivery.address.region,
+                                order.delivery.address.postalCode,
+                                order.delivery.address.country,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')}
+                            </p>
+                            <p>
+                              Shipping{' '}
+                              {money.format(order.delivery.shipping / 100)}
+                            </p>
+                            <p>Tax {money.format(order.delivery.tax / 100)}</p>
+                          </details>
                         )}
                       </td>
                       <td>

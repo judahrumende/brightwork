@@ -302,6 +302,13 @@
       "when": 1794834000042,
       "tag": "0042_generated_store_buyers",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794834000043,
+      "tag": "0043_generated_store_delivery",
+      "breakpoints": true
     }
   ]
 }

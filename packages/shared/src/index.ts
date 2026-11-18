@@ -21,10 +21,16 @@ export {
   storeCurrency,
   storeProductInput,
   storeOrderStatus,
+  storeDeliveryZones,
+  storeDeliveryAddress,
+  storeOrderTotal,
 } from './generated-store';
 export type {
   StoreProduct,
   StoreOrder,
   StoreOrderLine,
   StoreCustomer,
+  StoreDeliveryZone,
+  StoreDeliveryAddress,
+  StoreDelivery,
 } from './generated-store';

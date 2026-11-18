@@ -32,6 +32,7 @@ export type StoreOrder = {
   id: string;
   email: string;
   items: StoreOrderLine[];
+  delivery: StoreDelivery | null;
   currency: z.infer<typeof storeCurrency>;
   status: z.infer<typeof storeOrderStatus>;
   saleId: string | null;
@@ -51,3 +52,59 @@ export type StoreCustomer = {
   lastOrderAt: string | null;
   joinedAt: string | null;
 };
+
+export const deliveryCountry = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z]{2}$/u)
+  .refine(
+    (country) =>
+      new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }).of(
+        country,
+      ) !== undefined && country !== 'ZZ',
+  );
+export const storeDeliveryZones = z
+  .array(
+    z.object({
+      country: deliveryCountry,
+      shipping: z.int().min(0).max(100_000_000),
+      freeAbove: z.int().min(1).max(100_000_000).nullable(),
+      taxRate: z.int().min(0).max(10000),
+      taxShipping: z.boolean(),
+    }),
+  )
+  .max(50)
+  .refine(
+    (zones) =>
+      new Set(zones.map(({ country }) => country)).size === zones.length,
+    {
+      message: 'Set one delivery rule per country.',
+    },
+  );
+export const storeDeliveryAddress = z.object({
+  country: deliveryCountry,
+  name: z.string().trim().min(1).max(120),
+  street: z.string().trim().min(1).max(180),
+  unit: z.string().trim().max(120),
+  city: z.string().trim().min(1).max(100),
+  region: z.string().trim().max(100),
+  postalCode: z.string().trim().max(24),
+});
+export type StoreDeliveryZone = z.infer<typeof storeDeliveryZones>[number];
+export type StoreDeliveryAddress = z.infer<typeof storeDeliveryAddress>;
+export type StoreDelivery = {
+  address: StoreDeliveryAddress;
+  shipping: number;
+  tax: number;
+};
+
+export function storeOrderTotal(
+  items: StoreOrderLine[],
+  delivery: StoreDelivery | null = null,
+) {
+  return (
+    items.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0) +
+    (delivery ? delivery.shipping + delivery.tax : 0)
+  );
+}

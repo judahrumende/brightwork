@@ -346,22 +346,45 @@ test(
       }),
     );
     storeFixture = true;
-    async function reserveOrder() {
+    async function reserveOrder(withDelivery = false) {
       const dashboard = await stores.read(owner!.id, site!.id);
       const products = dashboard?.products;
       assert.equal(products?.length, 2);
-      const id = randomUUID();
-      assert.ok(
-        await stores.request(site!.id, {
-          id,
-          items: products!.map(({ id, revision, name }) => ({
-            productId: id,
-            revision,
-            quantity: name === 'Kettle' ? 1 : 2,
-          })),
-          email: 'merchant-order@example.test',
-        }),
-      );
+      const input = {
+        id: randomUUID(),
+        items: products!.map(({ id, revision, name }) => ({
+          productId: id,
+          revision,
+          quantity: name === 'Kettle' ? 1 : 2,
+        })),
+        email: 'merchant-order@example.test',
+      };
+      let id = input.id;
+      if (withDelivery) {
+        const prepared = await stores.prepareDelivery(
+          site!.id,
+          input,
+          {
+            country: 'AU',
+            name: 'Fixture Buyer',
+            street: '123 Test Street',
+            city: 'Perth',
+            region: 'WA',
+            postalCode: '6000',
+            unit: '',
+          },
+          null,
+        );
+        assert.equal(prepared?.delivery.shipping, 250);
+        assert.equal(prepared?.delivery.tax, 925);
+        assert.ok(prepared);
+        const saved = await stores.placeDelivery(site!.id, prepared.id, null);
+        assert.ok(saved);
+        id = saved;
+        assert.ok(await stores.setDelivery(owner!.id, site!.id, 1, []));
+      } else {
+        assert.ok(await stores.request(site!.id, input));
+      }
       assert.equal(await stores.createPayment(owner!.id, site!.id, id), null);
       assert.ok(await stores.changeOrder(owner!.id, site!.id, id, 'confirmed'));
       const [a, b] = await Promise.all([
@@ -371,7 +394,10 @@ test(
       assert.ok(a);
       assert.equal(a, b);
       assert.notEqual(id, a);
-      assert.equal((await connect.publicOrder(a))?.amount, 9000);
+      assert.equal(
+        (await connect.publicOrder(a))?.amount,
+        withDelivery ? 10175 : 9000,
+      );
       assert.equal(await stores.createPayment(other!.id, site!.id, id), null);
       return { id, saleId: a };
     }
@@ -477,8 +503,20 @@ test(
       ),
       [2, 2],
     );
-    const shipped = await reserveOrder();
-    checkoutOrder = { ...checkoutOrder, id: shipped.saleId };
+    assert.ok(
+      await stores.setDelivery(owner.id, site.id, 0, [
+        {
+          country: 'AU',
+          shipping: 250,
+          taxRate: 1000,
+          freeAbove: null,
+          taxShipping: true,
+        },
+      ]),
+    );
+    const shipped = await reserveOrder(true);
+    checkoutOrder = { ...checkoutOrder, id: shipped.saleId, amount: 10175 };
+    capturedAmount = 10175;
     paymentIntent = 'pi_GeneratedStoreShipped';
     session = 'cs_test_GeneratedStoreShipped';
     assert.equal(await connect.checkout(shipped.saleId), link);

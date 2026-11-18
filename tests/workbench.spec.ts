@@ -1413,6 +1413,8 @@ test('a generated store opens its dashboard below the preview and saves a produc
     publicUrl: null,
   };
   const products: object[] = [];
+  let zones: object[] = [];
+  let deliveryRevision = 0;
   const png =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
   await page.route(
@@ -1453,6 +1455,24 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await page.route('**' + api + '/work/' + id + '/store', (route) => {
     if (route.request().method() === 'POST') {
       const data = route.request().postDataJSON();
+      if (data.action === 'delivery') {
+        expect(data).toEqual({
+          action: 'delivery',
+          revision: 0,
+          zones: [
+            {
+              country: 'AU',
+              shipping: 500,
+              freeAbove: 10000,
+              taxRate: 1000,
+              taxShipping: true,
+            },
+          ],
+        });
+        zones = data.zones;
+        deliveryRevision++;
+        return route.fulfill({ json: { saved: true } });
+      }
       if (data.action === 'payment') {
         expect(data).toEqual({ action: 'payment', id: order.id });
         order.saleId = saleId;
@@ -1495,6 +1515,8 @@ test('a generated store opens its dashboard below the preview and saves a produc
         products,
         orders: [order],
         paymentReady: true,
+        zones,
+        deliveryRevision,
         counts: { openRequests: 0, awaitingFulfillment: 1 },
         customers: [
           {
@@ -1571,6 +1593,17 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await expect(
     buyer.getByRole('cell', { name: '0', exact: true }),
   ).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Delivery' }).click();
+  await dashboard.getByRole('button', { name: 'Add destination' }).click();
+  await dashboard.getByLabel('Two-letter country code').fill('au');
+  await dashboard.getByLabel('Flat shipping fee (AUD)').fill('5');
+  await dashboard.getByLabel('Free shipping from (AUD, optional)').fill('100');
+  await dashboard.getByLabel('Tax rate (%)').fill('10');
+  await dashboard.getByLabel('Apply tax to shipping').check();
+  await dashboard
+    .getByRole('button', { name: 'Save shipping and tax' })
+    .click();
+  await expect(dashboard.getByRole('group', { name: 'AU' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Site preview' }).click();
   await expect(
     dialog

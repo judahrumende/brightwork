@@ -1,3 +1,4 @@
+import { storeOrderTotal } from '@brightwork/shared';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { browserCookie, cookie, sessionLifetimeSeconds } from '../auth/tokens';
@@ -157,10 +158,7 @@ export function registerBuyerRoutes(
       const next = orders.length > 20 ? page.at(-1) : undefined;
       const cards = page
         .map((order) => {
-          const amount = order.items.reduce(
-            (sum, line) => sum + line.unitPrice * line.quantity,
-            0,
-          );
+          const amount = storeOrderTotal(order.items, order.delivery);
           const currency = new Intl.NumberFormat('en', {
             style: 'currency',
             currency: order.currency,
@@ -181,6 +179,12 @@ export function registerBuyerRoutes(
           return `<article><h2>${currency.format(amount / 100)} · ${escape(order.status)}</h2>
           <time datetime="${escape(order.createdAt)}">${formatter.format(new Date(order.createdAt))}</time>
           <ul>${order.items.map((line) => `<li>${escape(line.productName)} × ${line.quantity}</li>`).join('')}</ul>
+          ${
+            order.delivery
+              ? `<p>Delivery to ${escape(order.delivery.address.name)} · ${escape([order.delivery.address.street, order.delivery.address.unit, order.delivery.address.city, order.delivery.address.region, order.delivery.address.postalCode, order.delivery.address.country].filter(Boolean).join(', '))}</p>
+          <p>Shipping ${currency.format(order.delivery.shipping / 100)} · Tax ${currency.format(order.delivery.tax / 100)}</p>`
+              : ''
+          }
           ${order.payment ? `<p>${payment[order.payment]}</p>` : ''}
           <p>Reference: ${order.id}</p>${pay}</article>`;
         })

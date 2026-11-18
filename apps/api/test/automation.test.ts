@@ -1438,6 +1438,157 @@ test(
           (await history(buyerCookie)).body,
           new RegExp(withSession, 'u'),
         );
+
+        const zone = {
+          country: 'AU',
+          shipping: 600,
+          taxRate: 1000,
+          freeAbove: 1500,
+          taxShipping: true,
+        };
+        assert.equal(
+          await agent.generatedStore.setDelivery(otherBusiness.id, shopId, 0, [
+            zone,
+          ]),
+          false,
+        );
+        assert.ok(
+          await agent.generatedStore.setDelivery(business.id, shopId, 0, [
+            zone,
+          ]),
+        );
+        assert.equal(
+          await agent.generatedStore.setDelivery(business.id, shopId, 0, [
+            zone,
+          ]),
+          false,
+        );
+        const catalogWithDelivery = await shopApp.inject({
+          url: catalogPath,
+          headers: { host },
+        });
+        assert.match(catalogWithDelivery.body, /Review order/u);
+        assert.match(catalogWithDelivery.body, /Australia/u);
+
+        const deliveryValues = {
+          id: randomUUID(),
+          email: 'buyer@example.test',
+          [`cart:${filters.id}:${filters.revision}`]: '1',
+          country: 'AU',
+          name: 'Fixture <Buyer>',
+          street: '123 Test Street',
+          city: 'Perth',
+          region: 'WA',
+          postalCode: '6000',
+          unit: '',
+        };
+        function sendDelivery(path: string, values: Record<string, string>) {
+          return shopApp.inject({
+            method: 'POST',
+            url: path,
+            headers: {
+              ...browser,
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+            payload: new URLSearchParams(values).toString(),
+          });
+        }
+        assert.equal(
+          (await sendDelivery('/store/orders', deliveryValues)).statusCode,
+          409,
+        );
+        assert.equal(
+          (
+            await sendDelivery('/store/review', {
+              ...deliveryValues,
+              country: 'NZ',
+            })
+          ).statusCode,
+          409,
+        );
+        const before = await agent.generatedStore.read(business.id, shopId);
+        const firstReview = await sendDelivery('/store/review', deliveryValues);
+        assert.equal(firstReview.statusCode, 200);
+        assert.match(firstReview.body, /Fixture &lt;Buyer&gt;/u);
+        assert.match(firstReview.body, /14\.30/u);
+        const expiredSettingsQuote = /name="quote" value="([a-f0-9-]+)"/u.exec(
+          firstReview.body,
+        )?.[1];
+        assert.ok(expiredSettingsQuote);
+        assert.equal(
+          (await agent.generatedStore.read(business.id, shopId))?.orders.length,
+          before?.orders.length,
+        );
+
+        assert.ok(
+          await agent.generatedStore.setDelivery(business.id, shopId, 1, [
+            { ...zone, shipping: 500 },
+          ]),
+        );
+        assert.equal(
+          (await sendDelivery('/store/orders', { quote: expiredSettingsQuote }))
+            .statusCode,
+          409,
+        );
+        const secondReview = await sendDelivery(
+          '/store/review',
+          deliveryValues,
+        );
+        assert.match(secondReview.body, /13\.20/u);
+        const quote = /name="quote" value="([a-f0-9-]+)"/u.exec(
+          secondReview.body,
+        )?.[1];
+        assert.ok(quote);
+        const submit = await sendDelivery('/store/orders', {
+          quote,
+          shipping: '0',
+          tax: '0',
+        });
+        assert.equal(submit.statusCode, 200);
+        assert.equal(
+          (await sendDelivery('/store/orders', { quote })).statusCode,
+          200,
+        );
+        assert.ok(
+          await agent.generatedStore.setDelivery(business.id, shopId, 2, [
+            { ...zone, taxRate: 0 },
+          ]),
+        );
+        const finalized = await agent.generatedStore.read(business.id, shopId);
+        assert.equal(
+          finalized?.orders.length,
+          (before?.orders.length ?? 0) + 1,
+        );
+        const deliverySnapshot = finalized?.orders.find(
+          (value) => value.id === quote,
+        )?.delivery;
+        assert.equal(deliverySnapshot?.shipping, 500);
+        assert.equal(deliverySnapshot?.tax, 120);
+        assert.equal(deliverySnapshot?.address.city, 'Perth');
+        assert.ok(
+          await agent.generatedStore.setDelivery(business.id, shopId, 3, [
+            { ...zone, freeAbove: 700, taxRate: 1000, taxShipping: false },
+          ]),
+        );
+        const free = await sendDelivery('/store/review', deliveryValues);
+        assert.equal(free.statusCode, 200);
+        assert.match(free.body, /7\.70/u);
+        const freeQuote = /name="quote" value="([a-f0-9-]+)"/u.exec(
+          free.body,
+        )?.[1];
+        assert.ok(freeQuote);
+        assert.ok(
+          await agent.generatedStore.saveProduct(business.id, shopId, {
+            ...filters,
+            price: 800,
+          }),
+        );
+        assert.equal(
+          (await sendDelivery('/store/orders', { quote: freeQuote }))
+            .statusCode,
+          409,
+        );
+        assert.doesNotMatch((await history()).body, /123 Test Street/u);
       } finally {
         await shopApp.close();
       }
