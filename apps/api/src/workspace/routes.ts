@@ -23,6 +23,7 @@ import { canLeadRun } from './run-store';
 import type { runStore } from './run-store';
 import type { mailStore } from './mail-store';
 import { smsReplyInput } from './sms';
+import type { stripeConnect } from './stripe-connect';
 import type { workspaceSms } from './sms';
 import type { inboundMail } from './inbound-mail';
 
@@ -30,6 +31,7 @@ type Context = {
   store: ReturnType<typeof agentStore>;
   team: ReturnType<typeof teamStore>;
   commerce: ReturnType<typeof shopifyOrders> | undefined;
+  sellerPayments: ReturnType<typeof stripeConnect> | undefined;
   domains: ReturnType<typeof domainStore>;
   vault: ReturnType<typeof vaultStore> | undefined;
   runs: ReturnType<typeof runStore>;
@@ -151,6 +153,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
   registerWorkspaceSettings(app, {
     team: context.team,
     commerce: context.commerce,
+    sellerPayments: context.sellerPayments,
     sms: context.sms,
     vault: context.vault,
     domains: context.domains,

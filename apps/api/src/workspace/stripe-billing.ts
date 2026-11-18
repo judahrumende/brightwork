@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { stripeClient, verifyStripeSignature } from './stripe-client';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -40,28 +40,6 @@ const subscribedEvents = new Set([
   'charge.refunded',
 ]);
 
-function signatureValid(
-  secret: string,
-  raw: Buffer,
-  header: string | string[] | undefined,
-) {
-  if (typeof header !== 'string' || header.length > 4096) return false;
-  const fields = header.split(',');
-  const clocks = fields.filter((field) => field.startsWith('t='));
-  if (clocks.length !== 1 || !/^t=\d{10}$/u.test(clocks[0] ?? '')) return false;
-  const timestamp = clocks[0]!.slice(2);
-  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
-  const hmac = createHmac('sha256', secret)
-    .update(timestamp + '.')
-    .update(raw)
-    .digest();
-  return fields.some(
-    (field) =>
-      /^v1=[a-f0-9]{64}$/u.test(field) &&
-      timingSafeEqual(hmac, Buffer.from(field.slice(3), 'hex')),
-  );
-}
-
 export function stripeBilling(
   db: Database,
   config: {
@@ -76,29 +54,7 @@ export function stripeBilling(
   if (!config.key.startsWith('sk_test_') && !config.key.startsWith('rk_test_'))
     throw new Error('Stripe billing requires a test-mode key');
   const planCredits = creditUnits(config.renewalCredits);
-  async function stripe(
-    path: string,
-    body?: Record<string, string>,
-    idempotencyKey?: string,
-  ) {
-    const result = await transport('https://api.stripe.com/v1/' + path, {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        Authorization: 'Bearer ' + config.key,
-        'Stripe-Version': '2024-10-28.acacia',
-        ...(body
-          ? { 'Content-Type': 'application/x-www-form-urlencoded' }
-          : {}),
-        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
-      },
-      ...(body ? { body: new URLSearchParams(body) } : {}),
-      redirect: 'error',
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!result.ok)
-      throw new Error('Stripe could not complete the billing request');
-    return result.json() as Promise<unknown>;
-  }
+  const stripe = stripeClient(config.key, transport);
   const customerFor = async (accountId: string) => {
     const [row] = await db
       .select()
@@ -210,7 +166,7 @@ export function stripeBilling(
         hook.post('/api/webhooks/stripe', async (request, reply) => {
           if (
             !Buffer.isBuffer(request.body) ||
-            !signatureValid(
+            !verifyStripeSignature(
               config.webhook,
               request.body,
               request.headers['stripe-signature'],

@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { shopifyConnectionInput } from './shopify-orders';
 import type { shopifyOrders } from './shopify-orders';
+import { saleInput } from './stripe-connect';
+import type { stripeConnect } from './stripe-connect';
 import { smsConnectionInput } from './sms';
 import type { workspaceSms } from './sms';
 import { teamRole } from './team';
@@ -21,6 +23,7 @@ export function registerWorkspaceSettings(
   context: {
     team: ReturnType<typeof teamStore>;
     commerce: ReturnType<typeof shopifyOrders> | undefined;
+    sellerPayments: ReturnType<typeof stripeConnect> | undefined;
     sms: ReturnType<typeof workspaceSms> | undefined;
     vault: ReturnType<typeof vaultStore> | undefined;
     domains: ReturnType<typeof domainStore>;
@@ -28,7 +31,7 @@ export function registerWorkspaceSettings(
     reportError: (failure: unknown, reply: FastifyReply) => unknown;
   },
 ) {
-  const { team, vault, domains, commerce, sms } = context;
+  const { team, vault, domains, commerce, sms, sellerPayments } = context;
   const base = '/api/companies/:id/settings';
   const target = z.object({ resource: z.uuid() });
   type Access = NonNullable<Awaited<ReturnType<Authorize>>>;
@@ -81,6 +84,41 @@ export function registerWorkspaceSettings(
       if (!sms) return reply.code(503).send({ message: 'SMS is unavailable.' });
       await sms.disconnect(access.id);
       return { disconnected: true };
+    }),
+  );
+  app.get(
+    base + '/stripe-connect',
+    handle(false, async (_request, _reply, access) => ({
+      enabled: Boolean(sellerPayments),
+      ...((await sellerPayments?.overview(access.id)) ?? {
+        seller: null,
+        orders: [],
+      }),
+    })),
+  );
+  app.post(
+    base + '/stripe-connect/onboarding',
+    handle(true, async (_request, reply, access) => {
+      if (!sellerPayments)
+        return reply
+          .code(503)
+          .send({ message: 'Stripe Connect is unavailable.' });
+      return { url: await sellerPayments.onboarding(access.id) };
+    }),
+  );
+  app.post(
+    base + '/stripe-connect/sales',
+    handle(true, async (request, reply, access) => {
+      if (!sellerPayments)
+        return reply
+          .code(503)
+          .send({ message: 'Stripe Connect is unavailable.' });
+      const input = saleInput.parse(request.body);
+      if (!(await sellerPayments.create(access.id, input)))
+        return reply
+          .code(409)
+          .send({ message: 'Check seller readiness and sale details.' });
+      return { path: '/sale/' + input.id };
     }),
   );
   app.get(

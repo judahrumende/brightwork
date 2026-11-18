@@ -16,6 +16,9 @@ export const authEnv = z.object({
       .regex(/^(?:sk|rk)_test_[A-Za-z0-9_]+$/u)
       .optional(),
   ),
+  STRIPE_CONNECT_WEBHOOK_SECRET: optionalValue.pipe(
+    z.string().startsWith('whsec_').optional(),
+  ),
   STRIPE_WEBHOOK_SECRET: optionalValue.pipe(
     z.string().startsWith('whsec_').optional(),
   ),
