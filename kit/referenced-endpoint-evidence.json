@@ -1,0 +1,780 @@
+[
+  {
+    "path": "/api/app-sign-in/google/start",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-view-bwvdf9ix.js",
+        "line": 3001
+      },
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 11935
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/callback",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 21001,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:20868"
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/email/challenge",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/entry-card-bm94m18r.js",
+        "line": 218,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:25582"
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/email/password",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/entry-card-bm94m18r.js",
+        "line": 197,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:25582"
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/email/verification",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/entry-card-bm94m18r.js",
+        "line": 237,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:25582"
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/email/verification/resend",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/entry-card-bm94m18r.js",
+        "line": 231,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:25582"
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/hop",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 23357
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/sign-in",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 20992,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:20868"
+      }
+    ]
+  },
+  {
+    "path": "/api/auth/sign-out",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 21060,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js:20868"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/ads-wallet/top-ups",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/wallet-api-maz4jq8m.js",
+        "line": 2226,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/app-email/issues/:id",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 44724,
+        "method": "GET",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js:44757"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/app-email/websites/:id",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-tools-jvss788y.js",
+        "line": 15694,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/brief/start",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 31113,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/build/references",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-view-bwvdf9ix.js",
+        "line": 18105,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/build/references/:id/image",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-view-bwvdf9ix.js",
+        "line": 18136,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/build/runs/:id/design-picture",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 19311,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/computer/jobs",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 43980,
+        "method": "GET",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js:43990"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/creations/:id/logs",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-tools-jvss788y.js",
+        "line": 14828,
+        "method": "GET",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/build-tools-jvss788y.js:14829"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/creations/:id/share",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-view-bwvdf9ix.js",
+        "line": 14452,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/build-view-bwvdf9ix.js:14454"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/creations/:id/versions/:id/codebase",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-tools-jvss788y.js",
+        "line": 8557,
+        "method": "GET",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/build-tools-jvss788y.js:8558"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/delete",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5345,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/existing-site",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5252,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/existing-site/check",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5270,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/existing-site/remove",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5262,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/git",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 13876,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/logo",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5285,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      },
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5292,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/logo/versions/select",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5329,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/members/invitations",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 27109,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/members/leave",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 27198,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/payments",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 12097,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/profile",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 5244,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/run",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 83891,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/run/autonomy-mode",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 22857,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/run/owner-lines",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 22884,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/run/primary-site",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 22875,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/run/tier",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 22866,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/schedule",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 25803,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/site-captures",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 15758,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/social",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 21333,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/social/ads/audiences",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/decision-toasts-m1welds0.js",
+        "line": 59,
+        "method": "GET",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/decision-toasts-m1welds0.js:65"
+      },
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/decision-toasts-m1welds0.js",
+        "line": 59,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/decision-toasts-m1welds0.js:73"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/social/ads/campaigns",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/run-view-n486q77y.js",
+        "line": 11956,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/social/ads/setup",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 81754,
+        "method": "GET",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js:81762"
+      },
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 81754,
+        "method": "POST",
+        "methodBasis": "resolved-client-helper",
+        "via": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js:81776"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/ted/files/all",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 44331,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/ted/files/preview",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 44705,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/ted/files/remove",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 44414,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/video",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 19773
+      }
+    ]
+  },
+  {
+    "path": "/api/companies/:id/workspace/files",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 20511
+      }
+    ]
+  },
+  {
+    "path": "/api/computer/views",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 23295,
+        "referenceBasis": "route-family"
+      }
+    ]
+  },
+  {
+    "path": "/api/connect/:id/start",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/build-view-bwvdf9ix.js",
+        "line": 621
+      }
+    ]
+  },
+  {
+    "path": "/api/first-message/preview",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/workbench-g4upag2c.js",
+        "line": 17571
+      }
+    ]
+  },
+  {
+    "path": "/api/invitations/accept",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 16476
+      }
+    ]
+  },
+  {
+    "path": "/api/invitations/read",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 16475
+      }
+    ]
+  },
+  {
+    "path": "/api/me/account",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 19620,
+        "method": "DELETE",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/account/deletion",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 19657,
+        "method": "GET",
+        "methodBasis": "fetch-default"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/assistants/disconnect",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 18890
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/came",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28115,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/checkout",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28055,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/increase",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28086,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/paywall",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28124,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/portal",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28077,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/refresh",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28106,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/schedule",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28095,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/billing/sign-up",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 28149,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/companies",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 19179,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/companies/begin",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 19187,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/companies/requests/:id/deliver",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 90782,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/company-deletions/:id",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 16495
+      }
+    ]
+  },
+  {
+    "path": "/api/me/connect",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/index-kkr07elh.js",
+        "line": 18887
+      }
+    ]
+  },
+  {
+    "path": "/api/me/domains/move",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 4886,
+        "method": "POST",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  },
+  {
+    "path": "/api/me/support/conversations/:id/:id",
+    "locations": [
+      {
+        "file": "kit/assets-pretty/foundable.com/assets/_workbench-kkbiqljy.js",
+        "line": 91669,
+        "method": "GET",
+        "methodBasis": "literal-call-option"
+      }
+    ]
+  }
+]

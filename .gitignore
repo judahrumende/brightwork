@@ -11,6 +11,7 @@ dist/
 !/kit/features.md
 !/kit/api-shapes.json
 !/kit/screen-index.json
+!/kit/referenced-endpoint-evidence.json
 /reference-v1/
 /PROMPT.md
 /.tanstack/
