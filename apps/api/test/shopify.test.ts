@@ -229,6 +229,30 @@ test(
       assert.deepEqual((await commerce.report(first.id)).totals, []);
       assert.equal((await commerce.report(second.id)).totals[0]?.orders, 1);
       const range = { from: '2026-11-18', through: '2026-11-18' };
+      await client`update shopify_orders set gross_received = null, amount_refunded = null, processed_at = null, customer_key = null where connection_id = ${connected.id}`;
+      assert.deepEqual(
+        (await commerceInsights(db, first.id, range)).revenue,
+        [],
+      );
+      assert.equal(await commerce.repairHistory(second.id, connected.id), null);
+      reported = 1;
+      assert.deepEqual(await commerce.repairHistory(first.id, connected.id), {
+        checked: 1,
+        refreshed: 0,
+        failed: 0,
+        next: null,
+      });
+      reported = 3;
+      assert.deepEqual(await commerce.repairHistory(first.id, connected.id), {
+        checked: 1,
+        refreshed: 1,
+        failed: 0,
+        next: null,
+      });
+      assert.equal(
+        (await commerce.repairHistory(first.id, connected.id))?.checked,
+        0,
+      );
       const insights = await commerceInsights(db, first.id, range);
       assert.deepEqual(insights.revenue, [
         {

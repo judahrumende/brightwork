@@ -1,3 +1,4 @@
+import { CommerceHistoryRefresh } from './commerce-history-refresh';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -572,6 +573,10 @@ function CommerceSettings({ endpoint }: { endpoint: string }) {
               >
                 Disconnect
               </Button>
+              <CommerceHistoryRefresh
+                endpoint={endpoint + '/' + store.id}
+                queryKey={key}
+              />
             </>
           ) : (
             <p>Disconnected</p>

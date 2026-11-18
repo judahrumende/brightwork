@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { and, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   numeric,
   boolean,
@@ -124,6 +124,78 @@ export function shopifyOrders(
       .object({ data: z.unknown(), errors: z.array(z.unknown()).optional() })
       .parse(await response.json());
   }
+  async function readOrder(shop: string, token: string, id: string) {
+    let result = await admin(shop, token, orderQuery, { id });
+    if (
+      result.errors?.length &&
+      result.errors.every(
+        (error) =>
+          z.object({ path: z.array(z.unknown()) }).safeParse(error).data
+            ?.path[1] === 'customer',
+      )
+    )
+      result = await admin(
+        shop,
+        token,
+        orderQuery.replace('customer { id } ', ''),
+        { id },
+      );
+    if (result.errors?.length)
+      throw new Error('Shopify could not resolve the order');
+    const order = z
+      .object({ order: outboundOrder.nullable() })
+      .parse(result.data).order;
+    return order?.id === id ? order : null;
+  }
+  function recordOrder(
+    tx: Pick<Database, 'insert'>,
+    businessId: string,
+    connectionId: string,
+    order: z.infer<typeof outboundOrder>,
+  ) {
+    const { id } = order;
+    const gross = order.totalReceivedSet?.shopMoney;
+    const refund = order.totalRefundedSet?.shopMoney;
+    const currency = order.currentTotalPriceSet.shopMoney.currencyCode;
+    const customerId = order.customer?.id;
+    const values = {
+      updatedAt: new Date(order.updatedAt),
+      status: order.displayFinancialStatus,
+      cancelled: Boolean(order.cancelledAt),
+      currency,
+      processedAt: order.processedAt ? new Date(order.processedAt) : null,
+      grossReceived: gross?.currencyCode === currency ? gross.amount : null,
+      amountRefunded: refund?.currencyCode === currency ? refund.amount : null,
+      customerKey: customerId
+        ? createHmac('sha256', hexKey)
+            .update(
+              'shopify-customer\0' +
+                businessId +
+                '\0' +
+                connectionId +
+                '\0' +
+                customerId,
+            )
+            .digest('hex')
+        : null,
+      value: order.currentTotalPriceSet.shopMoney.amount,
+    };
+    return tx
+      .insert(orders)
+      .values({ connectionId, id, ...values })
+      .onConflictDoUpdate({
+        target: [orders.connectionId, orders.id],
+        set: {
+          ...values,
+          processedAt: sql`coalesce(excluded.processed_at, ${orders.processedAt})`,
+          grossReceived: sql`case when excluded.currency = ${orders.currency} then coalesce(excluded.gross_received, ${orders.grossReceived}) else excluded.gross_received end`,
+          amountRefunded: sql`case when excluded.currency = ${orders.currency} then coalesce(excluded.amount_refunded, ${orders.amountRefunded}) else excluded.amount_refunded end`,
+          customerKey: sql`coalesce(excluded.customer_key, ${orders.customerKey})`,
+        },
+        setWhere: lte(orders.updatedAt, values.updatedAt),
+      })
+      .returning({ id: orders.id });
+  }
   return {
     async connect(
       businessId: string,
@@ -153,6 +225,70 @@ export function shopifyOrders(
         })
         .returning({ id: connections.id });
       return row ?? null;
+    },
+    async repairHistory(
+      businessId: string,
+      connectionId: string,
+      after?: string,
+    ) {
+      const scope = and(
+        eq(connections.id, connectionId),
+        eq(connections.businessId, businessId),
+      );
+      const [entry] = await db.select().from(connections).where(scope);
+      if (!entry?.credentials) return null;
+      const sealed = entry.credentials;
+      const { token } = secrets.parse(
+        JSON.parse(cipher.open(sealed, context(businessId, entry.shop))),
+      );
+      const size = 4;
+      const candidates = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.connectionId, connectionId),
+            after ? gt(orders.id, after) : undefined,
+            or(
+              isNull(orders.processedAt),
+              isNull(orders.grossReceived),
+              isNull(orders.amountRefunded),
+              isNull(orders.customerKey),
+            ),
+          ),
+        )
+        .orderBy(asc(orders.id))
+        .limit(size + 1);
+      const results = await Promise.allSettled(
+        candidates.slice(0, size).map(async ({ id }) => {
+          const order = await readOrder(entry.shop, token, id);
+          if (!order) return false;
+          return db.transaction(async (tx) => {
+            const [active] = await tx
+              .select({ id: connections.id })
+              .from(connections)
+              .where(and(scope, eq(connections.credentials, sealed)))
+              .for('share');
+            if (!active) return false;
+            const records = await recordOrder(
+              tx,
+              businessId,
+              connectionId,
+              order,
+            );
+            return records.length > 0;
+          });
+        }),
+      );
+      return {
+        checked: results.length,
+        refreshed: results.filter(
+          (result) => result.status === 'fulfilled' && result.value,
+        ).length,
+        failed: results.filter((result) => result.status === 'rejected').length,
+        next:
+          candidates.length > size ? (candidates[size - 1]?.id ?? null) : null,
+      };
     },
     async disconnect(businessId: string, id: string) {
       const [row] = await db
@@ -282,31 +418,7 @@ export function shopifyOrders(
               if ((await db.select().from(deliveries).where(seen)).length)
                 return { received: true };
               const id = incoming.data.admin_graphql_api_id;
-              let result = await admin(
-                entry.shop,
-                connection.token,
-                orderQuery,
-                { id },
-              );
-              if (
-                result.errors?.length &&
-                result.errors.every(
-                  (error) =>
-                    z.object({ path: z.array(z.unknown()) }).safeParse(error)
-                      .data?.path[1] === 'customer',
-                )
-              )
-                result = await admin(
-                  entry.shop,
-                  connection.token,
-                  orderQuery.replace('customer { id } ', ''),
-                  { id },
-                );
-              if (result.errors?.length)
-                throw new Error('Shopify could not resolve the order');
-              const order = z
-                .object({ order: outboundOrder.nullable() })
-                .parse(result.data).order;
+              const order = await readOrder(entry.shop, connection.token, id);
               if (order?.id === id)
                 await db.transaction(async (tx) => {
                   const [active] = await tx
@@ -326,48 +438,7 @@ export function shopifyOrders(
                     .onConflictDoNothing()
                     .returning();
                   if (!created) return;
-                  const gross = order.totalReceivedSet?.shopMoney;
-                  const refund = order.totalRefundedSet?.shopMoney;
-                  const currency =
-                    order.currentTotalPriceSet.shopMoney.currencyCode;
-                  const customerId = order.customer?.id;
-                  const values = {
-                    updatedAt: new Date(order.updatedAt),
-                    status: order.displayFinancialStatus,
-                    cancelled: Boolean(order.cancelledAt),
-                    currency,
-                    processedAt: order.processedAt
-                      ? new Date(order.processedAt)
-                      : null,
-                    grossReceived:
-                      gross?.currencyCode === currency ? gross.amount : null,
-                    amountRefunded:
-                      refund?.currencyCode === currency ? refund.amount : null,
-                    customerKey: customerId
-                      ? createHmac('sha256', hexKey)
-                          .update(
-                            'shopify-customer\0' +
-                              entry.businessId +
-                              '\0' +
-                              connectionId +
-                              '\0' +
-                              customerId,
-                          )
-                          .digest('hex')
-                      : null,
-                    value: order.currentTotalPriceSet.shopMoney.amount,
-                  };
-                  await tx
-                    .insert(orders)
-                    .values({ connectionId, id, ...values })
-                    .onConflictDoUpdate({
-                      target: [orders.connectionId, orders.id],
-                      set: {
-                        ...values,
-                        customerKey: sql`coalesce(excluded.customer_key, ${orders.customerKey})`,
-                      },
-                      setWhere: lte(orders.updatedAt, values.updatedAt),
-                    });
+                  await recordOrder(tx, entry.businessId, connectionId, order);
                 });
               return { received: true };
             } catch {

@@ -237,6 +237,30 @@ test(
     assert.equal((await connect.publicOrder(order.id))?.amountRefunded, 1999);
     assert.deepEqual((await connect.overview(other.id)).orders, []);
     const day = new Date().toISOString().slice(0, 10);
+    await connection`update stripe_sales set customer_key = null where id = ${order.id}`;
+    assert.equal(await connect.repairHistory(other.id), null);
+    capturedAmount = order.amount + 1;
+    assert.deepEqual(await connect.repairHistory(owner.id), {
+      checked: 1,
+      refreshed: 0,
+      failed: 0,
+      next: null,
+    });
+    capturedAmount = order.amount;
+    failures = 1;
+    assert.deepEqual(await connect.repairHistory(owner.id), {
+      checked: 1,
+      refreshed: 0,
+      failed: 1,
+      next: null,
+    });
+    assert.deepEqual(await connect.repairHistory(owner.id), {
+      checked: 1,
+      refreshed: 1,
+      failed: 0,
+      next: null,
+    });
+    assert.equal((await connect.repairHistory(owner.id))?.checked, 0);
     const insights = await commerceInsights(db, owner.id, {
       from: day,
       through: day,
