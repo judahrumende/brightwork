@@ -5,7 +5,7 @@ const executablePath = process.env.BROWSER_EXECUTABLE_PATH;
 
 export default defineConfig({
   testDir: './tests',
-  testIgnore: '**/unit/**',
+  testIgnore: ['**/unit/**', '**/ssr/**'],
   use: {
     baseURL,
     viewport: { width: 1920, height: 772 },
