@@ -14,7 +14,8 @@ import { authStore } from '../src/auth/store';
 import { connectDatabase } from '../src/db/database';
 import { agentStore } from '../src/workspace/agent-store';
 import { runStore } from '../src/workspace/run-store';
-import { artifacts } from '../src/db/schema';
+import { agentTurns, artifacts } from '../src/db/schema';
+import { eq } from 'drizzle-orm';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const capture = resolve(
@@ -28,6 +29,7 @@ const { log } = JSON.parse(await readFile(capture, 'utf8')) as {
 const workspaceIds = new Set<string>();
 const historyVisits = new Map<string, number>();
 const creationVisits = new Map<string, number>();
+const capturedBuilds = new Set<string>();
 for (const entry of log.entries) {
   const url = new URL(entry.request.url);
   const workspace = url.pathname.match(
@@ -35,6 +37,8 @@ for (const entry of log.entries) {
   )?.[1];
   if (url.origin !== source || !workspace) continue;
   workspaceIds.add(workspace);
+  const build = url.pathname.match(/\/build\/runs\/([0-9a-f-]{36})$/u)?.[1];
+  if (build) capturedBuilds.add(build);
   const creation = url.pathname.match(
     /\/creations\/([0-9a-f-]{36})(?:\/|$)/u,
   )?.[1];
@@ -122,13 +126,33 @@ try {
     body: 'Review this announcement.',
     state: 'pending',
   });
+  await database.db
+    .update(agentTurns)
+    .set({ state: 'running' })
+    .where(eq(agentTurns.id, work.turnId));
   const website = await workStore.saveArtifact({
     businessId: workspace.id,
+    turnId: work.turnId,
     kind: 'website',
     title: 'Fixture website',
     body: '<p>Review the new homepage.</p>',
     state: 'pending',
   });
+  await database.db
+    .update(agentTurns)
+    .set({
+      state: 'completed',
+      parts: [
+        {
+          type: 'tool',
+          name: 'build',
+          status: 'completed',
+          toolCallId: 'replay-build',
+          output: { id: website.id },
+        },
+      ],
+    })
+    .where(eq(agentTurns.id, work.turnId));
   const fixtureIds = Object.fromEntries(
     [...workspaceIds].map((id) => [id, workspace.id]),
   );
@@ -136,6 +160,13 @@ try {
   if (primaryHistory) fixtureIds[primaryHistory[0]] = run.id;
   const [primaryCreation] = [...creationVisits].sort((a, b) => b[1] - a[1]);
   if (primaryCreation) fixtureIds[primaryCreation[0]] = website.id;
+  if (capturedBuilds.size === 1) {
+    const [build] = await workStore.buildActivity(workspace.id, {
+      chatId: run.id,
+    });
+    const [capturedBuild] = capturedBuilds;
+    if (build && capturedBuild) fixtureIds[capturedBuild] = build.build_id;
+  }
   const origin = 'http://127.0.0.1:5190';
   registerAuth(
     server,

@@ -1,3 +1,4 @@
+import { buildSummary } from './build-activity';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Queue } from 'bullmq';
@@ -472,6 +473,90 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       if (!reply.sent) return reportError(error, reply);
     }
   });
+  function conditionalWorkspaceRead(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    snapshot: unknown,
+  ) {
+    const etag =
+      '"' +
+      createHash('sha256')
+        .update(JSON.stringify(snapshot))
+        .digest('base64url') +
+      '"';
+    reply
+      .header('ETag', etag)
+      .header('Cache-Control', 'private, no-cache')
+      .header('Vary', 'Cookie');
+    if (
+      request.headers['if-none-match']?.split(',').some((value) => {
+        const tag = value.trim().replace(/^W\//u, '');
+        return tag === '*' || tag === etag;
+      })
+    )
+      return reply.code(304).send();
+    return snapshot;
+  }
+
+  app.get(path + '/build/active-runs', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const [builds, waiting] = await Promise.all([
+        store.buildActivity(access.id, { active: true }),
+        store.workByKind(access.id, 'website', true, 100),
+      ]);
+      return conditionalWorkspaceRead(request, reply, {
+        companyId: access.id,
+        builds: builds.map((row) => ({
+          run: buildSummary(row),
+          chatId: row.run_id ?? row.turn_id,
+          unattended: row.run_id !== null,
+        })),
+        line: waiting.map(({ id, title }) => ({
+          id,
+          creationId: id,
+          kind: 'approval',
+          title,
+        })),
+      });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+
+  app.get(path + '/build/runs', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { chatId } = z
+        .object({ chatId: z.uuid().optional() })
+        .parse(request.query);
+      const runs = await store.buildActivity(
+        access.id,
+        chatId ? { chatId } : {},
+      );
+      return conditionalWorkspaceRead(request, reply, {
+        companyId: access.id,
+        runs: runs.map(buildSummary),
+      });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+
+  app.get(path + '/build/runs/:resource', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const [row] = await store.buildActivity(access.id, { buildId: resource });
+      if (!row) return reply.code(404).send({ message: 'Build not found.' });
+      return { companyId: access.id, run: buildSummary(row) };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/ted/unattended/:resource', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
@@ -485,24 +570,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       const turns = await context.runs.turns(access.id, resource, limit);
       if (!turns) return reply.code(404).send({ message: 'Run not found.' });
       const snapshot = { id: resource, turns: turns.map(turnSnapshot) };
-      const etag =
-        '"' +
-        createHash('sha256')
-          .update(JSON.stringify(snapshot))
-          .digest('base64url') +
-        '"';
-      reply
-        .header('ETag', etag)
-        .header('Cache-Control', 'private, no-cache')
-        .header('Vary', 'Cookie');
-      if (
-        request.headers['if-none-match']?.split(',').some((value) => {
-          const tag = value.trim().replace(/^W\//u, '');
-          return tag === '*' || tag === etag;
-        })
-      )
-        return reply.code(304).send();
-      return snapshot;
+      return conditionalWorkspaceRead(request, reply, snapshot);
     } catch (error) {
       return reportError(error, reply);
     }

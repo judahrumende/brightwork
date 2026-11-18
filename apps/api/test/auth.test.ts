@@ -1027,6 +1027,58 @@ test(
           headers: { cookie: freshCookie },
         });
         assert.equal(wrongWorkspace.statusCode, 404);
+        const tool = {
+          type: 'tool',
+          name: 'build',
+          toolCallId: 'fixture-build',
+          status: 'running',
+        } as const;
+        await database.db
+          .update(agentTurns)
+          .set({ state: 'running', parts: [tool] })
+          .where(eq(agentTurns.id, runTurn.turnId));
+        const activeBuilds = await get('/build/active-runs');
+        assert.equal(activeBuilds.statusCode, 200);
+        const activeBuild = activeBuilds.json().builds[0];
+        assert.equal(activeBuild.chatId, run.id);
+        assert.equal(activeBuild.run.status, 'running');
+        assert.ok(!activeBuild.run.creationId);
+        const built = await store.saveArtifact({
+          businessId: studio,
+          turnId: runTurn.turnId,
+          kind: 'website',
+          title: 'Built website',
+          body: '<h1>Built website</h1>',
+          state: 'pending',
+        });
+        await database.db
+          .update(agentTurns)
+          .set({
+            state: 'completed',
+            parts: [{ ...tool, status: 'completed', output: { id: built.id } }],
+          })
+          .where(eq(agentTurns.id, runTurn.turnId));
+        const buildHistory = await get('/build/runs?chatId=' + run.id);
+        assert.equal(buildHistory.statusCode, 200);
+        const completedBuild = buildHistory.json().runs[0];
+        assert.equal(completedBuild.buildId, activeBuild.run.buildId);
+        assert.equal(completedBuild.creationId, built.id);
+        assert.match(completedBuild.result.sourceHash, /^[0-9a-f]{64}$/u);
+        assert.ok(!buildHistory.body.includes(built.body));
+        assert.equal((await get('/build/active-runs')).json().builds.length, 0);
+        const detail = '/build/runs/' + completedBuild.buildId;
+        assert.equal(
+          (await get(detail)).json().run.result.versionId,
+          completedBuild.result.versionId,
+        );
+        assert.equal((await get(detail, separateCookie)).statusCode, 404);
+        const historyTag = buildHistory.headers.etag;
+        assert.ok(typeof historyTag === 'string');
+        const conditional = await server.inject({
+          url: '/api/companies/' + studio + '/build/runs?chatId=' + run.id,
+          headers: { cookie: freshCookie, 'if-none-match': historyTag },
+        });
+        assert.equal(conditional.statusCode, 304);
         const drafts = await get('/inbox/drafts?waiting=true&limit=100');
         const draftIds = drafts
           .json<{ items: { id: string }[] }>()
