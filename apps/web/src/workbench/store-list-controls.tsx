@@ -14,8 +14,8 @@ export function StoreListFilters({
   label: string;
   placeholder?: string;
   filterLabel: string;
-  query?: string;
-  filter?: string;
+  query: string | undefined;
+  filter: string | undefined;
   options: Array<{ value: string; label: string }>;
   onSearch: (search: string, filter: string) => void;
 }) {
