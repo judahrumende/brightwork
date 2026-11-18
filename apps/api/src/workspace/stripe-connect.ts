@@ -46,6 +46,10 @@ const sales = pgTable('stripe_sales', {
   amountRefunded: integer('amount_refunded').notNull().default(0),
   checkoutId: text('checkout_id'),
   directCheckout: boolean('direct_checkout').notNull().default(false),
+  checkoutHoldUntil: timestamp('checkout_hold_until', {
+    withTimezone: true,
+    mode: 'date',
+  }),
   checkoutAttemptedAt: timestamp('checkout_attempted_at', {
     withTimezone: true,
     mode: 'date',
@@ -120,7 +124,192 @@ export function stripeConnect(
       : null;
   }
 
+  type StripeSession = Awaited<ReturnType<typeof stripe.checkout>>;
+  async function releaseDirectCheckout(
+    tx: Pick<Database, 'execute' | 'update'>,
+    saleId: string,
+    account: string,
+    expiredSession?: StripeSession,
+  ) {
+    const {
+      amount_total: amount,
+      currency,
+      id: checkoutId,
+    } = expiredSession ?? {};
+    if (expiredSession && (!amount || !currency || !checkoutId)) return false;
+    // Inventory edits and merchant cancellations take the store lock before the sale.
+    const [order] = await tx.execute<{ site_id: string; id: string }>(sql`
+      select orders.site_id, orders.id from generated_store_orders orders
+      join generated_stores store on store.site_id = orders.site_id
+      join stripe_sales sale on sale.id = orders.sale_id
+      where sale.id = ${saleId} and sale.account_id = ${account}
+        and sale.direct_checkout and orders.status = 'confirmed'
+      for update of store
+    `);
+    if (!order) return false;
+    const [closed] = await tx
+      .update(sales)
+      .set({ closedAt: new Date(), ...(checkoutId ? { checkoutId } : {}) })
+      .where(
+        and(
+          scopedOrder(saleId, account),
+          isNull(sales.paidAt),
+          isNull(sales.paymentId),
+          eq(sales.amountRefunded, 0),
+          ...(amount && currency && checkoutId
+            ? [
+                eq(sales.amount, amount),
+                eq(sales.currency, currency),
+                or(isNull(sales.checkoutId), eq(sales.checkoutId, checkoutId)),
+              ]
+            : [
+                isNull(sales.checkoutId),
+                sql`coalesce(${sales.checkoutHoldUntil}, ${sales.createdAt} + interval '45 minutes') <= now()`,
+              ]),
+        ),
+      )
+      .returning({ id: sales.id });
+    if (!closed) return false;
+    await tx.execute(sql`
+      with cancelled as (
+        update generated_store_orders set status = 'cancelled'
+        where site_id = ${order.site_id} and id = ${order.id} and status = 'confirmed'
+        returning site_id, id
+      )
+      update generated_store_products products
+      set stock = products.stock + lines.quantity, revision = products.revision + 1
+      from generated_store_order_lines lines
+      join cancelled on cancelled.site_id = lines.site_id and cancelled.id = lines.order_id
+      where products.site_id = lines.site_id and products.id = lines.product_id
+    `);
+    return true;
+  }
+
+  async function recoverSale(id: string) {
+    const [sale] = await db.select().from(sales).where(eq(sales.id, id));
+    if (!sale || sale.paidAt || sale.closedAt) return false;
+    if (!sale.checkoutAttemptedAt)
+      return db.transaction((tx) =>
+        releaseDirectCheckout(tx, sale.id, sale.accountId),
+      );
+
+    let session: StripeSession;
+    if (sale.checkoutId) {
+      session = await stripe.checkout(sale.accountId, sale.checkoutId);
+    } else {
+      const listed = await stripe.checkoutCandidates(
+        sale.accountId,
+        Math.floor(sale.checkoutAttemptedAt.getTime() / 1000) - 5,
+        Math.floor(sale.checkoutAttemptedAt.getTime() / 1000) + 300,
+      );
+      if (!listed.complete) return false;
+      const matches = listed.sessions.filter(
+        (candidate) =>
+          candidate.client_reference_id === sale.id &&
+          candidate.metadata.brightwork_sale === sale.id,
+      );
+      if (!matches.length)
+        return db.transaction((tx) =>
+          releaseDirectCheckout(tx, sale.id, sale.accountId),
+        );
+      if (matches.length !== 1)
+        throw new Error(
+          'More than one Stripe checkout matches this store order.',
+        );
+      session = matches[0]!;
+    }
+    if (
+      session.client_reference_id !== sale.id ||
+      session.metadata.brightwork_sale !== sale.id ||
+      session.amount_total !== sale.amount ||
+      session.currency !== sale.currency
+    )
+      throw new Error('Store checkout details do not match Stripe.');
+
+    if (session.status === 'open') {
+      session = await stripe.expireCheckout(sale.accountId, session.id);
+    }
+    if (session.status === 'expired' && session.payment_status === 'unpaid')
+      return db.transaction((tx) =>
+        releaseDirectCheckout(tx, sale.id, sale.accountId, session),
+      );
+    if (
+      session.status !== 'complete' ||
+      session.payment_status !== 'paid' ||
+      !session.payment_intent
+    )
+      return false;
+    const intent = await stripe.capturedPayment(
+      sale.accountId,
+      session.payment_intent,
+    );
+    const charge = intent.latest_charge;
+    if (
+      intent.metadata.brightwork_order !== sale.id ||
+      intent.amount_received !== sale.amount ||
+      intent.currency !== sale.currency ||
+      charge.currency !== sale.currency ||
+      charge.amount_captured !== sale.amount ||
+      charge.amount_refunded > sale.amount
+    )
+      throw new Error('Store payment details do not match Stripe.');
+    const [paid] = await db
+      .update(sales)
+      .set({
+        checkoutId: session.id,
+        paidAt: new Date(charge.created * 1000),
+        paymentId: intent.id,
+        customerKey: sql`coalesce(${sales.customerKey}, ${buyerKey(sale.businessId, sale.accountId, session.customer_details?.email)})`,
+        amountRefunded: sql`greatest(${sales.amountRefunded}, ${charge.amount_refunded})`,
+      })
+      .where(
+        and(
+          scopedOrder(sale.id, sale.accountId),
+          isNull(sales.paidAt),
+          isNull(sales.closedAt),
+          or(isNull(sales.checkoutId), eq(sales.checkoutId, session.id)),
+          or(isNull(sales.paymentId), eq(sales.paymentId, intent.id)),
+        ),
+      )
+      .returning();
+    return Boolean(paid);
+  }
+
+  async function recoverStoreCheckouts() {
+    // Advance the next check before network I/O so replicas claim different sales.
+    const batch = await db.execute<{ id: string }>(sql`
+      with due as (
+        select id from stripe_sales
+        where direct_checkout and closed_at is null and paid_at is null
+          and checkout_recover_at <= now()
+        order by checkout_recover_at, id limit 8 for update skip locked
+      )
+      update stripe_sales sales set checkout_recover_at = now() + interval '5 minutes'
+      from due where sales.id = due.id returning sales.id
+    `);
+    const results = await Promise.allSettled(
+      batch.map(({ id }) => recoverSale(id)),
+    );
+    return {
+      checked: results.length,
+      resolved: results.filter(
+        (item) => item.status === 'fulfilled' && item.value,
+      ).length,
+      failed: results.filter((item) => item.status === 'rejected').length,
+      errors: results.flatMap((item) =>
+        item.status === 'rejected'
+          ? [
+              item.reason instanceof Error
+                ? item.reason.message
+                : 'Unknown checkout error',
+            ]
+          : [],
+      ),
+    };
+  }
+
   return {
+    recoverStoreCheckouts,
     async overview(id: string) {
       const [[seller], orders] = await Promise.all([
         db.select().from(sellers).where(sellerScope(id)),
@@ -383,8 +572,11 @@ export function stripeConnect(
                 23 * 60 * 60 * 1000))
         )
           return null;
+        const expiresAt = order.checkoutHoldUntil?.getTime();
+        if (expiresAt && expiresAt - Date.now() < 31 * 60 * 1000) return null;
         const session = await stripe.createCheckout({
           orderId: order.id,
+          ...(expiresAt ? { expiresAt: expiresAt / 1000 } : {}),
           ...(order.checkoutId ? { expiredSession: order.checkoutId } : {}),
           accountId: order.accountId,
           title: order.title,
@@ -407,6 +599,38 @@ export function stripeConnect(
       });
     },
     register(app: FastifyInstance) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let pending: Promise<void> | undefined;
+      let closing = false;
+      function schedule() {
+        if (closing) return;
+        timer = setTimeout(() => {
+          pending = recoverStoreCheckouts()
+            .then(({ failed, errors }) => {
+              if (failed)
+                app.log.warn(
+                  { failed, errors },
+                  'Some store checkouts could not be reconciled',
+                );
+            })
+            .catch((error: unknown) => {
+              app.log.warn(
+                { error },
+                'Store checkout reconciliation could not run',
+              );
+            })
+            .finally(schedule);
+        }, 30_000);
+        timer.unref();
+      }
+      app.addHook('onReady', async () => {
+        schedule();
+      });
+      app.addHook('preClose', async () => {
+        closing = true;
+        clearTimeout(timer);
+        await pending;
+      });
       app.register(async (hooks) => {
         hooks.removeContentTypeParser('application/json');
         hooks.addContentTypeParser(
@@ -524,51 +748,12 @@ export function stripeConnect(
                   !session.currency
                 )
                   return;
-                // Match the store lock order used by inventory edits and cancellations.
-                const [order] = await tx.execute<{
-                  site_id: string;
-                  id: string;
-                }>(sql`
-                  select orders.site_id, orders.id from generated_store_orders orders
-                  join generated_stores store on store.site_id = orders.site_id
-                  join stripe_sales sale on sale.id = orders.sale_id
-                  where sale.id = ${reference.data} and sale.account_id = ${event.account}
-                    and sale.direct_checkout and orders.status = 'confirmed'
-                  for update of store
-                `);
-                if (!order) return;
-                const [expired] = await tx
-                  .update(sales)
-                  .set({ closedAt: new Date(), checkoutId: session.id })
-                  .where(
-                    and(
-                      scopedOrder(reference.data, event.account),
-                      eq(sales.amount, session.amount_total),
-                      eq(sales.currency, session.currency),
-                      isNull(sales.paidAt),
-                      isNull(sales.paymentId),
-                      eq(sales.amountRefunded, 0),
-                      or(
-                        isNull(sales.checkoutId),
-                        eq(sales.checkoutId, session.id),
-                      ),
-                    ),
-                  )
-                  .returning({ id: sales.id });
-                if (!expired) return;
-                // The status predicate also prevents a second release if Stripe sends another event ID.
-                await tx.execute(sql`
-                  with cancelled as (
-                    update generated_store_orders set status = 'cancelled'
-                    where site_id = ${order.site_id} and id = ${order.id} and status = 'confirmed'
-                    returning site_id, id
-                  )
-                  update generated_store_products products
-                  set stock = products.stock + lines.quantity, revision = products.revision + 1
-                  from generated_store_order_lines lines
-                  join cancelled on cancelled.site_id = lines.site_id and cancelled.id = lines.order_id
-                  where products.site_id = lines.site_id and products.id = lines.product_id
-                `);
+                await releaseDirectCheckout(
+                  tx,
+                  reference.data,
+                  event.account,
+                  session,
+                );
               }
               if (
                 event.type === 'charge.refunded' &&

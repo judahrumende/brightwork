@@ -222,9 +222,13 @@ export function generatedStores(db: Database) {
       items.length === 1
         ? `${first.productName} × ${first.quantity}`
         : `${first.productName} and ${items.length - 1} more`;
+    const deadline = direct
+      ? sql`date_trunc('second', now()) + interval '45 minutes'`
+      : sql`null`;
     const [sale] = await tx.execute<{ id: string }>(sql`
-      insert into stripe_sales(id, business_id, account_id, title, currency, amount, direct_checkout)
-      select ${randomUUID()}, business_id, account_id, ${title}, ${currency.toLowerCase()}, ${amount}, ${direct}
+      insert into stripe_sales(id, business_id, account_id, title, currency, amount, direct_checkout, checkout_hold_until, checkout_recover_at)
+      select ${randomUUID()}, business_id, account_id, ${title}, ${currency.toLowerCase()}, ${amount}, ${direct},
+        ${deadline}, ${deadline}
       from stripe_sellers where business_id = ${businessId} and ${readyStripeSeller}
       returning id
     `);

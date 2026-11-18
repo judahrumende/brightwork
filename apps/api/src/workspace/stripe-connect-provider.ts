@@ -21,6 +21,8 @@ const checkoutSession = z.object({
   currency: currency.nullable(),
   payment_intent: paymentId.nullable(),
   client_reference_id: z.string().max(200).nullable(),
+  created: z.int().nonnegative().max(4_102_444_800),
+  metadata: z.record(z.string(), z.string()),
   customer_details: z
     .object({ email: z.string().max(320).nullish() })
     .nullish(),
@@ -78,6 +80,7 @@ export function stripeConnectProvider(
       accountId: string;
       orderId: string;
       expiredSession?: string;
+      expiresAt?: number;
       title: string;
       amount: number;
       currency: string;
@@ -88,6 +91,7 @@ export function stripeConnectProvider(
         'checkout/sessions',
         {
           mode: 'payment',
+          ...(input.expiresAt ? { expires_at: String(input.expiresAt) } : {}),
           'adaptive_pricing[enabled]': 'false',
           'payment_method_types[0]': 'card',
           client_reference_id: order,
@@ -103,6 +107,7 @@ export function stripeConnectProvider(
             .parse(input.title),
           'line_items[0][quantity]': '1',
           'payment_intent_data[metadata][brightwork_order]': order,
+          'metadata[brightwork_sale]': order,
           success_url: new URL('/sale/' + order + '?result=returned', origin)
             .href,
           cancel_url: new URL('/sale/' + order, origin).href,
@@ -117,6 +122,36 @@ export function stripeConnectProvider(
       return checkoutSession
         .extend({ url: hostedUrl('checkout.stripe.com') })
         .parse(result);
+    },
+    async checkoutCandidates(connected: string, from: number, through: number) {
+      const sessions: z.infer<typeof checkoutSession>[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 5; page += 1) {
+        const params = new URLSearchParams({
+          limit: '100',
+          'created[gte]': String(from),
+          'created[lte]': String(through),
+          ...(cursor ? { starting_after: cursor } : {}),
+        });
+        const result = z
+          .object({
+            data: z.array(checkoutSession),
+            has_more: z.boolean(),
+          })
+          .parse(
+            await stripe(
+              'checkout/sessions?' + params,
+              undefined,
+              undefined,
+              accountId.parse(connected),
+            ),
+          );
+        sessions.push(...result.data);
+        if (!result.has_more) return { sessions, complete: true };
+        cursor = result.data.at(-1)?.id;
+        if (!cursor) break;
+      }
+      return { sessions, complete: false };
     },
     async checkout(connected: string, id: string) {
       return checkoutSession
@@ -139,6 +174,35 @@ export function stripeConnectProvider(
           accountId.parse(connected),
         ),
       );
+    },
+    async capturedPayment(connected: string, id: string) {
+      const intentId = paymentId.parse(id);
+      return z
+        .object({
+          id: z.literal(intentId),
+          livemode: z.literal(false),
+          status: z.literal('succeeded'),
+          amount_received: moneyAmount,
+          currency,
+          metadata: z.object({ brightwork_order: z.uuid() }),
+          latest_charge: z.object({
+            payment_intent: z.literal(intentId),
+            paid: z.literal(true),
+            captured: z.literal(true),
+            created: z.int().nonnegative().max(4_102_444_800),
+            amount_captured: moneyAmount,
+            amount_refunded: moneyAmount,
+            currency,
+          }),
+        })
+        .parse(
+          await stripe(
+            'payment_intents/' + intentId + '?expand%5B%5D=latest_charge',
+            undefined,
+            undefined,
+            accountId.parse(connected),
+          ),
+        );
     },
     async charge(connected: string, id: string) {
       const chargeId = z

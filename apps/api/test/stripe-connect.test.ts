@@ -66,6 +66,8 @@ test(
     let paymentIntent = 'pi_Sale';
     let storeFixture = false;
     let failCheckoutCreation = false;
+    let loseCheckoutResponse = false;
+    let listedSessions = true;
     let directFixture = false;
     const connect = stripeConnect(
       db,
@@ -89,6 +91,24 @@ test(
           failures--;
           return new Response('temporary provider outage', { status: 503 });
         }
+        if (path === '/v1/payment_intents/pi_DirectRecovered')
+          return Response.json({
+            id: 'pi_DirectRecovered',
+            livemode: false,
+            status: 'succeeded',
+            amount_received: checkoutOrder.amount,
+            currency: checkoutOrder.currency,
+            metadata: { brightwork_order: checkoutOrder.id },
+            latest_charge: {
+              payment_intent: 'pi_DirectRecovered',
+              paid: true,
+              captured: true,
+              created: Math.floor(Date.now() / 1000),
+              amount_captured: checkoutOrder.amount,
+              amount_refunded: 0,
+              currency: checkoutOrder.currency,
+            },
+          });
         if (path === '/v1/charges/ch_Sale')
           return Response.json({
             id: 'ch_Sale',
@@ -100,7 +120,36 @@ test(
             currency: checkoutOrder.currency,
             metadata: { brightwork_order: checkoutOrder.id },
           });
-        const creating = path === '/v1/checkout/sessions';
+        if (path === '/v1/checkout/sessions' && request?.method === 'GET') {
+          return Response.json({
+            data: listedSessions
+              ? [
+                  {
+                    id: session,
+                    livemode: false,
+                    status: checkoutStatus,
+                    payment_status:
+                      checkoutStatus === 'complete' ? 'paid' : 'unpaid',
+                    client_reference_id: checkoutOrder.id,
+                    created: Math.floor(Date.now() / 1000),
+                    metadata: { brightwork_sale: checkoutOrder.id },
+                    payment_intent:
+                      checkoutStatus === 'complete' ? paymentIntent : null,
+                    customer_details:
+                      checkoutStatus === 'complete'
+                        ? { email: 'Buyer@example.test' }
+                        : null,
+                    amount_total: checkoutOrder.amount,
+                    currency: checkoutOrder.currency,
+                    url: link,
+                  },
+                ]
+              : [],
+            has_more: false,
+          });
+        }
+        const creating =
+          path === '/v1/checkout/sessions' && request?.method === 'POST';
         if (creating) {
           if (failCheckoutCreation) {
             failCheckoutCreation = false;
@@ -134,6 +183,10 @@ test(
             session = 'cs_test_Replacement';
           }
           checkoutStatus = 'open';
+          if (loseCheckoutResponse) {
+            loseCheckoutResponse = false;
+            throw new Error('connection lost after Stripe created the session');
+          }
         } else if (path.endsWith('/expire')) {
           assert.equal(path, '/v1/checkout/sessions/' + session + '/expire');
           assert.equal(
@@ -152,6 +205,8 @@ test(
           status: checkoutStatus,
           payment_status: complete ? 'paid' : 'unpaid',
           client_reference_id: checkoutOrder.id,
+          created: Math.floor(Date.now() / 1000),
+          metadata: { brightwork_sale: checkoutOrder.id },
           payment_intent: complete ? paymentIntent : null,
           customer_details: complete ? { email: 'Buyer@example.test' } : null,
           amount_total: creating ? checkoutOrder.amount : capturedAmount,
@@ -730,6 +785,159 @@ test(
     );
     assert.ok(
       await stores.changeOrder(owner.id, site.id, paidQuote, 'fulfilled'),
+    );
+
+    assert.ok(
+      await stores.saveProduct(owner.id, site.id, {
+        name: 'Recovery fixture',
+        description: '',
+        price: 1200,
+        stock: 2,
+        active: true,
+      }),
+    );
+    const recoveryProduct = (await stores.read(
+      owner.id,
+      site.id,
+    ))!.products.find(({ name }) => name === 'Recovery fixture')!;
+    const recoveryOrder = (
+      id: string,
+      revision = recoveryProduct.revision,
+    ) => ({
+      id,
+      email: 'recovery@example.test',
+      items: [{ productId: recoveryProduct.id, revision, quantity: 1 }],
+    });
+    async function placeDirectFixture(input: ReturnType<typeof recoveryOrder>) {
+      const currentProduct = (await stores.read(
+        owner.id,
+        site.id,
+      ))!.products.find(({ id }) => id === recoveryProduct.id)!;
+      const currentInput = {
+        ...input,
+        items: input.items.map((item) => ({
+          ...item,
+          revision: currentProduct.revision,
+        })),
+      };
+      const review = await stores.prepareDelivery(
+        site.id,
+        currentInput,
+        {
+          country: 'AU',
+          name: 'Fixture Buyer',
+          street: '123 Test Street',
+          unit: '',
+          city: 'Perth',
+          region: 'WA',
+          postalCode: '6000',
+        },
+        null,
+      );
+      assert.ok(review);
+      const id = await stores.placeDelivery(site.id, review.id, null, true);
+      assert.ok(id);
+      return id;
+    }
+    const uncertainId = await placeDirectFixture(recoveryOrder(randomUUID()));
+    const uncertainSale = (await stores.buyerSale(site.id, uncertainId))!.id;
+    checkoutOrder = {
+      id: uncertainSale,
+      title: 'Recovery fixture',
+      amount: 1595,
+      currency: 'aud',
+    };
+    session = 'cs_test_LostResponse';
+    loseCheckoutResponse = true;
+    await assert.rejects(connect.checkout(uncertainSale));
+    await connection`update stripe_sales set checkout_recover_at = now() where id = ${uncertainSale}`;
+    checkoutStatus = 'open';
+    capturedAmount = checkoutOrder.amount;
+    assert.deepEqual(await connect.recoverStoreCheckouts(), {
+      checked: 1,
+      resolved: 1,
+      failed: 0,
+      errors: [],
+    });
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.orders.find(
+        ({ id }) => id === uncertainId,
+      )?.status,
+      'cancelled',
+    );
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.products.find(
+        ({ id }) => id === recoveryProduct.id,
+      )?.stock,
+      2,
+    );
+
+    const absentId = await placeDirectFixture(recoveryOrder(randomUUID()));
+    const absentSale = (await stores.buyerSale(site.id, absentId))!.id;
+    checkoutOrder = {
+      id: absentSale,
+      title: 'Recovery fixture',
+      amount: 1595,
+      currency: 'aud',
+    };
+    failCheckoutCreation = true;
+    await assert.rejects(connect.checkout(absentSale));
+    listedSessions = false;
+    await connection`update stripe_sales set checkout_recover_at = now(), checkout_hold_until = now() where id = ${absentSale}`;
+    assert.deepEqual(await connect.recoverStoreCheckouts(), {
+      checked: 1,
+      resolved: 1,
+      failed: 0,
+      errors: [],
+    });
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.orders.find(
+        ({ id }) => id === absentId,
+      )?.status,
+      'cancelled',
+    );
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.products.find(
+        ({ id }) => id === recoveryProduct.id,
+      )?.stock,
+      2,
+    );
+    listedSessions = true;
+
+    const missedEventId = randomUUID();
+    const refreshedProduct = (await stores.read(
+      owner.id,
+      site.id,
+    ))!.products.find(({ id }) => id === recoveryProduct.id)!;
+    const missedOrderId = await placeDirectFixture(
+      recoveryOrder(missedEventId, refreshedProduct.revision),
+    );
+    const missedSale = (await stores.buyerSale(site.id, missedOrderId))!.id;
+    checkoutOrder = {
+      id: missedSale,
+      title: 'Recovery fixture',
+      amount: 1595,
+      currency: 'aud',
+    };
+    session = 'cs_test_MissedWebhook';
+    capturedAmount = checkoutOrder.amount;
+    paymentIntent = 'pi_DirectRecovered';
+    assert.ok(await connect.checkout(missedSale));
+    checkoutStatus = 'complete';
+    await connection`update stripe_sales set checkout_recover_at = now() where id = ${missedSale}`;
+    assert.deepEqual(await connect.recoverStoreCheckouts(), {
+      checked: 1,
+      resolved: 1,
+      failed: 0,
+      errors: [],
+    });
+    assert.ok((await stores.buyerSale(site.id, missedOrderId))?.paid);
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.counts?.awaitingFulfillment,
+      1,
+    );
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, missedOrderId, 'fulfilled'),
     );
     assert.equal(await stores.setCheckout(owner.id, site.id, false), true);
     assert.doesNotMatch((await catalog()).body, /name="pay"/u);
