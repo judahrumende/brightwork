@@ -1,3 +1,4 @@
+import { storeBuyers } from '../workspace/store-buyers';
 import { creditConfig, creditLedger } from '../workspace/credits';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Redis from 'ioredis';
@@ -304,6 +305,20 @@ export function registerAuth(
     origin,
     env.SITE_BASE_DOMAIN,
     (key) => allow('store-order', key, 12, 600),
+    auth.buyerEmailEnabled
+      ? {
+          buyers: storeBuyers(database.db, secret),
+          sendCode: auth.sendBuyerCode,
+          limit: (type, key) =>
+            allow(
+              'store-sign-in-' + type,
+              key,
+              type === 'email' ? 4 : type === 'ip' ? 15 : 30,
+              600,
+            ),
+          paymentOrigin: origin,
+        }
+      : undefined,
   );
   billing?.register(app);
   const sellerPayments =

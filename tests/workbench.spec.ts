@@ -1490,7 +1490,21 @@ test('a generated store opens its dashboard below the preview and saves a produc
       return route.fulfill({ json: { saved: true } });
     }
     return route.fulfill({
-      json: { currency: 'AUD', products, orders: [order], paymentReady: true },
+      json: {
+        currency: 'AUD',
+        products,
+        orders: [order],
+        paymentReady: true,
+        counts: { openRequests: 0, awaitingFulfillment: 1 },
+        customers: [
+          {
+            email: 'buyer@example.test',
+            joinedAt: '2026-11-18T08:00:00.000Z',
+            lastOrderAt: null,
+            orderCount: 0,
+          },
+        ],
+      },
     });
   });
 
@@ -1551,6 +1565,12 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await expect(
     dashboard.getByRole('button', { name: 'Fulfill', exact: true }),
   ).toHaveCount(0);
+  await dashboard.getByRole('radio', { name: 'Customers' }).click();
+  const buyer = dashboard.getByRole('row', { name: /buyer@example.test/u });
+  await expect(buyer.getByRole('cell', { name: 'Verified' })).toBeVisible();
+  await expect(
+    buyer.getByRole('cell', { name: '0', exact: true }),
+  ).toBeVisible();
   await dialog.getByRole('button', { name: 'Site preview' }).click();
   await expect(
     dialog

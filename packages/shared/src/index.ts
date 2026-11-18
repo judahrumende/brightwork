@@ -26,4 +26,5 @@ export type {
   StoreProduct,
   StoreOrder,
   StoreOrderLine,
+  StoreCustomer,
 } from './generated-store';

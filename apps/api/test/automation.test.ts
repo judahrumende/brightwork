@@ -1,3 +1,4 @@
+import { storeBuyers } from '../src/workspace/store-buyers';
 import { productEdit } from '../src/workspace/generated-store';
 import { siteHosting } from '../src/workspace/publication';
 import assert from 'node:assert/strict';
@@ -865,12 +866,22 @@ test(
         await agent.generatedStore.saveProduct(business.id, shopId, product),
       );
       const shopApp = Fastify();
+      const buyers = storeBuyers(db, 'synthetic-buyer-test-secret');
+      let delivery: { email: string; code: string; host: string } | undefined;
       siteHosting(
         shopApp,
         agent,
         'https://studio.example.test',
         'sites.example.test',
         async () => {},
+        {
+          buyers,
+          sendCode: async (email, code, host) => {
+            delivery = { email, code, host };
+          },
+          limit: async () => {},
+          paymentOrigin: 'https://studio.example.test',
+        },
       );
       try {
         const host = shopId + '.sites.example.test';
@@ -878,6 +889,11 @@ test(
         const catalogPath = '/store/catalog';
         assert.equal(
           (await shopApp.inject({ url: catalogPath, headers: { host } }))
+            .statusCode,
+          404,
+        );
+        assert.equal(
+          (await shopApp.inject({ url: '/store/account', headers: { host } }))
             .statusCode,
           404,
         );
@@ -1285,6 +1301,142 @@ test(
           (await shopApp.inject({ url: imagePath, headers: { host } }))
             .statusCode,
           404,
+        );
+
+        const accountPath = '/store/account';
+        const history = (cookie?: string, accountHost = host) =>
+          shopApp.inject({
+            url: accountPath,
+            headers: { host: accountHost, ...(cookie ? { cookie } : {}) },
+          });
+        const postAccount = (
+          path: string,
+          values: Record<string, string>,
+          cookie?: string,
+        ) =>
+          shopApp.inject({
+            method: 'POST',
+            url: accountPath + path,
+            headers: {
+              ...browser,
+              'content-type': 'application/x-www-form-urlencoded',
+              ...(cookie ? { cookie } : {}),
+            },
+            payload: new URLSearchParams(values).toString(),
+          });
+        assert.doesNotMatch((await history()).body, new RegExp(firstId, 'u'));
+        assert.match((await history()).body, /Email me a code/u);
+        const challengePage = await postAccount('/code', {
+          email: 'Buyer@Example.test',
+        });
+        assert.equal(challengePage.statusCode, 200);
+        assert.equal(delivery?.email, 'buyer@example.test');
+        assert.equal(delivery?.host, host);
+        assert.ok(delivery?.code);
+        const challenge = /name="challenge" value="([a-f0-9-]+)"/u.exec(
+          challengePage.body,
+        )?.[1];
+        assert.ok(challenge);
+        assert.equal(
+          (
+            await postAccount('/verify', {
+              challenge,
+              code: delivery.code === '000000' ? '111111' : '000000',
+            })
+          ).statusCode,
+          401,
+        );
+        const verified = await postAccount('/verify', {
+          challenge,
+          code: delivery.code,
+        });
+        assert.equal(verified.statusCode, 303);
+        const header = String(verified.headers['set-cookie']);
+        assert.match(
+          header,
+          /^__Host-bw-buyer=.*HttpOnly; SameSite=Lax; Max-Age=\d+; Secure/u,
+        );
+        const buyerCookie = header.split(';')[0]!;
+        assert.equal(
+          (await postAccount('/verify', { challenge, code: delivery.code }))
+            .statusCode,
+          401,
+        );
+        const customerPage = await history(buyerCookie);
+        assert.equal(customerPage.headers['cache-control'], 'no-store');
+        assert.match(customerPage.body, new RegExp(firstId, 'u'));
+        assert.doesNotMatch(customerPage.body, new RegExp(variantOrder, 'u'));
+        assert.match(customerPage.body, /Copper &lt;Kettle&gt;/u);
+
+        const signup = await buyers.challenge(shopId, 'new-buyer@example.test');
+        const wrongCode = signup.code === '111111' ? '222222' : '111111';
+        for (let attempt = 0; attempt < 5; attempt++)
+          assert.equal(await buyers.verify(shopId, signup.id, wrongCode), null);
+        assert.equal(await buyers.verify(shopId, signup.id, signup.code), null);
+        const fresh = await buyers.challenge(shopId, 'new-buyer@example.test');
+        assert.ok(await buyers.verify(shopId, fresh.id, fresh.code));
+        const merchants = await agent.generatedStore.read(business.id, shopId);
+        const freshCustomer = merchants?.customers.find(
+          (customer) => customer.email === 'new-buyer@example.test',
+        );
+        assert.ok(freshCustomer?.joinedAt);
+        assert.equal(freshCustomer.orderCount, 0);
+        assert.equal(freshCustomer.lastOrderAt, null);
+
+        const sibling = await agent.saveArtifact({
+          businessId: otherBusiness.id,
+          kind: 'website',
+          title: 'Sibling store',
+          body: '<h1>Sibling store</h1>',
+          state: 'approved',
+        });
+        await client`insert into generated_stores(site_id, first_revision, currency) values (${sibling.id}, 1, 'AUD')`;
+        assert.ok(await agent.publish(otherBusiness.id, sibling.id, 1, true));
+        const siblingPage = await history(
+          buyerCookie,
+          sibling.id + '.sites.example.test',
+        );
+        assert.match(siblingPage.body, /Email me a code/u);
+        assert.doesNotMatch(siblingPage.body, new RegExp(firstId, 'u'));
+
+        const filters = (await agent.generatedStore.read(
+          business.id,
+          shopId,
+        ))!.products.find((value) => value.name === 'Filters');
+        assert.ok(filters);
+        const withSession = randomUUID();
+        const sessionOrder = await shopApp.inject({
+          method: 'POST',
+          url: '/store/orders',
+          headers: {
+            ...browser,
+            cookie: buyerCookie,
+            'content-type': 'application/x-www-form-urlencoded',
+          },
+          payload: new URLSearchParams({
+            id: withSession,
+            email: 'spoof@example.test',
+            [`cart:${filters.id}:${filters.revision}`]: '1',
+          }).toString(),
+        });
+        assert.equal(sessionOrder.statusCode, 200);
+        assert.equal(
+          (await agent.generatedStore.read(business.id, shopId))?.orders.find(
+            (value) => value.id === withSession,
+          )?.email,
+          'buyer@example.test',
+        );
+        assert.match(
+          (await history(buyerCookie)).body,
+          new RegExp(withSession, 'u'),
+        );
+        assert.equal(
+          (await postAccount('/sign-out', {}, buyerCookie)).statusCode,
+          303,
+        );
+        assert.doesNotMatch(
+          (await history(buyerCookie)).body,
+          new RegExp(withSession, 'u'),
         );
       } finally {
         await shopApp.close();

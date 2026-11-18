@@ -2,7 +2,11 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { storeCurrency } from '@brightwork/shared';
-import type { StoreOrder, StoreProduct } from '@brightwork/shared';
+import type {
+  StoreCustomer,
+  StoreOrder,
+  StoreProduct,
+} from '@brightwork/shared';
 import { api, errorMessage, write } from '../auth/client';
 import { Button, Pill, Segmented } from '../ui/primitives';
 import styles from './store-dashboard.module.css';
@@ -11,6 +15,8 @@ type Dashboard = {
   currency: string;
   products: StoreProduct[];
   orders: StoreOrder[];
+  customers: StoreCustomer[];
+  counts: { openRequests: number; awaitingFulfillment: number };
   paymentReady?: boolean;
 };
 const sections = ['Overview', 'Products', 'Orders', 'Customers'] as const;
@@ -146,14 +152,6 @@ export function StoreDashboard({
     };
     await save({ action: 'product', product });
   }
-  const customers = new Map<string, { orders: number; recent: string }>();
-  for (const order of store.orders) {
-    const previous = customers.get(order.email);
-    customers.set(order.email, {
-      orders: (previous?.orders ?? 0) + 1,
-      recent: previous?.recent ?? order.createdAt,
-    });
-  }
   const counts = [
     {
       label: 'Active products',
@@ -163,11 +161,11 @@ export function StoreDashboard({
     },
     {
       label: 'Open requests',
-      value: store.orders.filter(({ status }) => status === 'requested').length,
+      value: store.counts.openRequests,
     },
     {
       label: 'Awaiting fulfillment',
-      value: store.orders.filter(({ status }) => status === 'confirmed').length,
+      value: store.counts.awaitingFulfillment,
     },
   ];
 
@@ -596,29 +594,35 @@ export function StoreDashboard({
       {section === 'Customers' && (
         <>
           <h3>Customers</h3>
-          {customers.size ? (
+          {store.customers.length ? (
             <div className={styles.table}>
               <table>
                 <thead>
                   <tr>
                     <th>Email</th>
-                    <th>Recent requests</th>
+                    <th>Orders</th>
+                    <th>Account</th>
                     <th>Last request</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...customers].map(([email, customer]) => (
-                    <tr key={email}>
-                      <th scope="row">{email}</th>
-                      <td>{customer.orders}</td>
-                      <td>{new Date(customer.recent).toLocaleDateString()}</td>
+                  {store.customers.map((customer) => (
+                    <tr key={customer.email}>
+                      <th scope="row">{customer.email}</th>
+                      <td>{customer.orderCount}</td>
+                      <td>{customer.joinedAt ? 'Verified' : 'Guest'}</td>
+                      <td>
+                        {customer.lastOrderAt
+                          ? new Date(customer.lastOrderAt).toLocaleDateString()
+                          : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p>Customers appear here after their first order request.</p>
+            <p>Verified accounts and guest buyers will appear here.</p>
           )}
         </>
       )}

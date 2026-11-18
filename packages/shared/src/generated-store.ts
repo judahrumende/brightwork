@@ -44,3 +44,10 @@ export type StoreOrder = {
     | null;
   createdAt: string;
 };
+
+export type StoreCustomer = {
+  email: string;
+  orderCount: number;
+  lastOrderAt: string | null;
+  joinedAt: string | null;
+};

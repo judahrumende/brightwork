@@ -1,3 +1,11 @@
+import {
+  buyerPath,
+  isBuyerRoute,
+  readBuyer,
+  registerBuyerRoutes,
+} from './store-buyer-routes';
+import type { BuyerAccess } from './store-buyer-routes';
+import { escape } from './storefront-html';
 import { sendStorePhoto } from './store-product-photo';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -11,20 +19,12 @@ const photoPath = '/store/photos';
 const orderBodyLimit = 128 * 1024;
 export function storePublicRoute(method: string, route: string) {
   return (
+    isBuyerRoute(method, route) ||
     (method === 'POST' && route === orderPath) ||
     (['GET', 'HEAD'].includes(method) &&
       (route === catalogPath || route === photoPath + '/:product'))
   );
 }
-
-const escape = (value: string) =>
-  value.replace(/[&<>"']/gu, (char) => {
-    return (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[
-        char
-      ] ?? char
-    );
-  });
 
 export function registerStorefront(
   app: FastifyInstance,
@@ -32,6 +32,7 @@ export function registerStorefront(
   siteId: (hostname: string) => string | null,
   origin: (id: string) => string,
   limitOrder: (key: string) => Promise<void>,
+  buyerAccess?: BuyerAccess,
 ) {
   void app.register((scope, _opts, done) => {
     scope.addContentTypeParser(
@@ -64,8 +65,18 @@ export function registerStorefront(
       );
     });
     scope.get(catalogPath, async (request, reply) => {
-      const store = await stores.catalog(siteId(request.hostname)!);
+      const site = siteId(request.hostname)!;
+      const store = await stores.catalog(site);
       if (!store) return reply.code(404).send('Store not found');
+      const buyer = await readBuyer(
+        buyerAccess,
+        site,
+        origin(site),
+        request.headers.cookie,
+      );
+      const accountLink = buyerAccess
+        ? `<a href="${buyerPath}">My orders</a>`
+        : '';
       const price = new Intl.NumberFormat('en', {
         style: 'currency',
         currency: store.currency,
@@ -118,13 +129,17 @@ export function registerStorefront(
           h2,h3{margin:0} img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#f8f7f4;border-radius:.5rem;margin-bottom:1rem}.option{display:grid;gap:.5rem;margin-top:1rem}.option img{max-width:12rem;margin-bottom:0} form,label{display:grid;gap:.5rem}form{margin-top:1rem;gap:1rem}
           input,button{font:inherit;padding:.5rem .75rem;width:100%;border-radius:.375rem;border:1px solid #88867e}button{background:#254a3e;color:white;cursor:pointer}
         </style>
-        <main><a href="/">← ${escape(store.title)}</a><h1>Shop</h1><p>Choose quantities and send one order request for the store to confirm.</p>
+        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>Choose quantities and send one order request for the store to confirm.</p>
         <form method="post" action="${orderPath}">
           <input type="hidden" name="id" value="${randomUUID()}">
           <section aria-label="Products">${products || '<p>Products will appear here when they are available.</p>'}</section>
           ${
             available
-              ? `<div class="checkout"><label>Email for your order <input type="email" required name="email" maxlength="254" autocomplete="email"></label>
+              ? `<div class="checkout">${
+                  buyer
+                    ? `<p>Order email · ${escape(buyer)}</p>`
+                    : '<label>Email for your order <input type="email" required name="email" maxlength="254" autocomplete="email"></label>'
+                }
           <button>Request order</button></div>`
               : ''
           }
@@ -139,8 +154,16 @@ export function registerStorefront(
           return reply
             .code(403)
             .send('Open the store catalog to request an order.');
+        const buyer = await readBuyer(
+          buyerAccess,
+          id,
+          origin(id),
+          request.headers.cookie,
+        );
         const fields = z.record(z.string(), z.string()).safeParse(request.body);
-        const values = fields.success ? fields.data : null;
+        const values: Record<string, string> | null = fields.success
+          ? { ...fields.data, ...(buyer ? { email: buyer } : {}) }
+          : null;
         const cart = values
           ? Object.entries(values).filter(([key]) => key.startsWith('cart:'))
           : [];
@@ -181,10 +204,18 @@ export function registerStorefront(
         return reply
           .type('text/html; charset=utf-8')
           .send(
-            `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Order requested</title><main><h1>Order requested</h1><p>The store has received your request. No payment was taken.</p><p>Reference: ${result.data.id}</p><a href="${catalogPath}">Back to catalog</a></main></html>`,
+            `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Order requested</title><main><h1>Order requested</h1><p>The store has received your request. No payment was taken.</p><p>Reference: ${result.data.id}</p><a href="${catalogPath}">Back to catalog</a>${buyerAccess ? ` <a href="${buyerPath}">My orders</a>` : ''}</main></html>`,
           );
       },
     );
+    if (buyerAccess)
+      registerBuyerRoutes(
+        scope,
+        buyerAccess,
+        siteId,
+        origin,
+        stores.isPublished,
+      );
     done();
   });
 }

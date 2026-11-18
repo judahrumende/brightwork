@@ -1,8 +1,10 @@
+import { storeOrderRows } from './store-order-rows';
 import { productPhoto } from './store-product-photo';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { storeCurrency, storeProductInput } from '@brightwork/shared';
 import type {
+  StoreCustomer,
   StoreOrder,
   StoreOrderLine,
   StoreProduct,
@@ -87,7 +89,7 @@ export function generatedStores(db: Database) {
     async read(businessId: string, siteId: string) {
       const store = await scopedStore(businessId, siteId);
       if (!store) return null;
-      const [products, orders] = await Promise.all([
+      const [products, orders, customers, counts] = await Promise.all([
         db.execute<StoreProduct>(sql`
           select products.id, products.name, products.description, products.price, products.stock,
             products.active, products.revision, products.parent_id as "parentId", products.sku, photos.alt as "photoAlt"
@@ -98,26 +100,29 @@ export function generatedStores(db: Database) {
           order by coalesce(parent.name, products.name), coalesce(products.parent_id, products.id),
             products.parent_id is not null, products.name, products.id
         `),
-        db.execute<StoreOrder>(sql`
-          select orders.id, orders.email, orders.currency, orders.status, orders.created_at as "createdAt",
-            (select json_agg(json_build_object('productId', product_id, 'productName', product_name,
-              'unitPrice', unit_price, 'quantity', quantity) order by product_name, product_id)
-             from generated_store_order_lines where site_id = orders.site_id and order_id = orders.id) as items,
-            orders.sale_id as "saleId",
-            case
-              when orders.sale_id is null then null
-              when sales.closed_at is not null then 'closed'
-              when sales.amount_refunded = sales.amount then 'refunded'
-              when sales.amount_refunded > 0 then 'partially_refunded'
-              when sales.paid_at is not null then 'paid'
-              else 'awaiting_payment'
-            end as payment
-          from generated_store_orders as orders
-          left join stripe_sales as sales on sales.id = orders.sale_id and sales.business_id = ${businessId}
-          where orders.site_id = ${siteId} order by orders.created_at desc, orders.id desc limit 200
+        db.execute<StoreOrder>(
+          storeOrderRows(sql`orders.site_id = ${siteId}`, 200),
+        ),
+        db.execute<StoreCustomer>(sql`
+          with order_history as (
+            select email, count(*)::int as count, max(created_at) as latest
+            from generated_store_orders where site_id = ${siteId} group by email
+          ), verified as (
+            select email, created_at from generated_store_buyers where site_id = ${siteId}
+          )
+          select coalesce(order_history.email, verified.email) as email,
+            coalesce(order_history.count, 0) as "orderCount",
+            order_history.latest as "lastOrderAt", verified.created_at as "joinedAt"
+          from order_history full join verified on order_history.email = verified.email
+          order by greatest(order_history.latest, verified.created_at) desc, email limit 200
+        `),
+        db.execute<{ openRequests: number; awaitingFulfillment: number }>(sql`
+          select count(*) filter (where status = 'requested')::int as "openRequests",
+            count(*) filter (where status = 'confirmed')::int as "awaitingFulfillment"
+          from generated_store_orders where site_id = ${siteId}
         `),
       ]);
-      return { ...store, products, orders };
+      return { ...store, products, orders, customers, counts: counts[0] };
     },
     async saveProduct(
       businessId: string,
@@ -214,6 +219,12 @@ export function generatedStores(db: Database) {
         `);
         return result.length === 1;
       });
+    },
+    async isPublished(siteId: string) {
+      const [store] = await db.execute(
+        sql`select site_id from generated_stores where site_id = ${siteId} and ${liveScope}`,
+      );
+      return Boolean(store);
     },
     async catalog(siteId: string) {
       const [store] = await db.execute<{ currency: string; title: string }>(sql`

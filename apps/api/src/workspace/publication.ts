@@ -1,3 +1,4 @@
+import type { BuyerAccess } from './store-buyer-routes';
 import { registerStorefront, storePublicRoute } from './storefront';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -19,6 +20,7 @@ export function siteHosting(
   origin: string,
   domain: string | undefined,
   limitOrder: (key: string) => Promise<void>,
+  buyerAccess?: BuyerAccess,
 ) {
   const parsed = hostSchema.safeParse(domain);
   if (!parsed.success) return null;
@@ -106,6 +108,13 @@ export function siteHosting(
     if (!slug.success) return reply.code(404).send('Page not found');
     return serveSite(request, reply, slug.data.page);
   });
-  registerStorefront(app, store.generatedStore, siteId, url, limitOrder);
+  registerStorefront(
+    app,
+    store.generatedStore,
+    siteId,
+    url,
+    limitOrder,
+    buyerAccess,
+  );
   return { url };
 }
