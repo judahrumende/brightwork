@@ -232,6 +232,13 @@
       "when": 1794834000032,
       "tag": "0032_stripe_connect",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794834000033,
+      "tag": "0033_referrals",
+      "breakpoints": true
     }
   ]
 }

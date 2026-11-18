@@ -10,6 +10,7 @@ import {
   creditEntries,
 } from '../db/schema';
 import { creditDecimal, creditUnits } from './credit-amount';
+import { reconcileReferral, referralInvoice } from './referrals';
 
 const subscriptionSchema = z.object({
   id: z.string().startsWith('sub_'),
@@ -40,6 +41,25 @@ const subscribedEvents = new Set([
   'charge.refunded',
 ]);
 
+const invoiceId = z.string().regex(/^in_[a-z0-9_]+$/iu);
+const invoiceLines = z.object({
+  has_more: z.boolean(),
+  data: z.array(
+    z.object({ id: z.string(), price: z.object({ id: z.string() }).nullish() }),
+  ),
+});
+const referralPayment = z.object({
+  id: invoiceId,
+  livemode: z.literal(false),
+  customer: z.string(),
+  status: z.string().nullable(),
+  subscription: z.string().startsWith('sub_').nullish(),
+  amount_paid: z.int().nonnegative(),
+  status_transitions: z.object({ paid_at: z.int().nullable() }),
+  charge: z.object({ paid: z.boolean(), refunded: z.boolean() }).nullish(),
+  lines: invoiceLines,
+});
+
 export function stripeBilling(
   db: Database,
   config: {
@@ -48,13 +68,75 @@ export function stripeBilling(
     price: string;
     origin: string;
     renewalCredits: string;
+    referralCredits?: string;
   },
   transport: typeof fetch = fetch,
 ) {
   if (!config.key.startsWith('sk_test_') && !config.key.startsWith('rk_test_'))
     throw new Error('Stripe billing requires a test-mode key');
   const planCredits = creditUnits(config.renewalCredits);
+  const referralCredits = creditUnits(config.referralCredits ?? '0');
   const stripe = stripeClient(config.key, transport);
+  async function firstReferralPayment(customerId: string) {
+    let first: z.infer<typeof referralPayment> | undefined;
+    let cursor: string | undefined;
+    for (;;) {
+      const query = new URLSearchParams({
+        customer: customerId,
+        status: 'paid',
+        limit: '100',
+        'expand[]': 'data.charge',
+      });
+      if (cursor) query.set('starting_after', cursor);
+      const page = z
+        .object({ data: z.array(referralPayment), has_more: z.boolean() })
+        .parse(await stripe('invoices?' + query));
+      for (const invoice of page.data) {
+        if (
+          invoice.customer !== customerId ||
+          invoice.status !== 'paid' ||
+          !invoice.charge?.paid ||
+          !invoice.subscription ||
+          !invoice.amount_paid ||
+          invoice.status_transitions.paid_at === null
+        )
+          continue;
+        let lines = invoice.lines;
+        while (
+          !lines.data.some((line) => line.price?.id === config.price) &&
+          lines.has_more
+        ) {
+          const last = lines.data.at(-1);
+          if (!last) throw new Error('Stripe invoice lines are incomplete.');
+          const lineQuery = new URLSearchParams({
+            limit: '100',
+            starting_after: last.id,
+          });
+          lines = invoiceLines.parse(
+            await stripe('invoices/' + invoice.id + '/lines?' + lineQuery),
+          );
+          if (lines.data.at(-1)?.id === last.id)
+            throw new Error('Stripe repeated an invoice line page.');
+        }
+        if (!lines.data.some((line) => line.price?.id === config.price))
+          continue;
+        const firstTime = first?.status_transitions.paid_at;
+        if (
+          firstTime == null ||
+          invoice.status_transitions.paid_at < firstTime ||
+          (invoice.status_transitions.paid_at === firstTime &&
+            first &&
+            invoice.id < first.id)
+        )
+          first = invoice;
+      }
+      if (!page.has_more) return first;
+      const next = page.data.at(-1)?.id;
+      if (!next || next === cursor)
+        throw new Error('Stripe invoice history is incomplete.');
+      cursor = next;
+    }
+  }
   const customerFor = async (accountId: string) => {
     const [row] = await db
       .select()
@@ -221,6 +303,36 @@ export function stripeBilling(
                 .onConflictDoNothing()
                 .returning({ id: billingEvents.id });
               if (!seen) return;
+              if (
+                event.type === 'invoice.paid' ||
+                event.type === 'charge.refunded'
+              ) {
+                const bound = await referralInvoice(tx, row.accountId);
+                const payment = bound
+                  ? referralPayment.parse(
+                      await stripe(
+                        'invoices/' +
+                          invoiceId.parse(bound) +
+                          '?expand[]=charge',
+                      ),
+                    )
+                  : bound === null && referralCredits > 0n
+                    ? await firstReferralPayment(customerId)
+                    : undefined;
+                if (
+                  payment?.customer === customerId &&
+                  payment.status === 'paid' &&
+                  payment.charge?.paid &&
+                  payment.amount_paid > 0
+                )
+                  await reconcileReferral(
+                    tx,
+                    row.accountId,
+                    payment.id,
+                    referralCredits,
+                    payment.charge.refunded,
+                  );
+              }
               const query = new URLSearchParams({
                 customer: customerId,
                 status: 'all',

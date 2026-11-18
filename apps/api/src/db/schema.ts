@@ -595,7 +595,7 @@ export const creditEntries = pgTable(
     }),
     operationKey: text('operation_key').notNull(),
     kind: text({
-      enum: ['starter', 'model', 'tool', 'subscription', 'refund'],
+      enum: ['starter', 'model', 'tool', 'subscription', 'refund', 'referral'],
     }).notNull(),
     amount: numeric({ precision: 24, scale: 10 }).notNull(),
     createdAt: date('created_at').defaultNow().notNull(),

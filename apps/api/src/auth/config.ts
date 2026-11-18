@@ -35,6 +35,13 @@ export const authEnv = z.object({
       .regex(/^\d{1,14}(?:\.\d{1,10})?$/u)
       .default('0'),
   ),
+  STRIPE_REFERRAL_CREDITS: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^\d{1,14}(?:\.\d{1,10})?$/u)
+      .default('0'),
+  ),
   GITHUB_SITE_WORKSPACE_ID: optionalValue.pipe(z.uuid().optional()),
   GITHUB_SITE_REPO: optionalValue.pipe(
     z
