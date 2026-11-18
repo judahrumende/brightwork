@@ -869,6 +869,49 @@ test(
       assert.deepEqual(tasks.json().tasks, plan.sprint.items);
       const sessionContract =
         observedContracts['GET /api/companies/:id/run/session'].response;
+      {
+        const readQueue = (
+          chatId: string,
+          cookie = freshCookie,
+          tag?: string,
+        ) =>
+          server.inject({
+            url: '/api/companies/' + studio + '/ted/chats/' + chatId + '/queue',
+            headers: { cookie, ...(tag ? { 'if-none-match': tag } : {}) },
+          });
+        const direct = await readQueue(withFiles.id);
+        assert.equal(direct.statusCode, 200);
+        assert.equal(direct.json().items[0]?.id, withFiles.id);
+        assert.equal(direct.json().paused, false);
+        const queued = await readQueue(run.id);
+        assert.equal(queued.statusCode, 200);
+        assert.equal(queued.json().paused, true);
+        assert.equal(queued.json().items[0]?.turnId, runTurn.turnId);
+        assert.equal(queued.json().turn.id, runTurn.turnId);
+        const queueTag = queued.headers.etag;
+        assert.ok(typeof queueTag === 'string');
+        assert.equal(
+          (await readQueue(run.id, freshCookie, queueTag)).statusCode,
+          304,
+        );
+        assert.equal(
+          (await readQueue(run.id, separateCookie, queueTag)).statusCode,
+          404,
+        );
+        const missing = await readQueue(randomUUID(), freshCookie);
+        assert.equal(missing.statusCode, 404);
+        await runs.control(studio, run.id, 'resume');
+        const resumed = await readQueue(run.id, freshCookie, queueTag);
+        assert.equal(resumed.statusCode, 200);
+        assert.equal(resumed.json().paused, false);
+        await runs.control(studio, run.id, 'pause');
+        const history = await server.inject({
+          url: '/api/companies/' + studio + '/ted/chats/' + run.id,
+          headers: { cookie: freshCookie },
+        });
+        assert.equal(history.statusCode, 200);
+        assert.equal(history.json().turns[0]?.id, runTurn.turnId);
+      }
       const currentRunSession = await readRun('session');
       assert.equal(currentRunSession.statusCode, 200);
       assert.equal(

@@ -2085,6 +2085,7 @@
     {
       "method": "GET",
       "path": "/api/companies/:id/ted/chats/:id/queue",
+      "optionalResponsePaths": ["turn"],
       "statuses": {
         "0": 3,
         "200": 2,

@@ -30,6 +30,7 @@ const workspaceIds = new Set<string>();
 const historyVisits = new Map<string, number>();
 const creationVisits = new Map<string, number>();
 const capturedBuilds = new Set<string>();
+const capturedChats = new Set<string>();
 for (const entry of log.entries) {
   const url = new URL(entry.request.url);
   const workspace = url.pathname.match(
@@ -39,6 +40,10 @@ for (const entry of log.entries) {
   workspaceIds.add(workspace);
   const build = url.pathname.match(/\/build\/runs\/([0-9a-f-]{36})$/u)?.[1];
   if (build) capturedBuilds.add(build);
+  const chat = url.pathname.match(
+    /\/ted\/chats\/([0-9a-f-]{36})(?:\/queue)?$/u,
+  )?.[1];
+  if (chat) capturedChats.add(chat);
   const creation = url.pathname.match(
     /\/creations\/([0-9a-f-]{36})(?:\/|$)/u,
   )?.[1];
@@ -166,6 +171,19 @@ try {
     });
     const [capturedBuild] = capturedBuilds;
     if (build && capturedBuild) fixtureIds[capturedBuild] = build.build_id;
+  }
+  for (const capturedChat of capturedChats) {
+    if (fixtureIds[capturedChat]) continue;
+    const chat = await workStore.addTurn(
+      workspace.id,
+      account.account.id,
+      'Summarize a fixture project',
+    );
+    await database.db
+      .update(agentTurns)
+      .set({ state: 'completed', answer: 'Fixture summary', revision: 1 })
+      .where(eq(agentTurns.id, chat.id));
+    fixtureIds[capturedChat] = chat.id;
   }
   const origin = 'http://127.0.0.1:5190';
   registerAuth(
