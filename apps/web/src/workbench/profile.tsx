@@ -9,6 +9,7 @@ import { Sky } from '../sky/sky';
 import { creditKey, sessionKey } from './session';
 import styles from './workbench.module.css';
 import { BillingSettings } from './billing-settings';
+import { ReferralSettings } from './referral-settings';
 
 const creditLabels = {
   starter: 'Starter credits',
@@ -292,7 +293,10 @@ export function Profile({ session }: { session: Session }) {
               {section === 'Credits' ? (
                 <CreditHistory available={available} />
               ) : section === 'Billing' ? (
-                <BillingSettings />
+                <>
+                  <BillingSettings />
+                  <ReferralSettings />
+                </>
               ) : (
                 <>
                   <div className={styles.accountCard}>

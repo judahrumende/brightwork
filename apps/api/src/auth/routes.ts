@@ -283,6 +283,7 @@ export function registerAuth(
           price: env.STRIPE_TEST_PRICE,
           origin,
           renewalCredits: env.STRIPE_RENEWAL_CREDITS,
+          referralCredits: env.STRIPE_REFERRAL_CREDITS,
         })
       : null;
   const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
@@ -779,7 +780,10 @@ export function registerAuth(
     reply.header('Cache-Control', 'no-store');
     try {
       const { account } = await activeSession(request);
-      return await referrals.status(account.id);
+      return {
+        ...(await referrals.status(account.id)),
+        reward: billing ? env.STRIPE_REFERRAL_CREDITS : '0',
+      };
     } catch (error) {
       return authError(error, reply);
     }

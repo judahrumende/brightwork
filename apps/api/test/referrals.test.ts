@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -7,6 +7,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { accounts, creditEntries } from '../src/db/schema';
+import { stripeBilling } from '../src/workspace/stripe-billing';
 import { authStore } from '../src/auth/store';
 import { eq } from 'drizzle-orm';
 import {
@@ -97,6 +98,134 @@ test(
         ['referral', 0.5],
         ['refund', -0.5],
       ],
+    );
+    const signedBuyer = await auth.beginEmail('stripe-referral@example.test');
+    const signedToken = await auth.verifyCode(
+      signedBuyer.id,
+      'stripe-referral@example.test',
+      signedBuyer.code,
+      code,
+    );
+    assert.ok(signedToken);
+    const signedAccount = await auth.readSession(signedToken);
+    assert.ok(signedAccount);
+    const secret = 'whsec_referral_fixture';
+    let refunded = false;
+    let historyReads = 0;
+    const stripe = stripeBilling(
+      db,
+      {
+        key: 'sk_test_fixture',
+        price: 'price_plan',
+        webhook: secret,
+        origin: 'https://brightwork.example.test',
+        renewalCredits: '0',
+        referralCredits: '2',
+      },
+      async (input) => {
+        const path = new URL(String(input));
+        const invoice = (id: string, paidAt: number, price = 'price_plan') => ({
+          id,
+          livemode: false,
+          customer: 'cus_referral',
+          status: 'paid',
+          subscription: 'sub_referral',
+          amount_paid: 200,
+          status_transitions: { paid_at: paidAt },
+          charge: { paid: true, refunded: id === 'in_qualifying' && refunded },
+          lines: {
+            has_more: false,
+            data: [{ id: 'il_fixture', price: { id: price } }],
+          },
+        });
+        if (path.pathname === '/v1/customers')
+          return Response.json({ id: 'cus_referral', livemode: false });
+        if (path.pathname === '/v1/checkout/sessions')
+          return Response.json({
+            url: 'https://checkout.stripe.com/c/pay/fixture',
+          });
+        if (path.pathname === '/v1/subscriptions')
+          return Response.json({ data: [] });
+        if (path.pathname === '/v1/invoices/in_qualifying')
+          return Response.json(invoice('in_qualifying', 2));
+        assert.equal(path.pathname, '/v1/invoices');
+        assert.equal(path.searchParams.get('customer'), 'cus_referral');
+        historyReads++;
+        return Response.json(
+          path.searchParams.has('starting_after')
+            ? {
+                data: [
+                  invoice('in_qualifying', 2),
+                  invoice('in_otherprice', 1, 'price_other'),
+                ],
+                has_more: false,
+              }
+            : { data: [invoice('in_later', 3)], has_more: true },
+        );
+      },
+    );
+    await stripe.checkout(
+      signedAccount.account.id,
+      signedAccount.account.email,
+    );
+    stripe.register(app);
+    function deliver(id: string, type: string, key = secret) {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const payload = JSON.stringify({
+        id,
+        type,
+        livemode: false,
+        data: { object: { customer: 'cus_referral' } },
+      });
+      const sig = createHmac('sha256', key)
+        .update(timestamp + '.' + payload)
+        .digest('hex');
+      return app.inject({
+        url: '/api/webhooks/stripe',
+        method: 'POST',
+        payload,
+        headers: {
+          'content-type': 'application/json',
+          'stripe-signature': 't=' + timestamp + ',v1=' + sig,
+        },
+      });
+    }
+    assert.equal(
+      (await deliver('evt_referral', 'invoice.paid', 'incorrect')).statusCode,
+      401,
+    );
+    assert.equal(
+      (await deliver('evt_referral', 'invoice.paid')).statusCode,
+      200,
+    );
+    assert.equal(
+      (await deliver('evt_referral', 'invoice.paid')).statusCode,
+      200,
+    );
+    assert.equal(historyReads, 2);
+    assert.equal((await program.status(owner.id)).conversions, 1);
+    refunded = true;
+    assert.equal(
+      (await deliver('evt_reversal', 'charge.refunded')).statusCode,
+      200,
+    );
+    assert.equal((await program.status(owner.id)).conversions, 0);
+    const final = await db
+      .select()
+      .from(creditEntries)
+      .where(eq(creditEntries.accountId, owner.id));
+    assert.equal(
+      final.find((entry) => entry.operationKey === 'referral:in_qualifying')
+        ?.kind,
+      'referral',
+    );
+    assert.equal(
+      Number(
+        final.find(
+          (entry) => entry.operationKey === 'refund:referral:in_qualifying',
+        )?.amount,
+      ),
+      -2,
     );
   },
 );

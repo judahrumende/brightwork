@@ -1049,3 +1049,30 @@ test('Stripe Connect creates a shareable sale and waits for payment confirmation
     page.getByRole('button', { name: 'Continue to Stripe Checkout' }),
   ).toHaveCount(0);
 });
+
+test('Billing shows a personal referral link and conversion totals', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const code = '9501a976-910a-4de7-9f14-25c0948e4b25';
+  await page.route('**/api/me/billing', (route) =>
+    route.fulfill({
+      json: { enabled: true, state: 'free', paid: false, testMode: true },
+    }),
+  );
+  await page.route('**/api/me/referrals', (route) =>
+    route.fulfill({ json: { code, signups: 3, conversions: 2, reward: '5' } }),
+  );
+  await page.goto(workbench);
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Billing', exact: true }).click();
+  const referrals = page.getByRole('region', { name: 'Referrals' });
+  await expect(referrals.getByLabel('Referral link')).toHaveValue(
+    new URL('/api/referrals/visit?code=' + code, page.url()).href,
+  );
+  await expect(
+    referrals.getByText('3 sign-ups · 2 paid referrals'),
+  ).toBeVisible();
+  await expect(referrals.getByText(/Earn 5 credits/)).toBeVisible();
+});

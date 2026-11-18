@@ -78,6 +78,14 @@ export function referralProgram(db: Database) {
   };
 }
 
+export async function referralInvoice(tx: Transaction, account: string) {
+  const [record] = await tx
+    .select({ invoiceId: referrals.invoiceId })
+    .from(referrals)
+    .where(eq(referrals.referredId, account));
+  return record?.invoiceId ?? (record ? null : undefined);
+}
+
 export async function reconcileReferral(
   tx: Transaction,
   referredId: string,
