@@ -41,6 +41,15 @@ export function creditLedger(db: Database, config: CreditConfig) {
     return creditDecimal(creditUnits(row?.amount ?? '0'));
   }
 
+  type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+  async function lockAccount(tx: Transaction, id: string) {
+    const [row] = await tx
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(eq(accounts.id, id))
+      .for('no key update');
+    return Boolean(row);
+  }
   return {
     async open(accountId: string) {
       await grantStarter(db, accountId);
@@ -60,6 +69,42 @@ export function creditLedger(db: Database, config: CreditConfig) {
         .limit(50);
       return { entries };
     },
+    async reserveMedia(
+      tx: Transaction,
+      accountId: string,
+      jobId: string,
+      kind: 'image' | 'video' | 'voice',
+      amount: string,
+    ) {
+      const reserved = creditUnits(amount);
+      if (reserved < 0n || !(await lockAccount(tx, accountId))) return false;
+      await grantStarter(tx, accountId);
+      if (creditUnits(await balance(tx, accountId)) < reserved) return false;
+      await tx.insert(creditEntries).values({
+        accountId,
+        kind,
+        operationKey: 'media:' + jobId,
+        amount: creditDecimal(-reserved),
+      });
+      return true;
+    },
+    async refundMedia(
+      tx: Transaction,
+      accountId: string,
+      jobId: string,
+      amount: string,
+    ) {
+      if (!(await lockAccount(tx, accountId))) return;
+      await tx
+        .insert(creditEntries)
+        .values({
+          accountId,
+          kind: 'refund',
+          operationKey: 'refund:media:' + jobId,
+          amount: creditDecimal(creditUnits(amount)),
+        })
+        .onConflictDoNothing();
+    },
     async debit(
       accountId: string,
       turnId: string,
@@ -72,12 +117,7 @@ export function creditLedger(db: Database, config: CreditConfig) {
           : config.TOOL_CREDITS_PER_CALL,
       );
       return db.transaction(async (tx) => {
-        const [account] = await tx
-          .select({ id: accounts.id })
-          .from(accounts)
-          .where(eq(accounts.id, accountId))
-          .for('no key update');
-        if (!account) return false;
+        if (!(await lockAccount(tx, accountId))) return false;
         await grantStarter(tx, accountId);
         const operationKey = turnId + ':' + suffix;
         const [existing] = await tx

@@ -2,6 +2,8 @@ import { creditConfig, creditLedger } from '../workspace/credits';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Redis from 'ioredis';
 import { agentStore } from '../workspace/agent-store';
+import { mediaEnv, mediaRates } from '../workspace/media-providers';
+import { mediaStore } from '../workspace/media-store';
 import { commerceInsights } from '../workspace/commerce-insights';
 import { registerWorkspace } from '../workspace/routes';
 import { runStore } from '../workspace/run-store';
@@ -419,6 +421,8 @@ export function registerAuth(
     commerce,
     sellerPayments,
     salesInsights: (id, range) => commerceInsights(database.db, id, range),
+    media: mediaStore(database.db, credits),
+    mediaRates: mediaRates(mediaEnv.parse(process.env)),
     domains: domainStore(database.db),
     vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
     runs: runStore(database.db),

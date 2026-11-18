@@ -1115,3 +1115,44 @@ test('Commerce insights shows provider totals, customer counts and the selected 
   await insights.getByRole('button', { name: 'Back to overview' }).click();
   await expect(entry).toBeFocused();
 });
+
+test('Build quotes each media capability and exposes the completed workspace asset', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [], hosting: false } }),
+  );
+  const endpoint = api + '/media';
+  const rates = { image: '1', video: '4', voice: '2' };
+  const jobs: object[] = [];
+  await page.route('**' + endpoint, (route) => {
+    if (route.request().method() === 'GET')
+      return route.fulfill({ json: { rates, jobs } });
+    const request = route.request().postDataJSON();
+    expect(request).toEqual({
+      id: expect.any(String),
+      kind: 'voice',
+      prompt: 'Welcome to our shop',
+      quotedCredits: '2',
+    });
+    jobs.push({ ...request, credits: '2', state: 'completed' });
+    return route.fulfill({ json: { id: request.id } });
+  });
+  await page.goto(workbench + '/build');
+  const media = page.getByRole('region', { name: 'Generated media' });
+  await expect(
+    media.getByRole('button', { name: 'Generate for 1 credits' }),
+  ).toBeVisible();
+  await media.getByLabel('Media type').selectOption('video');
+  await expect(
+    media.getByRole('button', { name: 'Generate for 4 credits' }),
+  ).toBeVisible();
+  await media.getByLabel('Media type').selectOption('voice');
+  await media.getByLabel('Script').fill('Welcome to our shop');
+  await media.getByRole('button', { name: 'Generate for 2 credits' }).click();
+  await expect(media.getByText('Voice · Ready · 2 credits')).toBeVisible();
+  await expect(
+    media.getByRole('link', { name: 'Download voice' }),
+  ).toHaveAttribute('href', new RegExp(endpoint + '/[0-9a-f-]{36}/asset$'));
+});

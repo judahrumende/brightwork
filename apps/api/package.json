@@ -7,9 +7,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/db/migrate.ts",
-    "test:integration": "tsx --test test/auth.test.ts test/automation.test.ts test/shopify.test.ts test/sms.test.ts test/meta-page-store.test.ts test/stripe-connect.test.ts test/referrals.test.ts test/commerce-insights.test.ts",
+    "test:integration": "tsx --test test/auth.test.ts test/automation.test.ts test/shopify.test.ts test/sms.test.ts test/meta-page-store.test.ts test/stripe-connect.test.ts test/referrals.test.ts test/commerce-insights.test.ts test/media-store.test.ts",
     "test:research": "tsx --test test/research.test.ts",
-    "test:growth": "node --import tsx --test test/growth.test.ts test/github-site-sync.test.ts test/meta-page-webhook.test.ts test/stripe-connect-provider.test.ts"
+    "test:growth": "node --import tsx --test test/growth.test.ts test/github-site-sync.test.ts test/meta-page-webhook.test.ts test/stripe-connect-provider.test.ts test/media-providers.test.ts"
   },
   "dependencies": {
     "@brightwork/shared": "workspace:*",
@@ -36,6 +36,8 @@
     "./schedule": "./src/workspace/task-automation.ts",
     "./mail": "./src/workspace/mail-store.ts",
     "./llm": "./src/llm.ts",
-    "./public-page": "./src/research/page.ts"
+    "./public-page": "./src/research/page.ts",
+    "./media-store": "./src/workspace/media-store.ts",
+    "./media-providers": "./src/workspace/media-providers.ts"
   }
 }

@@ -30,11 +30,16 @@ import type { inboundMail } from './inbound-mail';
 import { commerceRange } from './commerce-insights';
 import type { commerceInsights } from './commerce-insights';
 
+import { mediaInput } from './media-store';
+import type { MediaKind, mediaStore } from './media-store';
+
 type Context = {
   store: ReturnType<typeof agentStore>;
   team: ReturnType<typeof teamStore>;
   commerce: ReturnType<typeof shopifyOrders> | undefined;
   sellerPayments: ReturnType<typeof stripeConnect> | undefined;
+  media: ReturnType<typeof mediaStore>;
+  mediaRates: Partial<Record<MediaKind, string>>;
   salesInsights: (
     id: string,
     range: z.infer<typeof commerceRange>,
@@ -520,6 +525,75 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/media', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return reply;
+      return {
+        rates: context.mediaRates,
+        jobs: await context.media.list(access.id),
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.post(path + '/media', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return reply;
+      const input = mediaInput.parse(request.body);
+      const rate = context.mediaRates[input.kind];
+      if (rate === undefined)
+        return reply
+          .code(503)
+          .send({ message: 'This media provider is unavailable.' });
+      await context.limit('media-generation', access.accountId, 10, 60);
+      const disposition = await context.media.enqueue(
+        access.id,
+        access.accountId,
+        input,
+        rate,
+      );
+      if (disposition === 'accepted')
+        return reply.code(202).send({ id: input.id });
+      if (disposition === 'insufficient_credits')
+        return reply
+          .code(402)
+          .send({ message: 'Insufficient credits for this generation.' });
+      return reply.code(409).send({
+        message:
+          disposition === 'price_changed'
+            ? 'The credit rate changed. Refresh before submitting.'
+            : 'This request ID is already in use.',
+      });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/media/:resource/asset', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return reply;
+      const { resource } = z
+        .object({ resource: z.uuid() })
+        .parse(request.params);
+      const asset = await context.media.asset(access.id, resource);
+      if (!asset?.bytes || !asset.mime)
+        return reply.code(404).send({ message: 'Asset not found.' });
+      const ext = { image: 'png', video: 'mp4', voice: 'mp3' }[asset.kind];
+      return reply
+        .type(asset.mime)
+        .header('X-Content-Type-Options', 'nosniff')
+        .header(
+          'Content-Disposition',
+          'attachment; filename="brightwork-' + resource + '.' + ext + '"',
+        )
+        .send(asset.bytes);
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+
   app.get(path + '/insights/commerce', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
