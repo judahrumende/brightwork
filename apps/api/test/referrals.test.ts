@@ -58,12 +58,12 @@ test(
     await db.transaction((tx) => attributeReferral(tx, owner.id, code));
     assert.equal((await program.status(owner.id)).signups, 0);
     const auth = authStore(db, 'synthetic-referral-auth-secret');
-    const intent = await auth.beginEmail('new@example.test');
+    const intent = await auth.beginEmail('new@example.test', code);
     const token = await auth.verifyCode(
       intent.id,
       'new@example.test',
       intent.code,
-      code,
+      competing.code,
     );
     assert.ok(token);
     const session = await auth.readSession(token);

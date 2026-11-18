@@ -253,6 +253,13 @@
       "when": 1794834000035,
       "tag": "0035_metered_media",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794834000036,
+      "tag": "0036_email_referral_handoff",
+      "breakpoints": true
     }
   ]
 }

@@ -519,7 +519,11 @@ export function registerAuth(
           400,
           'The security check expired. Please try again.',
         );
-      const attempt = await store.beginEmail(body.email);
+      const code = referralCode(request);
+      const attempt = await store.beginEmail(
+        body.email,
+        code && (await referrals.valid(code)) ? code : undefined,
+      );
       try {
         await auth.sendCode(body.email, attempt.code, attempt.link);
       } catch (error) {

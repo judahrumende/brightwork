@@ -73,14 +73,18 @@ test(
       });
     }
 
-    async function deliverCode() {
-      const response = await post('/api/auth/email/code', {
-        email,
-        humanCheck: 'fixture-turnstile-token',
-      });
+    async function deliverCode(targetEmail = email, referralCookie = '') {
+      const response = await post(
+        '/api/auth/email/code',
+        {
+          email: targetEmail,
+          humanCheck: 'fixture-turnstile-token',
+        },
+        referralCookie,
+      );
       assert.equal(response.statusCode, 200);
       const search = new URL('/api/v1/search', TEST_MAILPIT_URL);
-      search.searchParams.set('query', 'to:' + email);
+      search.searchParams.set('query', 'to:' + targetEmail);
       const result = await fetch(search);
       assert.equal(result.status, 200);
       const { messages } = (await result.json()) as {
@@ -270,6 +274,35 @@ test(
         401,
       );
       assert.equal(verifiedChallenges, 2);
+      {
+        const referrals = async () => {
+          const response = await server.inject({
+            url: '/api/me/referrals',
+            headers: { cookie: freshCookie },
+          });
+          assert.equal(response.statusCode, 200);
+          return response.json<{ code: string; signups: number }>();
+        };
+        const before = await referrals();
+        const visit = await server.inject(
+          '/api/referrals/visit?code=' + before.code,
+        );
+        const cookie = cookieFrom(visit.headers['set-cookie'], 'bw-referral');
+        const referred = await deliverCode(
+          `new-device-${fixture}@example.test`,
+          cookie,
+        );
+        const newDevice = await post('/api/auth/email/link', {
+          token: referred.token,
+        });
+        assert.equal(newDevice.statusCode, 200);
+        assert.equal((await referrals()).signups, before.signups + 1);
+        assert.equal(
+          (await post('/api/auth/email/link', { token: referred.token }))
+            .statusCode,
+          401,
+        );
+      }
 
       const socialCookies = new Map<string, string>();
       for (const provider of ['GoogleOAuth', 'AppleOAuth']) {
