@@ -20,6 +20,7 @@ import {
 import { usePreferences, usePresence, workspacePath } from './session';
 import { pageViewSeries } from './traffic-series';
 import { Runs } from './runs';
+import { SmsInbox } from './sms-inbox';
 import { ReceivedMail } from './received-mail';
 import { WorkspaceFiles } from './workspace-files';
 import { WorkspaceSettings } from './workspace-settings';
@@ -440,6 +441,13 @@ function View({
               id={company.id}
               timezone={timezone}
               editable={company.role !== 'viewer'}
+            />
+          )}
+          {view === 'inbox' && (
+            <SmsInbox
+              key={company.id}
+              id={company.id}
+              canReply={['owner', 'admin'].includes(company.role)}
             />
           )}
           {kind === 'library' && <WorkspaceFiles companyId={company.id} />}

@@ -32,6 +32,12 @@ test(
   async () => {
     assert.ok(TEST_DATABASE_URL && TEST_MAILPIT_URL && REDIS_URL);
     const fixture = randomUUID();
+    const smsCredentials = {
+      accountSid: 'AC' + '1'.repeat(32),
+      numberSid: 'PN' + '2'.repeat(32),
+      token: 'fixture-twilio-token-no-live',
+    };
+    const fixturePhone = '+15550100003';
     const providerEmail = randomUUID();
     const attachmentId = randomUUID();
     const schema = 'auth_fixture_' + fixture.replaceAll('-', '');
@@ -129,6 +135,7 @@ test(
         authEnv.parse({
           APP_ORIGIN: origin,
           SHOPIFY_ENABLED: 'true',
+          SMS_ENABLED: 'true',
           INBOUND_EMAIL_DOMAIN: 'mail.example.test',
           INBOUND_RESEND_API_KEY: 'fixture-inbound-key',
           INBOUND_RESEND_WEBHOOK_SECRET:
@@ -148,6 +155,21 @@ test(
         }),
         async (input, init) => {
           const target = String(input);
+          if (
+            target ===
+            'https://api.twilio.com/2010-04-01/Accounts/' +
+              smsCredentials.accountSid +
+              '/IncomingPhoneNumbers/' +
+              smsCredentials.numberSid +
+              '.json'
+          ) {
+            return Response.json({
+              sid: smsCredentials.numberSid,
+              account_sid: smsCredentials.accountSid,
+              phone_number: fixturePhone,
+              capabilities: { sms: true },
+            });
+          }
           if (
             target ===
             'https://api.resend.com/emails/receiving/' +
@@ -875,6 +897,46 @@ test(
         (await post(reveal, {}, freshCookie)).json<{ value: string }>().value,
         value,
       );
+      const smsSettings = settings + '/sms';
+      const smsInbox = `/api/companies/${studio}/work/sms`;
+      assert.equal(
+        (await post(smsSettings, smsCredentials, collaboratorCookie))
+          .statusCode,
+        403,
+      );
+      assert.equal(
+        (await post(smsSettings, smsCredentials, freshCookie)).statusCode,
+        200,
+      );
+      const smsState = await server.inject({
+        url: smsSettings,
+        headers: { cookie: freshCookie },
+      });
+      assert.ok(!smsState.body.includes(smsCredentials.token));
+      assert.equal(smsState.json().connection.phone, fixturePhone);
+      const smsReply = {
+        id: randomUUID(),
+        recipient: '+15550100099',
+        body: 'Synthetic reply',
+      };
+      assert.equal(
+        (await post(smsInbox, smsReply, collaboratorCookie)).statusCode,
+        403,
+      );
+      assert.equal(
+        (await post(smsInbox, smsReply, freshCookie)).statusCode,
+        409,
+      );
+      const independentInbox = await server.inject({
+        url: smsInbox.replace(studio, other),
+        headers: { cookie: separateCookie },
+      });
+      assert.deepEqual(independentInbox.json(), {
+        enabled: true,
+        connected: false,
+        messages: [],
+      });
+
       const shopify = settings + '/shopify';
       const shopCredentials = {
         shop: 'fixture.myshopify.com',

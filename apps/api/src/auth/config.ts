@@ -48,6 +48,10 @@ export const authEnv = z.object({
   ),
   GITHUB_SITE_TOKEN: optionalValue,
   AUTH_SECRET: optionalValue.pipe(z.string().min(32).optional()),
+  SMS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   SHOPIFY_ENABLED: z
     .enum(['true', 'false'])
     .default('false')

@@ -211,6 +211,13 @@
       "when": 1794834000029,
       "tag": "0029_inbox_task_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794834000030,
+      "tag": "0030_workspace_sms",
+      "breakpoints": true
     }
   ]
 }

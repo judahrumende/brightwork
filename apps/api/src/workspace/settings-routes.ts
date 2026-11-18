@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { shopifyConnectionInput } from './shopify-orders';
 import type { shopifyOrders } from './shopify-orders';
+import { smsConnectionInput } from './sms';
+import type { workspaceSms } from './sms';
 import { teamRole } from './team';
 import type { teamStore } from './team';
 import type { vaultStore } from './vault';
@@ -19,13 +21,14 @@ export function registerWorkspaceSettings(
   context: {
     team: ReturnType<typeof teamStore>;
     commerce: ReturnType<typeof shopifyOrders> | undefined;
+    sms: ReturnType<typeof workspaceSms> | undefined;
     vault: ReturnType<typeof vaultStore> | undefined;
     domains: ReturnType<typeof domainStore>;
     authorize: Authorize;
     reportError: (failure: unknown, reply: FastifyReply) => unknown;
   },
 ) {
-  const { team, vault, domains, commerce } = context;
+  const { team, vault, domains, commerce, sms } = context;
   const base = '/api/companies/:id/settings';
   const target = z.object({ resource: z.uuid() });
   type Access = NonNullable<Awaited<ReturnType<Authorize>>>;
@@ -51,6 +54,35 @@ export function registerWorkspaceSettings(
       }
     };
   }
+  app.get(
+    base + '/sms',
+    handle(false, async (_request, _reply, access) => ({
+      enabled: Boolean(sms),
+      connection: (await sms?.connection(access.id)) ?? null,
+    })),
+  );
+  app.post(
+    base + '/sms',
+    handle(true, async (request, reply, access) => {
+      if (!sms) return reply.code(503).send({ message: 'SMS is unavailable.' });
+      const input = smsConnectionInput.parse(request.body);
+      const connected = await sms.connect(access.id, input).catch(() => false);
+      if (!connected)
+        return reply.code(422).send({
+          message:
+            'Check the Twilio credentials, number capabilities, and existing workspace connection.',
+        });
+      return { connected: true };
+    }),
+  );
+  app.delete(
+    base + '/sms',
+    handle(true, async (_request, reply, access) => {
+      if (!sms) return reply.code(503).send({ message: 'SMS is unavailable.' });
+      await sms.disconnect(access.id);
+      return { disconnected: true };
+    }),
+  );
   app.get(
     base + '/shopify',
     handle(false, async (_request, _reply, access) => ({

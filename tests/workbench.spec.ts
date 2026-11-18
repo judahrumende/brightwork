@@ -879,3 +879,92 @@ test('Schedule creates a Pip task triggered by a new Inbox message', async ({
   await editor.getByRole('button', { name: 'Save task' }).click();
   await expect(editor).toHaveCount(0);
 });
+
+test('SMS settings and Inbox allow a reviewed reply with delivery status', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const base = api + '/settings';
+  const settings = base + '/sms';
+  const inbox = api + '/work/sms';
+  const phone = '+15550100001';
+  const contact = '+15550100009';
+  const authToken = 'fixture-token-for-connection';
+  let connected = false;
+  const messages = [
+    {
+      id: company.id,
+      peer: contact,
+      body: 'Is my order ready?',
+      direction: 'inbound',
+      status: 'received',
+      createdAt: '2026-11-18T02:00:00Z',
+    },
+  ];
+  await page.route('**' + base + '/team', (route) =>
+    route.fulfill({ json: { members: [], invites: [] } }),
+  );
+  await page.route('**' + settings, (route) => {
+    if (route.request().method() === 'POST') {
+      expect(route.request().postDataJSON().token).toBe(authToken);
+      connected = true;
+      return route.fulfill({ json: { connected: true } });
+    }
+    return route.fulfill({
+      json: {
+        enabled: true,
+        connection: connected
+          ? {
+              phone,
+              connected,
+              webhook:
+                'https://brightwork.example.test/api/webhooks/twilio/' +
+                company.id,
+            }
+          : null,
+      },
+    });
+  });
+  await page.route('**' + inbox, (route) => {
+    if (route.request().method() === 'POST') {
+      const draft = route.request().postDataJSON();
+      expect(draft).toMatchObject({
+        recipient: contact,
+        body: 'Yes, it is ready.',
+      });
+      expect(draft.id).toMatch(/^[0-9a-f-]{36}$/u);
+      messages.unshift({
+        id: draft.id,
+        peer: contact,
+        direction: 'outbound',
+        body: draft.body,
+        status: 'delivered',
+        createdAt: '2026-11-18T02:00:05Z',
+      });
+      return route.fulfill({ json: { status: 'delivered' } });
+    }
+    return route.fulfill({ json: { enabled: true, connected, messages } });
+  });
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**' + api + '/work/inbound', (route) =>
+    route.fulfill({ json: { address: null, emails: [] } }),
+  );
+  await page.goto(workbench + '/settings');
+  await page.getByRole('button', { name: 'SMS', exact: true }).click();
+  await page.getByLabel('Twilio account SID').fill('AC' + '1'.repeat(32));
+  await page.getByLabel('Twilio phone number SID').fill('PN' + '2'.repeat(32));
+  await page.getByLabel('Twilio auth token').fill(authToken);
+  await page.getByRole('button', { name: 'Connect or reconnect SMS' }).click();
+  await expect(page.getByText(phone + ' · Connected')).toBeVisible();
+  await expect(page.getByLabel('Twilio auth token')).toHaveValue('');
+  await page.goto(workbench + '/inbox');
+  await page.getByLabel('SMS conversation').selectOption(contact);
+  await expect(page.getByText('Is my order ready?')).toBeVisible();
+  await page.getByLabel('SMS reply', { exact: true }).fill('Yes, it is ready.');
+  await page.getByRole('button', { name: 'Send SMS reply' }).click();
+  const thread = page.getByRole('list', { name: 'SMS messages' });
+  await expect(thread).toContainText('Yes, it is ready.');
+  await expect(thread).toContainText('delivered');
+});

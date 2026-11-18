@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import type { Company } from '../auth/client';
 import { api, errorMessage, write } from '../auth/client';
 import { Button } from '../ui/primitives';
+import { SmsSettings } from './sms-settings';
 import styles from './workbench.module.css';
 
 type Role = 'admin' | 'member' | 'viewer';
@@ -32,9 +33,9 @@ export function WorkspaceSettings({
   company: Company;
   accountId: string;
 }) {
-  const [tab, setTab] = useState<'team' | 'vault' | 'domains' | 'commerce'>(
-    'team',
-  );
+  const [tab, setTab] = useState<
+    'team' | 'vault' | 'domains' | 'commerce' | 'sms'
+  >('team');
   const endpoint = `/api/companies/${company.id}/settings`;
   if (!['owner', 'admin'].includes(company.role))
     return (
@@ -75,6 +76,13 @@ export function WorkspaceSettings({
         >
           Commerce
         </Button>
+        <Button
+          variant="secondary"
+          aria-pressed={tab === 'sms'}
+          onClick={() => setTab('sms')}
+        >
+          SMS
+        </Button>
       </nav>
       {tab === 'team' && (
         <TeamSettings
@@ -85,6 +93,7 @@ export function WorkspaceSettings({
       )}
       {tab === 'vault' && <VaultSettings endpoint={endpoint + '/vault'} />}
       {tab === 'domains' && <DomainSettings endpoint={endpoint + '/domains'} />}
+      {tab === 'sms' && <SmsSettings endpoint={endpoint + '/sms'} />}
       {tab === 'commerce' && (
         <CommerceSettings endpoint={endpoint + '/shopify'} />
       )}
