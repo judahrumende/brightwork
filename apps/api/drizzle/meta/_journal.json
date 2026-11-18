@@ -225,6 +225,13 @@
       "when": 1794834000031,
       "tag": "0031_meta_page_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794834000032,
+      "tag": "0032_stripe_connect",
+      "breakpoints": true
     }
   ]
 }

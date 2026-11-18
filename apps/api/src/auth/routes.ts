@@ -23,6 +23,7 @@ import { teamStore } from '../workspace/team';
 import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
 import { shopifyOrders } from '../workspace/shopify-orders';
+import { stripeConnect } from '../workspace/stripe-connect';
 import { stripeBilling } from '../workspace/stripe-billing';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
@@ -279,6 +280,44 @@ export function registerAuth(
       : null;
   const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
   billing?.register(app);
+  const sellerPayments =
+    env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
+      ? stripeConnect(
+          database.db,
+          {
+            key: env.STRIPE_TEST_KEY,
+            secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
+            origin,
+          },
+          providerRequest,
+        )
+      : undefined;
+  sellerPayments?.register(app);
+  app.get('/api/sales/:id', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    const parsed = z.object({ id: uuid }).safeParse(request.params);
+    if (!parsed.success)
+      return reply.code(404).send({ message: 'Sale unavailable.' });
+    const sale = await sellerPayments?.publicOrder(parsed.data.id);
+    if (!sale) return reply.code(404).send({ message: 'Sale unavailable.' });
+    return sale;
+  });
+  app.post('/api/sales/:id/checkout', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      originTab(request);
+      await allow('public-checkout', request.ip, 12, 60);
+      const { id } = z.object({ id: uuid }).parse(request.params);
+      const url = await sellerPayments?.checkout(id);
+      if (!url)
+        return reply
+          .code(409)
+          .send({ message: 'This checkout is unavailable.' });
+      return { url };
+    } catch (error) {
+      return authError(error, reply);
+    }
+  });
   commerce?.register(app);
   registerGrowth(app, {
     env,
@@ -368,6 +407,7 @@ export function registerAuth(
     store: workspace,
     team,
     commerce,
+    sellerPayments,
     domains: domainStore(database.db),
     vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
     runs: runStore(database.db),

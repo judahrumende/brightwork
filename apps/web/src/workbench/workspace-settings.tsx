@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import type { Company } from '../auth/client';
 import { api, errorMessage, write } from '../auth/client';
 import { Button } from '../ui/primitives';
+import { StripeSeller } from './stripe-seller';
 import { SmsSettings } from './sms-settings';
 import styles from './workbench.module.css';
 
@@ -95,7 +96,10 @@ export function WorkspaceSettings({
       {tab === 'domains' && <DomainSettings endpoint={endpoint + '/domains'} />}
       {tab === 'sms' && <SmsSettings endpoint={endpoint + '/sms'} />}
       {tab === 'commerce' && (
-        <CommerceSettings endpoint={endpoint + '/shopify'} />
+        <>
+          <CommerceSettings endpoint={endpoint + '/shopify'} />
+          <StripeSeller endpoint={endpoint + '/stripe-connect'} />
+        </>
       )}
     </section>
   );

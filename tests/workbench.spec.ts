@@ -968,3 +968,84 @@ test('SMS settings and Inbox allow a reviewed reply with delivery status', async
   await expect(thread).toContainText('Yes, it is ready.');
   await expect(thread).toContainText('delivered');
 });
+
+test('Stripe Connect creates a shareable sale and waits for payment confirmation', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const base = api + '/settings';
+  const endpoint = base + '/stripe-connect';
+  const saleId = '438d3d94-aaaf-4ad9-8cf3-f687b332a54d';
+  let submitted = false;
+  let paidAt: string | null = null;
+  const sale = () => ({
+    id: saleId,
+    title: 'Fixture sale',
+    currency: 'aud',
+    amount: 1999,
+    amountRefunded: 0,
+    paidAt,
+  });
+  await page.route('**' + base + '/team', (route) =>
+    route.fulfill({ json: { members: [], invites: [] } }),
+  );
+  await page.route('**' + base + '/shopify', (route) =>
+    route.fulfill({ json: { enabled: false, shops: [], totals: [] } }),
+  );
+  await page.route('**' + endpoint, (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        seller: { ready: true, detailsSubmitted: true },
+        orders: submitted ? [sale()] : [],
+      },
+    }),
+  );
+  await page.route('**' + endpoint + '/sales', (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      title: 'Fixture sale',
+      amount: 1999,
+      currency: 'aud',
+    });
+    submitted = true;
+    return route.fulfill({ json: { path: '/sale/' + saleId } });
+  });
+  await page.route('**/api/sales/' + saleId, (route) =>
+    route.fulfill({ json: sale() }),
+  );
+  const checkout = 'https://checkout.stripe.com/c/pay/fixture';
+  await page.route('**/api/sales/' + saleId + '/checkout', (route) => {
+    expect(route.request().method()).toBe('POST');
+    return route.fulfill({ json: { url: checkout } });
+  });
+  await page.route(checkout, (route) =>
+    route.fulfill({ body: 'Stripe checkout fixture' }),
+  );
+  await page.goto(workbench + '/settings');
+  await page.getByRole('button', { name: 'Commerce', exact: true }).click();
+  await page.getByLabel('Sale title').fill('Fixture sale');
+  await page.getByLabel('Amount', { exact: true }).fill('19.99');
+  await page.getByRole('button', { name: 'Create sale link' }).click();
+  await page.getByRole('link', { name: 'Open the new sale' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Fixture sale' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Continue to Stripe Checkout' }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Continue to Stripe Checkout' })
+    .click();
+  await expect(page).toHaveURL(checkout);
+  await page.goto('/sale/' + saleId + '?result=returned');
+  await expect(
+    page.getByRole('button', { name: 'Continue to Stripe Checkout' }),
+  ).toBeVisible();
+  paidAt = '2026-11-18T02:00:06Z';
+  await expect(page.getByText('Payment received')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByRole('button', { name: 'Continue to Stripe Checkout' }),
+  ).toHaveCount(0);
+});
