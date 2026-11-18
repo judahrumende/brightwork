@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Queue } from 'bullmq';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -469,6 +470,90 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       }
     } catch (error) {
       if (!reply.sent) return reportError(error, reply);
+    }
+  });
+  app.get(path + '/ted/unattended/:resource', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const { limit } = z
+        .object({
+          limit: z.coerce.number().int().min(1).max(50).default(10),
+        })
+        .parse(request.query);
+      const turns = await context.runs.turns(access.id, resource, limit);
+      if (!turns) return reply.code(404).send({ message: 'Run not found.' });
+      const snapshot = { id: resource, turns: turns.map(turnSnapshot) };
+      const etag =
+        '"' +
+        createHash('sha256')
+          .update(JSON.stringify(snapshot))
+          .digest('base64url') +
+        '"';
+      reply
+        .header('ETag', etag)
+        .header('Cache-Control', 'private, no-cache')
+        .header('Vary', 'Cookie');
+      if (
+        request.headers['if-none-match']?.split(',').some((value) => {
+          const tag = value.trim().replace(/^W\//u, '');
+          return tag === '*' || tag === etag;
+        })
+      )
+        return reply.code(304).send();
+      return snapshot;
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/run/session', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const include = z
+        .object({
+          passes: z.literal('newest').optional(),
+          questions: z.literal('open').optional(),
+          report: z.literal('ended').optional(),
+        })
+        .parse(request.query);
+      const run = await context.runs.current(access.id);
+      if (!run) return { session: null };
+      const [turns, questions, report, waiting] = await Promise.all([
+        include.passes && context.runs.turns(access.id, run.id, 10),
+        include.questions && context.runs.questions(access.id, run.id),
+        include.report &&
+          run.endedAt &&
+          context.runs.history(access.id, run.id),
+        run.waitingFor === 'approval' &&
+          context.runs.waitingApprovals(access.id, run.id),
+      ]);
+      return {
+        session: {
+          id: run.id,
+          chatId: run.id,
+          state: run.state,
+          startedAt: run.createdAt,
+          ending: run.endedAt ? { at: run.endedAt, reason: run.failure } : null,
+          ...(waiting ? { waiting } : {}),
+        },
+        ...(turns
+          ? { passes: { id: run.id, turns: turns.map(turnSnapshot) } }
+          : {}),
+        ...(questions
+          ? {
+              questions: {
+                sessionId: run.id,
+                questions: questions.filter((question) => !question.answer),
+                files: false,
+              },
+            }
+          : {}),
+        ...(report ? { report } : {}),
+      };
+    } catch (error) {
+      return reportError(error, reply);
     }
   });
   for (const view of ['directions', 'questions', 'tasks'] as const) {

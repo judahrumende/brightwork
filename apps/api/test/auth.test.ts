@@ -810,7 +810,12 @@ test(
       assert.ok(runQuestion);
       await runs.control(studio, run.id, 'pause');
       async function readRun(
-        view: 'directions' | 'questions' | 'tasks',
+        view:
+          | 'directions'
+          | 'questions'
+          | 'tasks'
+          | 'session'
+          | 'session?passes=newest&questions=open',
         actor = freshCookie,
       ) {
         return server.inject({
@@ -829,6 +834,39 @@ test(
       const tasks = await readRun('tasks');
       assert.equal(tasks.statusCode, 200);
       assert.deepEqual(tasks.json().tasks, plan.sprint.items);
+      const sessionContract =
+        observedContracts['GET /api/companies/:id/run/session'].response;
+      const currentRunSession = await readRun('session');
+      assert.equal(currentRunSession.statusCode, 200);
+      assert.equal(
+        sessionContract.parse(currentRunSession.json()).session.id,
+        run.id,
+      );
+      const expanded = await readRun('session?passes=newest&questions=open');
+      assert.equal(expanded.statusCode, 200);
+      assert.equal(expanded.json().passes.turns[0]?.id, runTurn.turnId);
+      assert.equal(expanded.json().questions.questions[0]?.id, runQuestion.id);
+      const historyUrl = `/api/companies/${studio}/ted/unattended/${run.id}?limit=10`;
+      const readHistory = (cookie: string, tag?: string) =>
+        server.inject({
+          url: historyUrl,
+          headers: { cookie, ...(tag ? { 'if-none-match': tag } : {}) },
+        });
+      const runHistory = await readHistory(freshCookie);
+      assert.equal(runHistory.statusCode, 200);
+      assert.equal(runHistory.json().turns[0]?.id, runTurn.turnId);
+      const tag = runHistory.headers.etag;
+      assert.equal(typeof tag, 'string');
+      if (typeof tag !== 'string') throw new Error('Expected an ETag.');
+      assert.equal((await readHistory(freshCookie, tag)).statusCode, 304);
+      assert.equal((await readHistory(separateCookie, tag)).statusCode, 404);
+      await database.db
+        .update(agentTurns)
+        .set({ answer: 'Updated fixture history' })
+        .where(eq(agentTurns.id, runTurn.turnId));
+      const changedHistory = await readHistory(freshCookie, tag);
+      assert.equal(changedHistory.statusCode, 200);
+      assert.notEqual(changedHistory.headers.etag, tag);
       const open = await readRun('questions');
       assert.equal(open.statusCode, 200);
       const questionContract =
@@ -849,7 +887,12 @@ test(
         questionContract.parse(answered.json()).questions[0]?.answer?.text,
         'Local founders',
       );
-      for (const view of ['directions', 'questions', 'tasks'] as const)
+      for (const view of [
+        'directions',
+        'questions',
+        'tasks',
+        'session',
+      ] as const)
         assert.equal((await readRun(view, separateCookie)).statusCode, 404);
 
       const settings = `/api/companies/${studio}/settings`;

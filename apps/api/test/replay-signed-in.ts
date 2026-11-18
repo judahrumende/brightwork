@@ -25,12 +25,19 @@ const { log } = JSON.parse(await readFile(capture, 'utf8')) as {
   log: { entries: { request: { url: string } }[] };
 };
 const workspaceIds = new Set<string>();
+const historyVisits = new Map<string, number>();
 for (const entry of log.entries) {
   const url = new URL(entry.request.url);
   const workspace = url.pathname.match(
     /^\/api\/companies\/([0-9a-f-]{36})(?:\/|$)/u,
   )?.[1];
-  if (url.origin === source && workspace) workspaceIds.add(workspace);
+  if (url.origin !== source || !workspace) continue;
+  workspaceIds.add(workspace);
+  const history = url.pathname.match(
+    /\/ted\/unattended\/([0-9a-f-]{36})$/u,
+  )?.[1];
+  if (history)
+    historyVisits.set(history, (historyVisits.get(history) ?? 0) + 1);
 }
 assert.equal(
   workspaceIds.size,
@@ -93,6 +100,11 @@ try {
     state: 'pending',
   });
   await runs.control(workspace.id, run.id, 'pause');
+  const fixtureIds = Object.fromEntries(
+    [...workspaceIds].map((id) => [id, workspace.id]),
+  );
+  const [primaryHistory] = [...historyVisits].sort((a, b) => b[1] - a[1]);
+  if (primaryHistory) fixtureIds[primaryHistory[0]] = run.id;
   const origin = 'http://127.0.0.1:5190';
   registerAuth(
     server,
@@ -112,9 +124,7 @@ try {
       stdio: 'inherit',
       env: {
         HAR_FIXTURE_SOURCE_ORIGIN: source,
-        HAR_FIXTURE_ID_MAP: JSON.stringify(
-          Object.fromEntries([...workspaceIds].map((id) => [id, workspace.id])),
-        ),
+        HAR_FIXTURE_ID_MAP: JSON.stringify(fixtureIds),
         HAR_FIXTURE_COOKIE: 'bw-session=' + token,
       },
     },

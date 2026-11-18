@@ -1859,6 +1859,7 @@
     {
       "method": "GET",
       "path": "/api/companies/:id/run/session",
+      "optionalResponsePaths": ["passes","questions"],
       "statuses": {
         "200": 84
       },
