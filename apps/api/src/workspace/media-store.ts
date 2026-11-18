@@ -128,7 +128,7 @@ export function mediaStore(
         return 'accepted';
       });
     },
-    async list(businessId: string) {
+    async list(businessId: string, kind?: MediaKind) {
       return db
         .select({
           id: jobs.id,
@@ -139,8 +139,10 @@ export function mediaStore(
           createdAt: jobs.createdAt,
         })
         .from(jobs)
-        .where(eq(jobs.businessId, businessId))
-        .orderBy(desc(jobs.createdAt))
+        .where(
+          and(eq(jobs.businessId, businessId), kind && eq(jobs.kind, kind)),
+        )
+        .orderBy(desc(jobs.createdAt), desc(jobs.id))
         .limit(50);
     },
     async asset(businessId: string, id: string) {
