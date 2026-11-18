@@ -21,6 +21,8 @@ test('Stripe Connect separates seller onboarding and connected checkout', async 
     currency: 'aud',
     payment_intent: null,
     client_reference_id: order,
+    created: Math.floor(Date.now() / 1000),
+    metadata: { brightwork_sale: order },
     url: 'https://checkout.stripe.com/c/pay/fixture',
   };
   let hosted = session.url;
@@ -75,6 +77,7 @@ test('Stripe Connect separates seller onboarding and connected checkout', async 
           body.get('payment_intent_data[metadata][brightwork_order]'),
           order,
         );
+        assert.equal(body.get('metadata[brightwork_sale]'), order);
         assert.equal(
           headers.get('idempotency-key'),
           'brightwork-sale-' + order,
