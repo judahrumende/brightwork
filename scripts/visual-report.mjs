@@ -57,6 +57,22 @@ const cases = [
     actual: '085-visitors-range-menu.png',
   },
   ...[
+    ['Home: dashboard, Pip waiting', '002-home-waiting-for-you.png'],
+    ['Home: Documents popover', '012-home-dock-documents.png'],
+    ['Build canvas (no chat focus)', '038-build-canvas-live.png'],
+    ['Search palette (Cmd/Ctrl+K)', '049-search-palette.png'],
+    ['Search palette with query', '050-search-palette-query.png'],
+    ['Approval sheet: website change', '051-approval-website-change.png'],
+    ['Schedule: Day view', '054-schedule-day.png'],
+    ['Schedule: All tasks (list)', '055-schedule-all-tasks.png'],
+    ['Notifications panel', '058-notifications-panel.png'],
+    ['Settings modal: Earn credits (gift)', '059-settings-earn-credits.png'],
+    ['Settings: Team', '060-settings-team.png'],
+    ['Settings: Plans & credit usage', '064-settings-plans.png'],
+    ['Profile menu', '072-profile-menu.png'],
+    ['Company switcher', '074-company-switcher.png'],
+    ['Pip panel: Runs tab', '076-home-ted-runs-tab.png'],
+    ['Visitors: breakdown panels', '086-visitors-breakdowns.png'],
     ['Build site import', '040-build-import-site.png'],
     ['Build site editor', '045-build-site-editor.png'],
     ['Schedule month', '052-schedule-month.png'],
@@ -89,7 +105,7 @@ function contained(image, width, height) {
 
 function dataImage(image, label) {
   const data = PNG.sync.write(image).toString('base64');
-  return `<figure><figcaption>${label}</figcaption><img alt="${label}" src="data:image/png;base64,${data}"></figure>`;
+  return `<figure><figcaption>${label}</figcaption><img alt="${label}" loading="lazy" decoding="async" src="data:image/png;base64,${data}"></figure>`;
 }
 
 function exclude(expected, received, width, exclusions) {
@@ -142,7 +158,7 @@ function compare({ title, baseline, actual, crop, exclusions = [] }) {
   const dimensions = [expected, received].map(
     (image) => `${image.width} × ${image.height}`,
   );
-  return `<section><h2>${title}</h2><p>${ratio}% different outside text and replacement artwork. Kit ${dimensions[0]} px. Brightwork ${dimensions[1]} px.</p>
+  return `<section><h2>${title}</h2><p>${ratio}% of compared pixels differ${exclusions.length ? ` after excluding ${exclusions.length} specified regions` : ''}. Kit ${dimensions[0]} px. Brightwork ${dimensions[1]} px.</p>
     <div class="row">${dataImage(expected, 'Kit')}${dataImage(received, 'Brightwork')}${dataImage(diff, 'Difference')}</div></section>`;
 }
 

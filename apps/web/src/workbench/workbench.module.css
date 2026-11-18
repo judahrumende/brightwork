@@ -806,11 +806,12 @@ button.creditCard:hover {
 
 .buildGrid {
   display: grid;
-  grid-template-columns: minmax(290px, 420px) 1fr;
+  grid-template-columns: minmax(290px, 420px) minmax(0, 1fr);
   gap: 16px;
 }
 .chat,
 .workList {
+  min-width: 0;
   background: var(--workbench-card-fill);
   border-radius: 16px;
   padding: 16px;
@@ -882,6 +883,12 @@ button.creditCard:hover {
   border-radius: 12px;
   padding: 10px 12px;
   color: var(--ink);
+}
+.chat form {
+  grid-template-columns: minmax(0, 1fr);
+}
+.chat input[type='file'] {
+  max-inline-size: 100%;
 }
 .chat form button {
   justify-self: end;
@@ -1055,7 +1062,7 @@ button.creditCard:hover {
 }
 @media (max-width: 760px) {
   .buildGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
