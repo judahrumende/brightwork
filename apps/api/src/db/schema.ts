@@ -58,6 +58,7 @@ export const attempts = pgTable('auth_attempts', {
   email: text().notNull(),
   codeHash: text('code_hash').notNull(),
   linkHash: text('link_hash').notNull().unique(),
+  referralCode: uuid('referral_code'),
   tries: integer().notNull().default(0),
   expiresAt: date('expires_at').notNull(),
 });

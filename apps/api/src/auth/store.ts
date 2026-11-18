@@ -124,7 +124,7 @@ export function authStore(db: Database, secret: string) {
   }
 
   return {
-    async beginEmail(email: string) {
+    async beginEmail(email: string, referralCode?: string) {
       const id = randomUUID();
       const code = randomCode();
       const link = randomToken();
@@ -133,6 +133,7 @@ export function authStore(db: Database, secret: string) {
         .values({
           id,
           email,
+          referralCode: referralCode ?? null,
           codeHash: digest(secret, 'code', email + ':' + id + ':' + code),
           linkHash: digest(secret, 'link', link),
           expiresAt: new Date(Date.now() + challengeLifetimeSeconds * 1000),
@@ -178,7 +179,7 @@ export function authStore(db: Database, secret: string) {
           return null;
         }
         await tx.delete(attempts).where(eq(attempts.id, id));
-        return emailSession(tx, email, referralCode);
+        return emailSession(tx, email, record.referralCode ?? referralCode);
       });
     },
 
@@ -192,8 +193,13 @@ export function authStore(db: Database, secret: string) {
               gt(attempts.expiresAt, new Date()),
             ),
           )
-          .returning({ email: attempts.email });
-        return record ? emailSession(tx, record.email, referralCode) : null;
+          .returning({
+            email: attempts.email,
+            referralCode: attempts.referralCode,
+          });
+        return record
+          ? emailSession(tx, record.email, record.referralCode ?? referralCode)
+          : null;
       });
     },
 
