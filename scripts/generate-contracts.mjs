@@ -18,7 +18,7 @@ const primitives = new Map([
   ['null', 'z.null()'],
 ]);
 
-function schema(shape) {
+function schema(shape, optional = [], path = '') {
   if (shape === null) return 'z.unknown()';
   if (typeof shape === 'string') {
     const expression = primitives.get(shape);
@@ -26,14 +26,17 @@ function schema(shape) {
     return expression;
   }
   if (Array.isArray(shape)) {
-    const entries = [...new Set(shape.map(schema))];
+    const entries = [
+      ...new Set(shape.map((item) => schema(item, optional, path + '[]'))),
+    ];
     if (entries.length === 0) return 'z.array(z.unknown())';
     if (entries.length === 1) return `z.array(${entries[0]})`;
     return `z.array(z.union([${entries.join(', ')}]))`;
   }
-  const fields = Object.entries(shape).map(
-    ([key, value]) => `[${JSON.stringify(key)}]: ${schema(value)}`,
-  );
+  const fields = Object.entries(shape).map(([key, value]) => {
+    const keyPath = path ? path + '.' + key : key;
+    return `[${JSON.stringify(key)}]: ${schema(value, optional, keyPath)}${optional.includes(keyPath) ? '.optional()' : ''}`;
+  });
   return `z.looseObject({ ${fields.join(', ')} })`;
 }
 
@@ -45,6 +48,7 @@ const rows = observed.map((entry) => {
     responseTypes,
     requestBodySchema,
     responseSchema,
+    optionalResponsePaths,
     queryParams,
   } = entry;
   return `  ${JSON.stringify(`${method} ${path}`)}: {
@@ -52,7 +56,7 @@ const rows = observed.map((entry) => {
     responseTypes: ${JSON.stringify(responseTypes)},
     queryKeys: ${JSON.stringify(queryParams ?? [])},
     request: ${schema(requestBodySchema)},
-    response: ${schema(responseSchema)},
+    response: ${schema(responseSchema, optionalResponsePaths)},
   },`;
 });
 

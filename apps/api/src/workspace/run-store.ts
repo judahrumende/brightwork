@@ -32,6 +32,7 @@ function summarize(run: Run) {
     failure: run.failure,
     createdAt: run.createdAt.toISOString(),
     endedAt: run.endedAt?.toISOString() ?? null,
+    pausedAt: run.state === 'paused' ? run.nextCheckAt.toISOString() : null,
   };
 }
 
@@ -149,6 +150,38 @@ export function runStore(db: Database) {
             : [],
         ),
         publications: publications.filter((item) => item.runId === run.id),
+      }));
+    },
+
+    async questions(businessId: string, runId: string) {
+      const questions = await db
+        .select({
+          id: artifacts.id,
+          question: artifacts.title,
+          why: artifacts.body,
+          askedAt: artifacts.createdAt,
+          answer: artifacts.answer,
+          answeredAt: artifacts.answeredAt,
+        })
+        .from(artifacts)
+        .innerJoin(agentTurns, eq(artifacts.turnId, agentTurns.id))
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(agentTurns.businessId, businessId),
+            eq(agentTurns.runId, runId),
+            eq(artifacts.kind, 'question'),
+          ),
+        )
+        .orderBy(asc(artifacts.createdAt), asc(artifacts.id));
+      return questions.map(({ answer, answeredAt, askedAt, ...question }) => ({
+        ...question,
+        askedAt: askedAt.toISOString(),
+        kind: 'owner',
+        instead: '',
+        ...(answer !== null && answeredAt
+          ? { answer: { text: answer, files: 0, at: answeredAt.toISOString() } }
+          : {}),
       }));
     },
 

@@ -12,6 +12,8 @@ import { authEnv } from '../src/auth/config';
 import { registerAuth } from '../src/auth/routes';
 import { authStore } from '../src/auth/store';
 import { connectDatabase } from '../src/db/database';
+import { runStore } from '../src/workspace/run-store';
+import { artifacts } from '../src/db/schema';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const capture = resolve(
@@ -72,6 +74,25 @@ try {
     'Replay workspace',
     '',
   );
+  const runs = runStore(database.db);
+  const run = await runs.create(workspace.id, account.account.id, {
+    goal: 'Launch a fixture business',
+    steps: ['Draft a homepage', 'Plan launch outreach'],
+    creditLimit: '5',
+    publishWebsites: false,
+  });
+  assert.ok(run);
+  const work = await runs.advance();
+  assert.ok(work?.turnId);
+  await database.db.insert(artifacts).values({
+    businessId: workspace.id,
+    turnId: work.turnId,
+    kind: 'question',
+    title: 'Which audience?',
+    body: 'The homepage needs a target audience.',
+    state: 'pending',
+  });
+  await runs.control(workspace.id, run.id, 'pause');
   const origin = 'http://127.0.0.1:5190';
   registerAuth(
     server,
