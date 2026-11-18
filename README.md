@@ -110,6 +110,8 @@ pnpm dev
 
 - **Home → View sales and customers** reports recorded Shopify receipts and Stripe Connect test sales by provider and currency. The date range uses UTC and attaches refunds to the original sale. Customer counts use pseudonymous identifiers scoped to a store or seller account. Orders without customer information count as unattributed. Existing Shopify records enter the report when a signed delivery refreshes them with canonical financial totals. Shopify customer access can depend on the app’s protected customer data permissions.
 
+- **Build → Media** generates images, videos, and voice files. Configure `MEDIA_OPENAI_KEY` and a model for each enabled OpenAI capability using `MEDIA_IMAGE_MODEL` and `MEDIA_VOICE_MODEL`. Set `MEDIA_FAL_KEY` to enable five-second Kling video. Configure each capability’s credit price with `MEDIA_IMAGE_CREDITS`, `MEDIA_VOICE_CREDITS`, and `MEDIA_VIDEO_CREDITS` in the API and worker environments. Brightwork reserves credits when it queues a job and refunds confirmed failures. Jobs with an uncertain provider result stay visible for review. Completed files up to 25 MB are available to workspace members.
+
 ## Standalone web search API
 
 For browser reading, lead research, Google Business Profile, social drafts and publishing, Meta campaign controls, and the ad wallet, see [the Growth setup plan](docs/growth-plan.md). Run the new migration before opening these tools.

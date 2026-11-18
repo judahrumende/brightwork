@@ -26,6 +26,7 @@ import { WorkspaceFiles } from './workspace-files';
 import { WorkspaceSettings } from './workspace-settings';
 import { WebSearch } from './web-search';
 import { Growth } from './growth';
+import { MediaLibrary } from './media-library';
 import { CommerceInsights } from './commerce-insights';
 import { useTraffic, Visitors } from './visitors';
 import styles from './workbench.module.css';
@@ -433,6 +434,13 @@ function View({
   return (
     <section className={styles.view} data-view={view}>
       {view !== 'schedule' && <h1>{labels[view]}</h1>}
+      {view === 'build' && (
+        <MediaLibrary
+          key={company.id}
+          companyId={company.id}
+          readOnly={company.role === 'viewer'}
+        />
+      )}
       {view === 'build' ? (
         <div className={styles.buildGrid}>
           <PipChat

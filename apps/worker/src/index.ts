@@ -1,3 +1,5 @@
+import { mediaEnv, mediaProviders } from '@brightwork/api/media-providers';
+import { mediaStore } from '@brightwork/api/media-store';
 import { creditConfig, creditLedger } from '@brightwork/api/credits';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Queue, Worker } from 'bullmq';
@@ -36,9 +38,12 @@ const cache = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 const store = agentStore(database.db);
 const runs = runStore(database.db);
 const schedules = taskAutomationStore(database.db);
+const credits = creditLedger(database.db, creditConfig.parse(process.env));
+const media = mediaStore(database.db, credits);
+const providers = mediaProviders(mediaEnv.parse(process.env));
 const run = agentRunner(
   store,
-  creditLedger(database.db, creditConfig.parse(process.env)),
+  credits,
   llmClient({
     key: env.LLM_API_KEY,
     model: env.LLM_MODEL,
@@ -140,11 +145,25 @@ const sending = (async () => {
   }
 })();
 
+const generating = (async () => {
+  if (!providers.kinds.length) return;
+  while (!stop.signal.aborted) {
+    try {
+      const job = await media.claim(providers.kinds);
+      if (job) await media.record(job, await providers.run(job));
+    } catch {
+      if (!stop.signal.aborted)
+        console.error('Media processing encountered a recoverable error.');
+    }
+    await delay(2_000, undefined, { signal: stop.signal }).catch(() => {});
+  }
+})();
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     stop.abort();
     void Promise.all([worker.close(), queue.close()])
-      .then(() => Promise.all([scheduling, sending]))
+      .then(() => Promise.all([scheduling, sending, generating]))
       .then(async () => {
         cache.disconnect();
         producer.disconnect();
