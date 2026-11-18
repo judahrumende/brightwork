@@ -963,6 +963,70 @@ test(
           body: '<p>Review this website</p>',
           state: 'pending',
         });
+        const brief = await get('/creations/' + website.id);
+        assert.equal(brief.statusCode, 200);
+        const firstId = brief.json().creation.currentVersionId as string;
+        const listing = await get('/creations?source=app');
+        assert.equal(listing.statusCode, 200);
+        assert.ok(
+          listing
+            .json<{ creations: { id: string; currentVersionId: string }[] }>()
+            .creations.some(
+              (creation) =>
+                creation.id === website.id &&
+                creation.currentVersionId === firstId,
+            ),
+        );
+        assert.ok(!brief.body.includes(website.body));
+        const changedWebsite = await store.editWebsite(
+          studio,
+          website.id,
+          1,
+          'Updated website',
+          '<p>Second version</p>',
+        );
+        assert.ok(changedWebsite);
+        const edited = (await get('/creations/' + website.id)).json().creation;
+        assert.notEqual(edited.currentVersionId, firstId);
+        const restoredWebsite = await post(
+          '/api/companies/' +
+            studio +
+            '/work/' +
+            website.id +
+            '/versions/' +
+            firstId +
+            '/restore',
+          { revision: 2 },
+          freshCookie,
+        );
+        assert.equal(restoredWebsite.statusCode, 200);
+        const versions = await get('/creations/' + website.id + '/versions');
+        assert.equal(versions.statusCode, 200);
+        const historyRows = versions.json().versions;
+        assert.deepEqual(
+          historyRows.map(
+            (row: { versionNumber: number }) => row.versionNumber,
+          ),
+          [3, 2, 1],
+        );
+        assert.equal(historyRows[0].revertedFromId, firstId);
+        assert.equal(historyRows[0].parentVersionId, edited.currentVersionId);
+        assert.equal(historyRows[1].parentVersionId, firstId);
+        assert.equal(historyRows[2].parentVersionId, null);
+        assert.equal(
+          (await get('/creations/' + website.id, separateCookie)).statusCode,
+          404,
+        );
+        assert.equal(
+          (await get('/creations/' + website.id + '/versions', separateCookie))
+            .statusCode,
+          404,
+        );
+        const wrongWorkspace = await server.inject({
+          url: '/api/companies/' + shop + '/creations/' + website.id,
+          headers: { cookie: freshCookie },
+        });
+        assert.equal(wrongWorkspace.statusCode, 404);
         const drafts = await get('/inbox/drafts?waiting=true&limit=100');
         const draftIds = drafts
           .json<{ items: { id: string }[] }>()

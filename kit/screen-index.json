@@ -277,7 +277,7 @@
     "title": "Build: Import your site",
     "file": "040-build-import-site.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 41,
@@ -312,7 +312,7 @@
     "title": "Build: site editor (live preview)",
     "file": "045-build-site-editor.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 46,

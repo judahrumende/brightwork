@@ -1142,6 +1142,97 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  function describeCreation(
+    row: Awaited<ReturnType<typeof store.creations>>[number],
+  ) {
+    const pages = [
+      { path: '/', title: row.title, state: row.state },
+      ...row.pages.map(({ slug, title }) => ({
+        path: '/' + slug,
+        title,
+        state: row.state,
+      })),
+    ];
+    const url = row.publication && hosting ? hosting.url(row.id) : null;
+    return {
+      id: row.id,
+      title: row.title,
+      kind: row.kind,
+      createdAt: row.createdAt,
+      updatedAt: row.currentVersion.savedAt,
+      currentVersionId: row.currentVersion.id,
+      currentVersion: {
+        id: row.currentVersion.id,
+        versionNumber: row.currentVersion.revision,
+        savedAt: row.currentVersion.savedAt,
+        pagePaths: pages.map((page) => page.path),
+        pages,
+      },
+      pages,
+      publication: row.publication && {
+        releaseId: row.publication.id,
+        revision: row.publication.revision,
+        publishedAt: row.publication.publishedAt,
+        published: true,
+        publishedVersionId: row.publishedVersionId,
+        hostname: url ? new URL(url).hostname : null,
+        url,
+      },
+      publicationCapability: {
+        available: Boolean(hosting),
+        currentVersion: row.currentVersion.id,
+      },
+    };
+  }
+
+  app.get(path + '/creations', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const creations = await store.creations(access.id);
+      return {
+        companyId: access.id,
+        creations: creations.map(describeCreation),
+        nextCursor: null,
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/creations/:resource', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const [row] = await store.creations(access.id, resource);
+      if (!row) return reply.code(404).send({ message: 'Website not found.' });
+      return { companyId: access.id, creation: describeCreation(row) };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/creations/:resource/versions', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const versions = await store.websiteHistory(access.id, resource);
+      if (!versions.length)
+        return reply.code(404).send({ message: 'Website not found.' });
+      return {
+        companyId: access.id,
+        creationId: resource,
+        versions: versions.map(({ revision, ...version }) => ({
+          ...version,
+          versionNumber: revision,
+          previewable: true,
+        })),
+        nextCursor: null,
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(versionsPath, async (request, reply) => {
     try {
       const access = await authorize(request, reply);
@@ -1211,6 +1302,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         prior.title,
         prior.document,
         prior.pages,
+        prior.id,
       );
       if (!item)
         return reply.code(409).send({

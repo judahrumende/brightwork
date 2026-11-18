@@ -27,6 +27,7 @@ const { log } = JSON.parse(await readFile(capture, 'utf8')) as {
 };
 const workspaceIds = new Set<string>();
 const historyVisits = new Map<string, number>();
+const creationVisits = new Map<string, number>();
 for (const entry of log.entries) {
   const url = new URL(entry.request.url);
   const workspace = url.pathname.match(
@@ -34,6 +35,11 @@ for (const entry of log.entries) {
   )?.[1];
   if (url.origin !== source || !workspace) continue;
   workspaceIds.add(workspace);
+  const creation = url.pathname.match(
+    /\/creations\/([0-9a-f-]{36})(?:\/|$)/u,
+  )?.[1];
+  if (creation)
+    creationVisits.set(creation, (creationVisits.get(creation) ?? 0) + 1);
   const history = url.pathname.match(
     /\/ted\/unattended\/([0-9a-f-]{36})$/u,
   )?.[1];
@@ -116,7 +122,7 @@ try {
     body: 'Review this announcement.',
     state: 'pending',
   });
-  await workStore.saveArtifact({
+  const website = await workStore.saveArtifact({
     businessId: workspace.id,
     kind: 'website',
     title: 'Fixture website',
@@ -128,6 +134,8 @@ try {
   );
   const [primaryHistory] = [...historyVisits].sort((a, b) => b[1] - a[1]);
   if (primaryHistory) fixtureIds[primaryHistory[0]] = run.id;
+  const [primaryCreation] = [...creationVisits].sort((a, b) => b[1] - a[1]);
+  if (primaryCreation) fixtureIds[primaryCreation[0]] = website.id;
   const origin = 'http://127.0.0.1:5190';
   registerAuth(
     server,
