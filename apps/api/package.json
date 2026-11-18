@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/db/migrate.ts",
-    "test:integration": "tsx --test test/auth.test.ts test/automation.test.ts test/shopify.test.ts",
+    "test:integration": "tsx --test test/auth.test.ts test/automation.test.ts test/shopify.test.ts test/sms.test.ts",
     "test:research": "tsx --test test/research.test.ts",
     "test:growth": "node --import tsx --test test/growth.test.ts test/github-site-sync.test.ts"
   },

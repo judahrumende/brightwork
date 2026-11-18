@@ -6,6 +6,7 @@ import { registerWorkspace } from '../workspace/routes';
 import { runStore } from '../workspace/run-store';
 import { registerEmailDelivery } from '../workspace/email-delivery';
 import { mailStore } from '../workspace/mail-store';
+import { workspaceSms } from '../workspace/sms';
 import { inboundMail } from '../workspace/inbound-mail';
 import { z } from 'zod';
 import { connectDatabase } from '../db/database';
@@ -355,6 +356,11 @@ export function registerAuth(
     providerRequest,
   );
   inbound.register(app);
+  const sms =
+    env.SMS_ENABLED && env.VAULT_KEY
+      ? workspaceSms(database.db, env.VAULT_KEY, origin, providerRequest)
+      : undefined;
+  sms?.register(app);
   if (env.OUTREACH_RESEND_WEBHOOK_SECRET)
     registerEmailDelivery(app, database.db, env.OUTREACH_RESEND_WEBHOOK_SECRET);
   registerWorkspace(app, {
@@ -366,6 +372,7 @@ export function registerAuth(
     runs: runStore(database.db),
     mail: mailStore(database.db),
     inbound,
+    sms,
     outreachSender:
       agentEnabled && env.OUTREACH_RESEND_API_KEY && env.OUTREACH_FROM_EMAIL
         ? env.OUTREACH_FROM_EMAIL

@@ -22,6 +22,8 @@ import { creditUnits } from './credit-amount';
 import { canLeadRun } from './run-store';
 import type { runStore } from './run-store';
 import type { mailStore } from './mail-store';
+import { smsReplyInput } from './sms';
+import type { workspaceSms } from './sms';
 import type { inboundMail } from './inbound-mail';
 
 type Context = {
@@ -33,6 +35,7 @@ type Context = {
   runs: ReturnType<typeof runStore>;
   mail: ReturnType<typeof mailStore>;
   inbound: ReturnType<typeof inboundMail>;
+  sms: ReturnType<typeof workspaceSms> | undefined;
   outreachSender: string | undefined;
   redis: Redis;
   agentEnabled: boolean;
@@ -148,6 +151,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
   registerWorkspaceSettings(app, {
     team: context.team,
     commerce: context.commerce,
+    sms: context.sms,
     vault: context.vault,
     domains: context.domains,
     authorize,
@@ -506,6 +510,44 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/work/sms', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return reply;
+      const sms = context.sms;
+      const [connection, messages] = sms
+        ? await Promise.all([sms.connection(access.id), sms.list(access.id)])
+        : [null, []];
+      return {
+        enabled: Boolean(sms),
+        connected: Boolean(connection?.connected),
+        messages,
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.post(path + '/work/sms', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return reply;
+      if (!canLeadRun(access.role))
+        return reply
+          .code(403)
+          .send({ message: 'An owner or admin can send SMS replies.' });
+      if (!context.sms)
+        return reply.code(503).send({ message: 'SMS is unavailable.' });
+      const input = smsReplyInput.parse(request.body);
+      await context.limit('sms-reply', access.id, 15, 60);
+      const result = await context.sms.reply(access.id, input);
+      if ('error' in result)
+        return reply.code(409).send({ message: result.error });
+      return result;
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+
   app.get(path + '/work/inbound', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
