@@ -6,8 +6,11 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { authEnv } from '../src/auth/config';
 import { businesses } from '../src/db/schema';
 import { workspaceMetaPages } from '../src/growth/meta-page-store';
+import { registerGrowth } from '../src/growth/routes';
+import type { agentStore } from '../src/workspace/agent-store';
 
 const url = process.env.TEST_DATABASE_URL;
 test(
@@ -49,28 +52,53 @@ test(
     let subscribed = 0;
     let sent = 0;
     let ambiguous = false;
+    const vaultKey = '12'.repeat(32);
+    const transport: typeof fetch = async (target, options) => {
+      const path = new URL(String(target)).pathname;
+      assert.equal(
+        new Headers(options?.headers).get('authorization'),
+        'Bearer ' + activeToken,
+      );
+      if (path.endsWith('/me'))
+        return Response.json({ id: '500', name: 'Fixture Page' });
+      if (path.endsWith('/500/subscribed_apps')) {
+        subscribed += 1;
+        return Response.json({ success: true });
+      }
+      assert.ok(path.endsWith('/500_30/comments'));
+      sent += 1;
+      if (ambiguous) throw new Error('response lost');
+      return Response.json({ id: '500_41' });
+    };
     const pages = workspaceMetaPages(
       db,
-      { vaultKey: '12'.repeat(32), appSecret: secret, verifyToken },
-      async (target, options) => {
-        const path = new URL(String(target)).pathname;
-        assert.equal(
-          new Headers(options?.headers).get('authorization'),
-          'Bearer ' + activeToken,
-        );
-        if (path.endsWith('/me'))
-          return Response.json({ id: '500', name: 'Fixture Page' });
-        if (path.endsWith('/500/subscribed_apps')) {
-          subscribed += 1;
-          return Response.json({ success: true });
-        }
-        assert.ok(path.endsWith('/500_30/comments'));
-        sent += 1;
-        if (ambiguous) throw new Error('response lost');
-        return Response.json({ id: '500_41' });
-      },
+      { vaultKey, appSecret: secret, verifyToken },
+      transport,
     );
-    pages.register(app);
+    registerGrowth(app, {
+      env: authEnv.parse({
+        VAULT_KEY: vaultKey,
+        GROWTH_META_APP_SECRET: secret,
+        GROWTH_META_VERIFY_TOKEN: verifyToken,
+      }),
+      db,
+      transport,
+      store: {
+        membership: async (actor: string, businessId: string) =>
+          actor === businessId ? { role: 'owner' } : undefined,
+      } as ReturnType<typeof agentStore>,
+      identify: async (request) => String(request.headers['x-test-business']),
+      requireOrigin: () => {},
+      limit: async () => {},
+      reportError: (error) => {
+        throw error;
+      },
+    });
+    const readSocial = (route: string, actor = owner.id, business = owner.id) =>
+      app.inject({
+        url: `/api/companies/${business}/social/${route}`,
+        headers: { 'x-test-business': actor },
+      });
     const urlPath = '/api/webhooks/meta/pages';
     const challenge = new URLSearchParams({
       'hub.mode': 'subscribe',
@@ -93,6 +121,20 @@ test(
       name: 'Fixture Page',
       connected: true,
     });
+    assert.deepEqual((await readSocial('accounts')).json(), {
+      items: [
+        {
+          platform: 'facebook',
+          pageId: '500',
+          name: 'Fixture Page',
+          connected: true,
+        },
+      ],
+    });
+    const capabilities = await readSocial('capabilities');
+    assert.equal(capabilities.statusCode, 200);
+    assert.equal(capabilities.json().platforms[0].publish, true);
+    assert.deepEqual(capabilities.json().platforms[0].inbox, ['comment']);
 
     function deliver(
       verb: string,
@@ -164,10 +206,48 @@ test(
     assert.equal((await pages.reply(owner.id, retry)).status, 'needs_review');
     assert.equal((await pages.reply(owner.id, retry)).status, 'needs_review');
     assert.equal(sent, 2);
+    const allReplies = await readSocial('replies');
+    assert.equal(allReplies.statusCode, 200);
+    assert.deepEqual(
+      new Set(allReplies.json().items.map((item: { id: string }) => item.id)),
+      new Set([reply.id, retry.id]),
+    );
+    assert.deepEqual(
+      (await readSocial('replies?waiting=true&limit=1'))
+        .json()
+        .items.map((item: { id: string }) => item.id),
+      [retry.id],
+    );
+    const actions = (
+      await readSocial('provider-actions?state=published')
+    ).json().actions;
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0].providerId, '500_41');
+    assert.equal('body' in actions[0], false);
+    assert.deepEqual(
+      (await readSocial('replies', other.id, other.id)).json().items,
+      [],
+    );
+    for (const route of [
+      'capabilities',
+      'accounts',
+      'replies',
+      'provider-actions',
+    ]) {
+      assert.equal((await readSocial(route, other.id)).statusCode, 404);
+    }
     await deliver('remove', 105);
     await deliver('add', 104);
     assert.equal((await pages.threads(owner.id)).comments.length, 0);
     await pages.disconnect(owner.id);
+    assert.equal(
+      (await readSocial('accounts')).json().items[0].connected,
+      false,
+    );
+    assert.equal(
+      (await readSocial('capabilities')).json().platforms[0].publish,
+      false,
+    );
     assert.equal(await pages.provider(owner.id), null);
     await deliver('add', 110, '500_31');
     assert.equal((await pages.threads(owner.id)).comments.length, 0);

@@ -47,6 +47,42 @@ export const pageReplyInput = z.strictObject({
   body: z.string().trim().min(1).max(4000),
 });
 
+export function metaPageReads(db: Database) {
+  return {
+    async connection(id: string) {
+      const [row] = await db
+        .select({
+          pageId: connections.pageId,
+          name: connections.name,
+          connected: sql<boolean>`${connections.token} is not null`,
+        })
+        .from(connections)
+        .where(eq(connections.businessId, id));
+      return row ?? null;
+    },
+    async replies(id: string, limit = 100, status?: string) {
+      return db
+        .select({
+          id: replies.id,
+          commentId: replies.commentId,
+          body: replies.body,
+          status: replies.status,
+          providerId: replies.providerId,
+          createdAt: replies.createdAt,
+        })
+        .from(replies)
+        .where(
+          and(
+            eq(replies.businessId, id),
+            status ? eq(replies.status, status) : undefined,
+          ),
+        )
+        .orderBy(desc(replies.createdAt), desc(replies.id))
+        .limit(limit);
+    },
+  };
+}
+
 export function workspaceMetaPages(
   db: Database,
   config: {
@@ -56,6 +92,7 @@ export function workspaceMetaPages(
   },
   transport: typeof fetch = fetch,
 ) {
+  const reads = metaPageReads(db);
   const cipher = vaultCipher(config.vaultKey);
   const ownsPage = (id: string) => eq(connections.businessId, id);
   const context = (id: string) => Buffer.from('meta-page\0' + id);
@@ -70,15 +107,10 @@ export function workspaceMetaPages(
   const readConnection = async (id: string) =>
     (await db.select().from(connections).where(ownsPage(id)))[0];
   return {
+    connection: reads.connection,
     async provider(id: string) {
       const row = await readConnection(id);
       return row ? providerFor(row) : undefined;
-    },
-    async connection(id: string) {
-      const row = await readConnection(id);
-      return row
-        ? { pageId: row.pageId, name: row.name, connected: Boolean(row.token) }
-        : null;
     },
     async connect(id: string, input: z.infer<typeof pageConnectionInput>) {
       const provider = metaPage(input.pageId, input.token, transport);
@@ -123,14 +155,12 @@ export function workspaceMetaPages(
           )
           .orderBy(desc(comments.updatedAt))
           .limit(100),
-        db
-          .select()
-          .from(replies)
-          .where(eq(replies.businessId, id))
-          .orderBy(desc(replies.createdAt))
-          .limit(100),
+        reads.replies(id),
       ]);
-      return { comments: received, replies: sent };
+      return {
+        comments: received,
+        replies: sent.map((reply) => ({ businessId: id, ...reply })),
+      };
     },
     async reply(id: string, input: z.infer<typeof pageReplyInput>) {
       const replyScope = and(

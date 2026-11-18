@@ -20,6 +20,8 @@ import {
   workspaceCredentials,
 } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
+import { creditConfig, creditLedger } from '../src/workspace/credits';
+import { mediaStore } from '../src/workspace/media-store';
 import { observedContracts } from '../../../packages/shared/src/api-contracts.gen';
 import { runStore } from '../src/workspace/run-store';
 import { domainStore } from '../src/workspace/domains';
@@ -349,6 +351,78 @@ test(
       const collaboratorCookie = socialCookies.get('GoogleOAuth');
       assert.ok(separateCookie && collaboratorCookie);
       const other = await company(separateCookie, 'Separate Fixture');
+      const media = mediaStore(
+        database.db,
+        creditLedger(
+          database.db,
+          creditConfig.parse({ STARTER_CREDITS: '10' }),
+        ),
+      );
+      const renderId = randomUUID();
+      assert.equal(
+        await media.enqueue(
+          studio,
+          owner.companyList.userId,
+          {
+            id: renderId,
+            kind: 'video',
+            prompt: 'A private rendered clip',
+            quotedCredits: '1',
+          },
+          '1',
+        ),
+        'accepted',
+      );
+      assert.equal(
+        await media.enqueue(
+          studio,
+          owner.companyList.userId,
+          {
+            id: randomUUID(),
+            kind: 'image',
+            prompt: 'A separate image',
+            quotedCredits: '1',
+          },
+          '1',
+        ),
+        'accepted',
+      );
+      const videoClaim = await media.claim(['video']);
+      assert.ok(videoClaim);
+      assert.equal(
+        await media.record(videoClaim, {
+          state: 'completed',
+          bytes: Buffer.from('synthetic video'),
+        }),
+        true,
+      );
+      const renders = await server.inject({
+        url: `/api/companies/${studio}/video/renders`,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(renders.statusCode, 200);
+      const { items: clips } = renders.json();
+      assert.equal(clips.length, 1);
+      assert.equal(clips[0].id, renderId);
+      assert.equal(clips[0].state, 'completed');
+      assert.equal(
+        (
+          await server.inject({
+            url: clips[0].downloadUrl,
+            headers: { cookie: freshCookie },
+          })
+        ).body,
+        'synthetic video',
+      );
+      assert.equal(
+        (
+          await server.inject({
+            url: clips[0].downloadUrl,
+            headers: { cookie: separateCookie },
+          })
+        ).statusCode,
+        404,
+      );
       const [turn] = await database.db
         .insert(agentTurns)
         .values({ businessId: studio, prompt: 'Synthetic private chat' })
@@ -398,6 +472,7 @@ test(
         '/pip/turns',
         `/work/${draft.id}`,
         `/work/${file.id}`,
+        '/video/renders',
         calendar,
       ]) {
         assert.equal(

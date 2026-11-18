@@ -12,13 +12,14 @@ import {
 } from '../research/searxng';
 import type { agentStore } from '../workspace/agent-store';
 import {
+  metaPageReads,
   pageConnectionInput,
   pageReplyInput,
   workspaceMetaPages,
 } from './meta-page-store';
 import { googleListing, metaAds, metaPage, money } from './providers';
 
-const root = '/api/companies/:id/growth';
+const root = '/api/companies/:id';
 const uuid = z.uuid();
 const urlInput = z.string().trim().max(2048);
 class GrowthError extends Error {
@@ -49,6 +50,7 @@ export function registerGrowth(
   },
 ) {
   const { env, db, store } = options;
+  const pageReads = metaPageReads(db);
   const publicUrl = publicPageUrl(env.APP_ORIGIN, env.SITE_BASE_DOMAIN);
   const readPage = pageReader(publicUrl);
   const search =
@@ -88,10 +90,11 @@ export function registerGrowth(
     path: string,
     permission: 'read' | 'write' | 'admin',
     handle: (request: FastifyRequest, access: Access) => Promise<unknown>,
+    section: 'growth' | 'social' = 'growth',
   ) {
     app.route({
       method,
-      url: root + path,
+      url: root + '/' + section + path,
       bodyLimit: 24_000,
       async handler(request, reply) {
         reply.header('Cache-Control', 'no-store');
@@ -152,6 +155,103 @@ export function registerGrowth(
     const managed = await pages?.provider(access.id);
     return managed === undefined ? (access.connected ? page : null) : managed;
   }
+  async function socialAccount(access: Access) {
+    const saved = await pageReads.connection(access.id);
+    if (saved && pages) return saved;
+    if (access.connected && page)
+      return { pageId: page.id, name: null, connected: true };
+    return saved && { ...saved, connected: false };
+  }
+  route(
+    'GET',
+    '/capabilities',
+    'read',
+    async (_request, access) => {
+      const account = await socialAccount(access);
+      const connected = account?.connected ?? false;
+      return {
+        readiness: connected ? 'ready' : 'limited',
+        reasons: connected ? [] : ['setup_required'],
+        managedAds: access.connected && Boolean(ads),
+        platforms: [
+          {
+            platform: 'facebook',
+            connect: Boolean(pages),
+            publish: connected,
+            ownerApproves: true,
+            autoReplies: false,
+            inbox:
+              pages && connected && typeof account?.name === 'string'
+                ? ['comment']
+                : [],
+          },
+        ],
+        polling: { pollAfterMs: 5_000 },
+        rewrites: false,
+        tedReplies: false,
+        pictures: false,
+        destinations: connected || Boolean(pages),
+      };
+    },
+    'social',
+  );
+  route(
+    'GET',
+    '/accounts',
+    'read',
+    async (_request, access) => {
+      const account = await socialAccount(access);
+      return { items: account ? [{ platform: 'facebook', ...account }] : [] };
+    },
+    'social',
+  );
+  route(
+    'GET',
+    '/replies',
+    'read',
+    async (request, { id }) => {
+      const { limit, waiting } = z
+        .object({
+          limit: z.coerce.number().int().min(1).max(100).default(100),
+          waiting: z.enum(['true', 'false']).optional(),
+        })
+        .parse(request.query);
+      return {
+        items: await pageReads.replies(
+          id,
+          limit,
+          waiting === 'true' ? 'needs_review' : undefined,
+        ),
+        nextCursor: null,
+      };
+    },
+    'social',
+  );
+  route(
+    'GET',
+    '/provider-actions',
+    'read',
+    async (request, { id }) => {
+      const { state } = z
+        .object({ state: z.string().min(1).max(40).optional() })
+        .parse(request.query);
+      const replies = await pageReads.replies(id, 100, state);
+      return {
+        actions: replies.map(
+          ({ id, commentId, status, providerId, createdAt }) => ({
+            id,
+            commentId,
+            status,
+            providerId,
+            createdAt,
+            platform: 'facebook',
+            kind: 'reply',
+          }),
+        ),
+      };
+    },
+    'social',
+  );
   route('GET', '', 'read', async (_request, access) => {
     const destination = await currentPage(access);
     return {

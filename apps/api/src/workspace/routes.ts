@@ -810,6 +810,25 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/video/renders', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return reply;
+      const jobs = await context.media.list(access.id, 'video');
+      return {
+        items: jobs.map((job) => ({
+          ...job,
+          downloadUrl:
+            job.state === 'completed'
+              ? `/api/companies/${access.id}/media/${job.id}/asset`
+              : null,
+        })),
+        nextCursor: null,
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.post(path + '/media', async (request, reply) => {
     try {
       const access = await authorize(request, reply, true);
