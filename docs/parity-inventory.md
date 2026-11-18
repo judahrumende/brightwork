@@ -1,6 +1,6 @@
 # Foundable parity inventory
 
-The [screen index](../kit/screen-index.json) tracks all 86 numbered tour captures. Capture 001 is the logged-out landing page. The capture directory also contains 20 public screenshots outside the numbered tour. Eight numbered screens and two additional auth screens have local Playwright comparisons in `docs/visual-diff.html`. The remaining screens still need matching Brightwork captures and review.
+The [screen index](../kit/screen-index.json) tracks all 86 numbered tour captures. Capture 001 is the logged-out landing page. The capture directory also contains 20 public screenshots outside the numbered tour. Ten numbered screens and two additional auth screens have local Playwright comparisons in `docs/visual-diff.html`. The remaining screens still need matching Brightwork captures and review.
 
 The [API shape catalogue](../kit/api-shapes.json) records 147 unique observed method and path pairs and 70 routes referenced by the original JavaScript. The referenced paths have no exact path match in the observed request catalogue. The [client evidence index](../kit/referenced-endpoint-evidence.json) points to shipped JavaScript locations for all 70 entries. There is static method evidence for 51 entries from direct calls, standard Fetch defaults or traced request helpers. Eleven have a matching reference with no method established. Eight identify a route family whose requests add further path segments. Check the line in `file` first and the helper or resolved call in `via` when present.
 
@@ -8,4 +8,10 @@ For example, the ads audience client sends GET for listing and POST for creation
 
 `pnpm parity:check` verifies the checked-in inventories. `pnpm contracts:check` verifies generated schemas. Run `pnpm visual:report` locally with the raw captures in `kit/screens/` and the latest Playwright screenshots in `test-results/visual/`. The report displays pixel differences for review. Raw screenshots and HAR files stay in the local capture kit.
 
-Staging screenshot comparison, responsive and accessibility review, and HAR replay are pending. Provider-dependent contracts require a permitted fixture or a verified provider connection before being marked complete.
+The request-time marketing suite covers 24 Brightwork public routes from the capture inventory. It checks the initial HTML and canonical URL, cookie-independent caching, published-host separation and mobile navigation with JavaScript disabled. It also tests the landing idea handoff and scans selected public workflows with axe. The pages use Brightwork copy and layout.
+
+### Replay and staging
+
+The read-only logged-out HAR replay against the local built server matched five records and found two gaps. The capture returns 200 for `GET /api/landing-test` and `GET /api/billing/plans`. Brightwork currently returns 404 for both. The landing has one implementation, and public pricing describes credit usage while available subscriptions are shown in account Billing. The five matched records represent observed responses on repeated requests, so this run does not establish five distinct endpoints.
+
+Signed-in replay still requires a synthetic local session and an ID mapping to the fixture workspace. Full staging screenshot comparison, responsive and accessibility review, and replay depend on an active staging environment. Verify live identity, billing, messaging, connected stores and media using test accounts or permitted provider credentials. Leave live ad activation disabled until an approved provider test proves the budget controls.

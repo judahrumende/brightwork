@@ -121,3 +121,13 @@ test('capture the foundation and its browser empty state', async ({ page }) => {
     path: 'test-results/visual/foundation-browser-empty.png',
   });
 });
+
+test('capture the public landing at the tour viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 765 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(
+    page.getByRole('textbox', { name: 'Your business idea' }),
+  ).toBeVisible();
+  await page.screenshot({ path: 'test-results/visual/001-landing-hero.png' });
+});

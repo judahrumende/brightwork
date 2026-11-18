@@ -1108,6 +1108,9 @@ test('Commerce insights shows provider totals, customer counts and the selected 
   await expect(insights.getByRole('table')).toContainText('Shopify');
   await expect(insights.getByRole('table')).toContainText(/AUD\s*50\.00/);
   await expect(insights.getByText('Repeat customers')).toBeVisible();
+  await page.screenshot({
+    path: 'test-results/visual/079-home-revenue-12m-insights-sales.png',
+  });
   await insights.getByLabel('From').fill('2026-11-17');
   await insights.getByLabel('Through').fill('2026-11-18');
   await insights.getByRole('button', { name: 'Apply dates' }).click();

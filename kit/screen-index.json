@@ -4,7 +4,7 @@
     "title": "Public landing page (/)",
     "file": "001-landing-hero.png",
     "surface": "public",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 2,
@@ -550,7 +550,7 @@
     "title": "Home: 12M range and Insights Sales tab",
     "file": "079-home-revenue-12m-insights-sales.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 80,
