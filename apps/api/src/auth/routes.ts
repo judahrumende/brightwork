@@ -2,6 +2,7 @@ import { creditConfig, creditLedger } from '../workspace/credits';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Redis from 'ioredis';
 import { agentStore } from '../workspace/agent-store';
+import { commerceInsights } from '../workspace/commerce-insights';
 import { registerWorkspace } from '../workspace/routes';
 import { runStore } from '../workspace/run-store';
 import { registerEmailDelivery } from '../workspace/email-delivery';
@@ -295,6 +296,7 @@ export function registerAuth(
           {
             key: env.STRIPE_TEST_KEY,
             secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
+            identityKey: secret,
             origin,
           },
           providerRequest,
@@ -416,6 +418,7 @@ export function registerAuth(
     team,
     commerce,
     sellerPayments,
+    salesInsights: (id, range) => commerceInsights(database.db, id, range),
     domains: domainStore(database.db),
     vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
     runs: runStore(database.db),

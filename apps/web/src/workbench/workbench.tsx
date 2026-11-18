@@ -26,6 +26,7 @@ import { WorkspaceFiles } from './workspace-files';
 import { WorkspaceSettings } from './workspace-settings';
 import { WebSearch } from './web-search';
 import { Growth } from './growth';
+import { CommerceInsights } from './commerce-insights';
 import { useTraffic, Visitors } from './visitors';
 import styles from './workbench.module.css';
 
@@ -235,6 +236,15 @@ function Home({
     new Date(),
   ).reduce((total, day) => total + day.views, 0);
   const [showVisitors, setShowVisitors] = useState(false);
+  const [showCommerce, setShowCommerce] = useState(false);
+  const commerceLink = useRef<HTMLButtonElement>(null);
+  const restoreCommerce = useRef(false);
+  useEffect(() => {
+    if (!showCommerce && restoreCommerce.current) {
+      commerceLink.current?.focus();
+      restoreCommerce.current = false;
+    }
+  }, [showCommerce]);
   const visitorsLink = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
   useEffect(() => {
@@ -243,6 +253,16 @@ function Home({
       restoreFocus.current = false;
     }
   }, [showVisitors]);
+  if (showCommerce)
+    return (
+      <CommerceInsights
+        companyId={company.id}
+        onBack={() => {
+          restoreCommerce.current = true;
+          setShowCommerce(false);
+        }}
+      />
+    );
   if (showVisitors) {
     return (
       <Visitors
@@ -282,10 +302,13 @@ function Home({
         </article>
         <article>
           <h2>Revenue</h2>
-          <EmptyState
-            title="No revenue yet"
-            description="Sales and payments will appear here."
-          />
+          <Button
+            ref={commerceLink}
+            variant="secondary"
+            onClick={() => setShowCommerce(true)}
+          >
+            View sales and customers
+          </Button>
         </article>
         <article>
           <h2>Visitors</h2>
@@ -305,13 +328,6 @@ function Home({
           >
             View website traffic
           </Button>
-        </article>
-        <article>
-          <h2>Insights</h2>
-          <EmptyState
-            title="No activity to report"
-            description="Your business activity will appear here."
-          />
         </article>
       </section>
     </>

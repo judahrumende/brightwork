@@ -108,6 +108,8 @@ pnpm dev
 
 - **Workspace settings → Commerce → Stripe Connect** lets owners and admins onboard a seller in test mode and create a shareable sale link. Set `STRIPE_TEST_KEY` and a separate `STRIPE_CONNECT_WEBHOOK_SECRET`. Register `/api/webhooks/stripe-connect` for connected account events `account.updated`, `checkout.session.completed`, and `charge.refunded`. A seller must complete onboarding and support payments and payouts before creating a sale. Brightwork verifies the connected account, currency, and total against Stripe before recording a payment.
 
+- **Home → View sales and customers** reports recorded Shopify receipts and Stripe Connect test sales by provider and currency. The date range uses UTC and attaches refunds to the original sale. Customer counts use pseudonymous identifiers scoped to a store or seller account. Orders without customer information count as unattributed. Existing Shopify records enter the report when a signed delivery refreshes them with canonical financial totals. Shopify customer access can depend on the app’s protected customer data permissions.
+
 ## Standalone web search API
 
 For browser reading, lead research, Google Business Profile, social drafts and publishing, Meta campaign controls, and the ad wallet, see [the Growth setup plan](docs/growth-plan.md). Run the new migration before opening these tools.

@@ -21,6 +21,9 @@ const checkoutSession = z.object({
   currency: currency.nullable(),
   payment_intent: paymentId.nullable(),
   client_reference_id: z.string().max(200).nullable(),
+  customer_details: z
+    .object({ email: z.string().max(320).nullish() })
+    .nullish(),
 });
 const hostedUrl = (hostname: string) =>
   z

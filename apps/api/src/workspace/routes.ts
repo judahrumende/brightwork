@@ -27,11 +27,18 @@ import type { stripeConnect } from './stripe-connect';
 import type { workspaceSms } from './sms';
 import type { inboundMail } from './inbound-mail';
 
+import { commerceRange } from './commerce-insights';
+import type { commerceInsights } from './commerce-insights';
+
 type Context = {
   store: ReturnType<typeof agentStore>;
   team: ReturnType<typeof teamStore>;
   commerce: ReturnType<typeof shopifyOrders> | undefined;
   sellerPayments: ReturnType<typeof stripeConnect> | undefined;
+  salesInsights: (
+    id: string,
+    range: z.infer<typeof commerceRange>,
+  ) => ReturnType<typeof commerceInsights>;
   domains: ReturnType<typeof domainStore>;
   vault: ReturnType<typeof vaultStore> | undefined;
   runs: ReturnType<typeof runStore>;
@@ -513,6 +520,19 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/insights/commerce', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return reply;
+      return await context.salesInsights(
+        access.id,
+        commerceRange.parse(request.query),
+      );
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+
   app.get(path + '/work/sms', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
