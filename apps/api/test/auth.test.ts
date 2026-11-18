@@ -879,6 +879,38 @@ test(
             url: '/api/companies/' + studio + '/ted/chats/' + chatId + '/queue',
             headers: { cookie, ...(tag ? { 'if-none-match': tag } : {}) },
           });
+        const chatPath = '/api/companies/' + studio + '/ted/chats';
+        const browse = (suffix: string, cookie = freshCookie) =>
+          server.inject({ url: chatPath + suffix, headers: { cookie } });
+        const conversations = await browse('?limit=50');
+        assert.equal(conversations.statusCode, 200);
+        const titles = observedContracts[
+          'GET /api/companies/:id/ted/chats'
+        ].response.parse(conversations.json()).conversations;
+        assert.equal(titles.find(({ id }) => id === run.id)?.title, run.goal);
+        assert.equal(
+          titles.find(({ id }) => id === withFiles.id)?.title,
+          'Use the attached brief',
+        );
+        assert.ok(!titles.some(({ id }) => id === runTurn.turnId));
+        const details = await browse('/' + withFiles.id + '/title');
+        assert.deepEqual(
+          observedContracts[
+            'GET /api/companies/:id/ted/chats/:id/title'
+          ].response.parse(details.json()),
+          titles.find(({ id }) => id === withFiles.id),
+        );
+        assert.equal(
+          (await browse('/' + withFiles.id + '/title', separateCookie))
+            .statusCode,
+          404,
+        );
+        const savedChat = await browse('/' + withFiles.id);
+        assert.equal(savedChat.statusCode, 200);
+        assert.equal(
+          savedChat.json().turns[0]?.attachments[0]?.id,
+          withFiles.attachments[0].id,
+        );
         const direct = await readQueue(withFiles.id);
         assert.equal(direct.statusCode, 200);
         assert.equal(direct.json().items[0]?.id, withFiles.id);

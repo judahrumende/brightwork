@@ -823,6 +823,9 @@ button.creditCard:hover {
   align-items: center;
   gap: 8px;
 }
+.chat header {
+  flex-wrap: wrap;
+}
 .chat h2,
 :is(.artifactDialog, .taskDialog) h2 {
   margin: 0;

@@ -24,7 +24,10 @@ for (const mode of ['sign-in', 'sign-up'] as const) {
       }),
     ).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: `test-results/visual/auth-${mode}.png` });
+    await page.screenshot({
+      path: `test-results/visual/auth-${mode}.png`,
+      animations: 'disabled',
+    });
   });
 }
 
