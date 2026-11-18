@@ -564,6 +564,22 @@ test('restoring a saved version creates a pending draft and keeps the live snaps
     publicUrl: 'https://demo.example.test/',
   };
   const versions = api + '/work/' + artifact + '/versions';
+  await page.route(
+    '**' + api + '/work/' + artifact + '/review?revision=3',
+    (route) =>
+      route.fulfill({
+        json: {
+          change: {
+            revision: 3,
+            baseRevision: 2,
+            baseSource: 'published',
+            edits: [{ path: '/', change: 'updated' }],
+          },
+          before: { document: '<h1>Live website</h1>', pages: [] },
+          after: { document: '<h1>Original website</h1>', pages: [] },
+        },
+      }),
+  );
   await page.route('**' + api + '/work', (route) =>
     route.fulfill({ json: { items: [item], hosting: true } }),
   );
@@ -610,6 +626,21 @@ test('restoring a saved version creates a pending draft and keeps the live snaps
   await expect(
     editor.getByRole('link', { name: 'View live site' }),
   ).toHaveAttribute('href', 'https://demo.example.test/');
+  await editor.getByText('Compare website changes', { exact: true }).click();
+  const comparison = editor.getByRole('region', {
+    name: 'Website change comparison',
+  });
+  await expect(comparison.getByLabel('Changed page')).toHaveValue('/');
+  await expect(
+    comparison
+      .frameLocator('iframe[title="Published version preview"]')
+      .getByRole('heading', { name: 'Live website' }),
+  ).toBeVisible();
+  await expect(
+    comparison
+      .frameLocator('iframe[title="Compared draft preview"]')
+      .getByRole('heading', { name: 'Original website' }),
+  ).toBeVisible();
   await captureWorkspace(page, '051-approval-website-change.png');
 });
 

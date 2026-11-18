@@ -31,6 +31,7 @@ const historyVisits = new Map<string, number>();
 const creationVisits = new Map<string, number>();
 const capturedBuilds = new Set<string>();
 const capturedChats = new Set<string>();
+const capturedSiteCare = new Set<string>();
 for (const entry of log.entries) {
   const url = new URL(entry.request.url);
   const workspace = url.pathname.match(
@@ -49,6 +50,10 @@ for (const entry of log.entries) {
   )?.[1];
   if (creation)
     creationVisits.set(creation, (creationVisits.get(creation) ?? 0) + 1);
+  const care = url.pathname.match(
+    /\/creations\/[0-9a-f-]{36}\/site-care\/([0-9a-f-]{36})$/u,
+  )?.[1];
+  if (care) capturedSiteCare.add(care);
   const history = url.pathname.match(
     /\/ted\/unattended\/([0-9a-f-]{36})$/u,
   )?.[1];
@@ -158,6 +163,27 @@ try {
       ],
     })
     .where(eq(agentTurns.id, work.turnId));
+  assert.ok(
+    await workStore.decide(
+      workspace.id,
+      website.id,
+      website.revision,
+      true,
+      account.account.id,
+    ),
+  );
+  assert.ok(
+    await workStore.publish(workspace.id, website.id, website.revision, true),
+  );
+  assert.ok(
+    await workStore.editWebsite(
+      workspace.id,
+      website.id,
+      website.revision,
+      website.title,
+      '<p>Compare the revised homepage.</p>',
+    ),
+  );
   const fixtureIds = Object.fromEntries(
     [...workspaceIds].map((id) => [id, workspace.id]),
   );
@@ -184,6 +210,14 @@ try {
       .set({ state: 'completed', answer: 'Fixture summary', revision: 1 })
       .where(eq(agentTurns.id, chat.id));
     fixtureIds[capturedChat] = chat.id;
+  }
+  if (capturedSiteCare.size === 1) {
+    const [captured] = capturedSiteCare;
+    const [review] = await workStore.websiteReviews(workspace.id, {
+      id: website.id,
+      onlyPublished: true,
+    });
+    if (captured && review) fixtureIds[captured] = review.change.versionId;
   }
   const origin = 'http://127.0.0.1:5190';
   registerAuth(

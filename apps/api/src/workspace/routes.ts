@@ -1331,6 +1331,64 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     };
   }
 
+  app.get(path + '/creations/site-care/changes', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const results = await store.websiteReviews(access.id, {
+        onlyPublished: true,
+      });
+      return {
+        companyId: access.id,
+        changes: results.map(({ change }) => change),
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(
+    path + '/creations/:resource/site-care/:versionId',
+    async (request, reply) => {
+      try {
+        const access = await authorize(request, reply);
+        if (!access) return;
+        const { resource, versionId } = versionParams.parse(request.params);
+        const [result] = await store.websiteReviews(access.id, {
+          id: resource,
+          versionId,
+          onlyPublished: true,
+        });
+        if (!result)
+          return reply
+            .code(404)
+            .send({ message: 'Pending website change not found.' });
+        return { companyId: access.id, change: result.change };
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    },
+  );
+  app.get(path + '/work/:resource/review', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const { revision } = z
+        .object({ revision: z.coerce.number().int().positive() })
+        .parse(request.query);
+      const [result] = await store.websiteReviews(access.id, {
+        id: resource,
+        revision,
+      });
+      if (!result)
+        return reply.code(404).send({
+          message: 'Refresh the work item to review its current draft.',
+        });
+      return result;
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/creations', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
