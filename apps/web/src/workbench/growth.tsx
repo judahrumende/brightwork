@@ -5,6 +5,7 @@ import { api, errorMessage, write } from '../auth/client';
 import type { Company } from '../auth/client';
 import { Button } from '../ui/primitives';
 import { workspacePath } from './session';
+import { MetaPageComments } from './meta-page-comments';
 import styles from './growth.module.css';
 
 const tools = {
@@ -18,6 +19,7 @@ type Tool = keyof typeof tools;
 type Capabilities = {
   leads: boolean;
   social: boolean;
+  socialReplies?: boolean;
   pageId: string | null;
   ads: boolean;
   google: boolean;
@@ -284,6 +286,9 @@ function Social({ base, company, canWrite, admin, caps }: Panel) {
   });
   return (
     <>
+      {caps.socialReplies && (
+        <MetaPageComments key={company.id} base={base} admin={admin} />
+      )}
       <p>
         Pip’s social drafts appear here for review.{' '}
         <a href={workspacePath(company.id, 'build')}>Ask Pip for a draft</a>.

@@ -91,6 +91,12 @@ export const authEnv = z.object({
     z.string().regex(/^\d+$/u).optional(),
   ),
   GROWTH_META_PAGE_TOKEN: optionalValue,
+  GROWTH_META_APP_SECRET: optionalValue.pipe(
+    z.string().min(16).max(4096).optional(),
+  ),
+  GROWTH_META_VERIFY_TOKEN: optionalValue.pipe(
+    z.string().min(16).max(4096).optional(),
+  ),
   GROWTH_META_AD_ACCOUNT_ID: optionalValue.pipe(
     z.string().regex(/^\d+$/u).optional(),
   ),

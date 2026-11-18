@@ -11,6 +11,11 @@ import {
   searxngSearch,
 } from '../research/searxng';
 import type { agentStore } from '../workspace/agent-store';
+import {
+  pageConnectionInput,
+  pageReplyInput,
+  workspaceMetaPages,
+} from './meta-page-store';
 import { googleListing, metaAds, metaPage, money } from './providers';
 
 const root = '/api/companies/:id/growth';
@@ -29,6 +34,7 @@ export function registerGrowth(
   app: FastifyInstance,
   options: {
     env: AuthEnv;
+    transport?: typeof fetch;
     db: Database;
     store: ReturnType<typeof agentStore>;
     identify: (request: FastifyRequest) => Promise<string>;
@@ -52,6 +58,19 @@ export function registerGrowth(
     env.GROWTH_META_PAGE_ID && env.GROWTH_META_PAGE_TOKEN
       ? metaPage(env.GROWTH_META_PAGE_ID, env.GROWTH_META_PAGE_TOKEN)
       : null;
+  const pages =
+    env.VAULT_KEY && env.GROWTH_META_APP_SECRET && env.GROWTH_META_VERIFY_TOKEN
+      ? workspaceMetaPages(
+          db,
+          {
+            vaultKey: env.VAULT_KEY,
+            appSecret: env.GROWTH_META_APP_SECRET,
+            verifyToken: env.GROWTH_META_VERIFY_TOKEN,
+          },
+          options.transport,
+        )
+      : null;
+  pages?.register(app);
   const ads =
     env.GROWTH_META_AD_ACCOUNT_ID && env.GROWTH_META_AD_TOKEN
       ? metaAds(env.GROWTH_META_AD_ACCOUNT_ID, env.GROWTH_META_AD_TOKEN)
@@ -129,14 +148,57 @@ export function registerGrowth(
     return url;
   }
 
-  route('GET', '', 'read', async (_request, access) => ({
-    browse: true,
-    leads: Boolean(search),
-    social: access.connected && Boolean(page),
-    pageId: access.connected ? (page?.id ?? null) : null,
-    ads: access.connected && Boolean(ads),
-    google: access.connected && Boolean(google),
+  async function currentPage(access: Access) {
+    const managed = await pages?.provider(access.id);
+    return managed === undefined ? (access.connected ? page : null) : managed;
+  }
+  route('GET', '', 'read', async (_request, access) => {
+    const destination = await currentPage(access);
+    return {
+      browse: true,
+      leads: Boolean(search),
+      social: Boolean(destination),
+      socialReplies: Boolean(pages),
+      pageId: destination?.id ?? null,
+      ads: access.connected && Boolean(ads),
+      google: access.connected && Boolean(google),
+    };
+  });
+  route('GET', '/page', 'read', async (_request, { id }) => ({
+    connection: (await pages?.connection(id)) ?? null,
   }));
+  route('POST', '/page/connect', 'admin', async (request, { id, actor }) => {
+    if (!pages)
+      throw new GrowthError(503, 'Facebook Page connections are unavailable.');
+    const input = pageConnectionInput.parse(request.body);
+    if (input.pageId === page?.id && id !== env.GROWTH_WORKSPACE_ID)
+      throw new GrowthError(409, 'This Facebook Page is already assigned.');
+    await options.limit('growth-page-connect', actor, 8, 60);
+    if (!(await remote(() => pages.connect(id, input))))
+      throw new GrowthError(
+        409,
+        'Verify the Page token and workspace assignment.',
+      );
+    return { connected: true };
+  });
+  route('POST', '/page/disconnect', 'admin', async (_request, { id }) => {
+    if (!pages)
+      throw new GrowthError(503, 'Facebook Page connections are unavailable.');
+    await pages.disconnect(id);
+    return { disconnected: true };
+  });
+  route('GET', '/page/comments', 'read', async (_request, { id }) =>
+    pages ? pages.threads(id) : { comments: [], replies: [] },
+  );
+  route('POST', '/page/replies', 'admin', async (request, { id, actor }) => {
+    if (!pages)
+      throw new GrowthError(503, 'Facebook Page replies are unavailable.');
+    const input = pageReplyInput.parse(request.body);
+    await options.limit('growth-page-reply', actor, 12, 60);
+    const result = await pages.reply(id, input);
+    if (result.error) throw new GrowthError(409, result.error);
+    return result;
+  });
   route('POST', '/browse', 'write', async (request, { actor }) => {
     const { url } = z.strictObject({ url: urlInput }).parse(request.body);
     const target = checkedUrl(url);
@@ -255,7 +317,8 @@ export function registerGrowth(
     };
   });
   route('POST', '/posts/:post/publish', 'admin', async (request, access) => {
-    const provider = requireProvider(access, page);
+    const provider = await currentPage(access);
+    if (!provider) throw new GrowthError(503, 'Connect a Facebook Page first.');
     const { post } = z.object({ post: uuid }).parse(request.params);
     const { revision, pageId } = z
       .strictObject({ revision: z.int().positive(), pageId: z.string() })

@@ -284,6 +284,7 @@ export function registerAuth(
     env,
     db: database.db,
     store: workspace,
+    ...(providerRequest ? { transport: providerRequest } : {}),
     requireOrigin: originTab,
     identify: async (request) => (await activeSession(request)).account.id,
     reportError: authError,
