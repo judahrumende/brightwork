@@ -720,6 +720,44 @@ test(
         },
       });
       assert.equal(edit.statusCode, 200);
+      {
+        const previewPath = work + '/review?revision=2';
+        const get = (url: string, cookie = freshCookie) =>
+          server.inject({ url, headers: { cookie } });
+        const preview = await get(previewPath);
+        assert.equal(preview.statusCode, 200);
+        const { change, before, after } = preview.json();
+        assert.equal(change.baseSource, 'published');
+        assert.equal(change.baseRevision, 1);
+        assert.deepEqual(change.edits, [
+          { path: '/', change: 'updated' },
+          { path: '/about', change: 'updated' },
+        ]);
+        assert.match(before.pages[0].html, /First about/);
+        assert.match(after.pages[0].html, /Second about/);
+        const care = '/api/companies/' + studio + '/creations';
+        const list = await get(care + '/site-care/changes');
+        assert.equal(list.statusCode, 200);
+        assert.equal(list.json().changes[0]?.versionId, change.versionId);
+        const detail = await get(
+          care + '/' + site.id + '/site-care/' + change.versionId,
+        );
+        assert.equal(detail.statusCode, 200);
+        assert.deepEqual(detail.json().change, change);
+        assert.ok(!detail.body.includes('First about'));
+        assert.equal((await get(work + '/review?revision=1')).statusCode, 404);
+        assert.equal((await get(previewPath, separateCookie)).statusCode, 404);
+        assert.equal(
+          (
+            await get(
+              care + '/' + site.id + '/site-care/' + change.versionId,
+              separateCookie,
+            )
+          ).statusCode,
+          404,
+        );
+      }
+
       assert.match((await visit('/about')).body, /First about/);
       assert.equal(
         (

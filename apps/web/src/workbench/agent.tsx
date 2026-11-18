@@ -11,6 +11,7 @@ import type { Turn } from './turn-events';
 import { creditKey, workspacePath } from './session';
 import { TaskCalendar } from './task-calendar';
 import { CalendarEventFields } from './calendar-event';
+import { WebsiteReview } from './website-review';
 import { WebsitePreview } from './website-preview';
 import { WebsiteVersions } from './website-versions';
 import { WebsiteEditor } from './website-editor';
@@ -879,6 +880,13 @@ export function WorkList({
                       title="Website draft preview"
                       html={selected.body}
                       pages={selected.pages ?? []}
+                    />
+                  )}
+                  {!editing && selected.state === 'pending' && (
+                    <WebsiteReview
+                      key={selected.id + ':' + selected.revision}
+                      endpoint={root(id) + '/work/' + selected.id + '/review'}
+                      revision={selected.revision}
                     />
                   )}
                   {!editing && role !== 'viewer' && (

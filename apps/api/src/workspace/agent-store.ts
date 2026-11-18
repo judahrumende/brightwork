@@ -1,3 +1,4 @@
+import { websiteReviews } from './website-review';
 import { buildActivity } from './build-activity';
 import { publishWebsite } from './publish-website';
 import { upcomingOccurrences } from './recurrence';
@@ -142,6 +143,10 @@ export function agentStore(db: Database) {
       );
 
   return {
+    websiteReviews: (
+      businessId: string,
+      filter?: Parameters<typeof websiteReviews>[2],
+    ) => websiteReviews(db, businessId, filter),
     buildActivity: (
       businessId: string,
       filter?: Parameters<typeof buildActivity>[2],
