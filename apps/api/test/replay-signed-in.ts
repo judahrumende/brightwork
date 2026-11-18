@@ -14,7 +14,7 @@ import { authStore } from '../src/auth/store';
 import { connectDatabase } from '../src/db/database';
 import { agentStore } from '../src/workspace/agent-store';
 import { runStore } from '../src/workspace/run-store';
-import { agentTurns, artifacts } from '../src/db/schema';
+import { agentTurns, artifacts, businessRuns } from '../src/db/schema';
 import { eq } from 'drizzle-orm';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -189,6 +189,31 @@ try {
   );
   const [primaryHistory] = [...historyVisits].sort((a, b) => b[1] - a[1]);
   if (primaryHistory) fixtureIds[primaryHistory[0]] = run.id;
+  for (const capturedRun of historyVisits.keys()) {
+    if (fixtureIds[capturedRun]) continue;
+    const [past] = await database.db
+      .insert(businessRuns)
+      .values({
+        businessId: workspace.id,
+        creatorId: account.account.id,
+        goal: 'Review a fixture launch',
+        state: 'completed',
+        endedAt: new Date(),
+        creditLimit: '5',
+      })
+      .returning({ id: businessRuns.id });
+    assert.ok(past);
+    await database.db.insert(agentTurns).values({
+      businessId: workspace.id,
+      creatorId: account.account.id,
+      runId: past.id,
+      prompt: 'Summarize a completed launch task',
+      answer: 'Fixture launch summary',
+      state: 'completed',
+      revision: 1,
+    });
+    fixtureIds[capturedRun] = past.id;
+  }
   const [primaryCreation] = [...creationVisits].sort((a, b) => b[1] - a[1]);
   if (primaryCreation) fixtureIds[primaryCreation[0]] = website.id;
   if (capturedBuilds.size === 1) {

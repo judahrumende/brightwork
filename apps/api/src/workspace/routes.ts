@@ -413,13 +413,16 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
-  app.get(path + '/pip/turns/:resource/events', async (request, reply) => {
+  async function streamTurn(request: FastifyRequest, reply: FastifyReply) {
     try {
       const access = await authorize(request, reply);
       if (!access) return;
-      const { resource } = resourceParams.parse(request.params);
+      const { resource, runId } = resourceParams
+        .extend({ runId: z.uuid().optional() })
+        .parse(request.params);
       let row = await store.readTurn(access.id, resource);
-      if (!row) return reply.code(404).send({ message: 'Turn not found.' });
+      if (!row || (runId && row.runId !== runId))
+        return reply.code(404).send({ message: 'Turn not found.' });
       reply.hijack();
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -443,7 +446,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         ) {
           await delay(600, undefined, { signal: abort.signal });
           const next = await store.readTurn(access.id, resource);
-          if (!next) break;
+          if (!next || (runId && next.runId !== runId)) break;
           if (next.revision !== row.revision)
             send('changes', {
               id: next.id,
@@ -472,7 +475,9 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     } catch (error) {
       if (!reply.sent) return reportError(error, reply);
     }
-  });
+  }
+  app.get(path + '/pip/turns/:resource/events', streamTurn);
+  app.get(path + '/ted/unattended/:runId/turns/:resource/events', streamTurn);
   function conditionalWorkspaceRead(
     request: FastifyRequest,
     reply: FastifyReply,
