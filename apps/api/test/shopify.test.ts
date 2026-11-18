@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { commerceInsights } from '../src/workspace/commerce-insights';
 import { businesses } from '../src/db/schema';
 import {
   orderQuery,
@@ -78,6 +79,20 @@ test(
                 updatedAt: '2026-11-18T00:00:0' + reported + 'Z',
                 displayFinancialStatus: reported === 3 ? 'REFUNDED' : 'PAID',
                 cancelledAt: null,
+                processedAt: '2026-11-18T13:40:00Z',
+                customer: { id: 'gid://shopify/Customer/45' },
+                totalReceivedSet: {
+                  shopMoney: {
+                    amount: target.hostname === shop ? '20' : '85',
+                    currencyCode: 'AUD',
+                  },
+                },
+                totalRefundedSet: {
+                  shopMoney: {
+                    amount: reported === 3 ? '20' : '0',
+                    currencyCode: 'AUD',
+                  },
+                },
                 currentTotalPriceSet: {
                   shopMoney: {
                     amount:
@@ -213,6 +228,27 @@ test(
       );
       assert.deepEqual((await commerce.report(first.id)).totals, []);
       assert.equal((await commerce.report(second.id)).totals[0]?.orders, 1);
+      const range = { from: '2026-11-18', through: '2026-11-18' };
+      const insights = await commerceInsights(db, first.id, range);
+      assert.deepEqual(insights.revenue, [
+        {
+          source: 'shopify',
+          currency: 'AUD',
+          sales: 1,
+          gross: '20.00000000',
+          refunded: '20.00000000',
+          net: '0.00000000',
+        },
+      ]);
+      assert.deepEqual(insights.customers, {
+        identified: 1,
+        repeat: 0,
+        unattributed: 0,
+      });
+      assert.equal(
+        (await commerceInsights(db, second.id, range)).revenue[0]?.gross,
+        '85.00000000',
+      );
     } finally {
       await app.close();
       await client.end();

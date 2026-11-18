@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { and, desc, eq, or, isNull, sql } from 'drizzle-orm';
 import {
   boolean,
@@ -35,6 +36,7 @@ const sales = pgTable('stripe_sales', {
   amountRefunded: integer('amount_refunded').notNull().default(0),
   checkoutId: text('checkout_id'),
   paymentId: text('payment_id'),
+  customerKey: text('customer_key'),
   paidAt: timestamp('paid_at', { withTimezone: true, mode: 'date' }),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
     .defaultNow()
@@ -62,7 +64,12 @@ const ready = (seller: typeof sellers.$inferSelect) =>
 
 export function stripeConnect(
   db: Database,
-  options: { key: string; secret: string; origin: string },
+  options: {
+    key: string;
+    secret: string;
+    origin: string;
+    identityKey?: string;
+  },
   transport?: typeof fetch,
 ) {
   const stripe = stripeConnectProvider(options.key, options.origin, transport);
@@ -277,10 +284,26 @@ export function stripeConnect(
                   !session.amount_total
                 )
                   return;
+                const email = session.customer_details?.email
+                  ?.trim()
+                  .toLowerCase();
+                const customerKey = email
+                  ? createHmac('sha256', options.identityKey ?? options.secret)
+                      .update(
+                        'stripe-customer\0' +
+                          seller.businessId +
+                          '\0' +
+                          event.account +
+                          '\0' +
+                          email,
+                      )
+                      .digest('hex')
+                  : null;
                 await tx
                   .update(sales)
                   .set({
                     checkoutId: session.id,
+                    customerKey: sql`coalesce(${sales.customerKey}, ${customerKey})`,
                     paymentId: session.payment_intent,
                     paidAt: sql`coalesce(${sales.paidAt}, ${new Date(event.created * 1000).toISOString()}::timestamptz)`,
                   })

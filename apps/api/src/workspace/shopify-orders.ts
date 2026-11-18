@@ -36,6 +36,10 @@ const orders = pgTable(
     cancelled: boolean().notNull(),
     currency: text().notNull(),
     value: numeric({ precision: 24, scale: 8 }).notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    grossReceived: numeric('gross_received', { precision: 24, scale: 8 }),
+    amountRefunded: numeric('amount_refunded', { precision: 24, scale: 8 }),
+    customerKey: text('customer_key'),
   },
   (table) => [primaryKey({ columns: [table.connectionId, table.id] })],
 );
@@ -58,22 +62,29 @@ const secrets = z.object({
   secret: z.string().min(16).max(512),
 });
 export const shopifyConnectionInput = secrets.extend({ shop: shopDomain });
+const money = z.object({
+  shopMoney: z.object({
+    amount: z.string().regex(/^\d{1,16}(?:\.\d{1,8})?$/u),
+    currencyCode: z.string().regex(/^[A-Z]{3}$/u),
+  }),
+});
 const outboundOrder = z.object({
   id: z.string().regex(/^gid:\/\/shopify\/Order\/\d+$/u),
   updatedAt: z.iso.datetime({ offset: true }),
   displayFinancialStatus: z.string().nullable(),
   cancelledAt: z.string().nullable(),
-  currentTotalPriceSet: z.object({
-    shopMoney: z.object({
-      amount: z.string().regex(/^\d{1,16}(?:\.\d{1,8})?$/u),
-      currencyCode: z.string().regex(/^[A-Z]{3}$/u),
-    }),
-  }),
+  currentTotalPriceSet: money,
+  processedAt: z.iso.datetime({ offset: true }).optional(),
+  totalReceivedSet: money.optional(),
+  totalRefundedSet: money.optional(),
+  customer: z
+    .object({ id: z.string().regex(/^gid:\/\/shopify\/Customer\/\d+$/u) })
+    .nullish(),
 });
 
 export const shopQuery = 'query BrightworkShop { shop { myshopifyDomain } }';
 export const orderQuery =
-  'query BrightworkOrder($id: ID!) { order(id: $id) { id updatedAt displayFinancialStatus cancelledAt currentTotalPriceSet { shopMoney { amount currencyCode } } } }';
+  'query BrightworkOrder($id: ID!) { order(id: $id) { id updatedAt processedAt displayFinancialStatus cancelledAt customer { id } currentTotalPriceSet { shopMoney { amount currencyCode } } totalReceivedSet { shopMoney { amount currencyCode } } totalRefundedSet { shopMoney { amount currencyCode } } } }';
 const orderTopics = new Set([
   'orders/create',
   'orders/updated',
@@ -271,12 +282,26 @@ export function shopifyOrders(
               if ((await db.select().from(deliveries).where(seen)).length)
                 return { received: true };
               const id = incoming.data.admin_graphql_api_id;
-              const result = await admin(
+              let result = await admin(
                 entry.shop,
                 connection.token,
                 orderQuery,
                 { id },
               );
+              if (
+                result.errors?.length &&
+                result.errors.every(
+                  (error) =>
+                    z.object({ path: z.array(z.unknown()) }).safeParse(error)
+                      .data?.path[1] === 'customer',
+                )
+              )
+                result = await admin(
+                  entry.shop,
+                  connection.token,
+                  orderQuery.replace('customer { id } ', ''),
+                  { id },
+                );
               if (result.errors?.length)
                 throw new Error('Shopify could not resolve the order');
               const order = z
@@ -301,11 +326,35 @@ export function shopifyOrders(
                     .onConflictDoNothing()
                     .returning();
                   if (!created) return;
+                  const gross = order.totalReceivedSet?.shopMoney;
+                  const refund = order.totalRefundedSet?.shopMoney;
+                  const currency =
+                    order.currentTotalPriceSet.shopMoney.currencyCode;
+                  const customerId = order.customer?.id;
                   const values = {
                     updatedAt: new Date(order.updatedAt),
                     status: order.displayFinancialStatus,
                     cancelled: Boolean(order.cancelledAt),
-                    currency: order.currentTotalPriceSet.shopMoney.currencyCode,
+                    currency,
+                    processedAt: order.processedAt
+                      ? new Date(order.processedAt)
+                      : null,
+                    grossReceived:
+                      gross?.currencyCode === currency ? gross.amount : null,
+                    amountRefunded:
+                      refund?.currencyCode === currency ? refund.amount : null,
+                    customerKey: customerId
+                      ? createHmac('sha256', hexKey)
+                          .update(
+                            'shopify-customer\0' +
+                              entry.businessId +
+                              '\0' +
+                              connectionId +
+                              '\0' +
+                              customerId,
+                          )
+                          .digest('hex')
+                      : null,
                     value: order.currentTotalPriceSet.shopMoney.amount,
                   };
                   await tx
@@ -313,7 +362,10 @@ export function shopifyOrders(
                     .values({ connectionId, id, ...values })
                     .onConflictDoUpdate({
                       target: [orders.connectionId, orders.id],
-                      set: values,
+                      set: {
+                        ...values,
+                        customerKey: sql`coalesce(excluded.customer_key, ${orders.customerKey})`,
+                      },
                       setWhere: lte(orders.updatedAt, values.updatedAt),
                     });
                 });

@@ -7,6 +7,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { businesses } from '../src/db/schema';
+import { commerceInsights } from '../src/workspace/commerce-insights';
 import { stripeConnect } from '../src/workspace/stripe-connect';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -115,6 +116,7 @@ test(
           payment_status: complete ? 'paid' : 'unpaid',
           client_reference_id: order.id,
           payment_intent: complete ? 'pi_Sale' : null,
+          customer_details: complete ? { email: 'Buyer@example.test' } : null,
           amount_total: creating ? order.amount : capturedAmount,
           currency: order.currency,
           url: link,
@@ -234,6 +236,22 @@ test(
     await webhook(6, 'charge.refunded', 'ch_Sale');
     assert.equal((await connect.publicOrder(order.id))?.amountRefunded, 1999);
     assert.deepEqual((await connect.overview(other.id)).orders, []);
+    const day = new Date().toISOString().slice(0, 10);
+    const insights = await commerceInsights(db, owner.id, {
+      from: day,
+      through: day,
+    });
+    assert.equal(insights.revenue[0]?.source, 'stripe');
+    assert.equal(Number(insights.revenue[0]?.gross), 19.99);
+    assert.equal(Number(insights.revenue[0]?.refunded), 19.99);
+    assert.equal(Number(insights.revenue[0]?.net), 0);
+    assert.deepEqual(insights.customers, {
+      identified: 1,
+      repeat: 0,
+      unattributed: 0,
+    });
+    assert.ok(!JSON.stringify(insights).includes('Buyer@example.test'));
+
     assert.equal(await connect.checkout(order.id), null);
   },
 );

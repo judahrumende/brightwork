@@ -1076,3 +1076,42 @@ test('Billing shows a personal referral link and conversion totals', async ({
   ).toBeVisible();
   await expect(referrals.getByText(/Earn 5 credits/)).toBeVisible();
 });
+
+test('Commerce insights shows provider totals, customer counts and the selected range', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const requests: string[] = [];
+  await page.route('**/insights/commerce?*', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    requests.push(params.get('from') + '/' + params.get('through'));
+    return route.fulfill({
+      json: {
+        revenue: [
+          {
+            source: 'shopify',
+            currency: 'AUD',
+            sales: 3,
+            gross: '55',
+            refunded: '5',
+            net: '50',
+          },
+        ],
+        customers: { identified: 1, repeat: 1, unattributed: 1 },
+      },
+    });
+  });
+  await page.goto(workbench);
+  const entry = page.getByRole('button', { name: 'View sales and customers' });
+  await entry.click();
+  const insights = page.getByRole('region', { name: 'Commerce insights' });
+  await expect(insights.getByRole('table')).toContainText('Shopify');
+  await expect(insights.getByRole('table')).toContainText(/AUD\s*50\.00/);
+  await expect(insights.getByText('Repeat customers')).toBeVisible();
+  await insights.getByLabel('From').fill('2026-11-17');
+  await insights.getByLabel('Through').fill('2026-11-18');
+  await insights.getByRole('button', { name: 'Apply dates' }).click();
+  await expect.poll(() => requests.at(-1)).toBe('2026-11-17/2026-11-18');
+  await insights.getByRole('button', { name: 'Back to overview' }).click();
+  await expect(entry).toBeFocused();
+});
