@@ -11,7 +11,7 @@
     "title": "Home: dashboard, Ted waiting",
     "file": "002-home-waiting-for-you.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 3,
@@ -81,7 +81,7 @@
     "title": "Home: Documents popover",
     "file": "012-home-dock-documents.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 13,
@@ -263,7 +263,7 @@
     "title": "Build canvas (no chat focus)",
     "file": "038-build-canvas-live.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 39,
@@ -340,21 +340,21 @@
     "title": "Search palette (Cmd/Ctrl+K)",
     "file": "049-search-palette.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 50,
     "title": "Search palette with query",
     "file": "050-search-palette-query.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 51,
     "title": "Approval sheet: website change",
     "file": "051-approval-website-change.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 52,
@@ -375,14 +375,14 @@
     "title": "Schedule: Day view",
     "file": "054-schedule-day.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 55,
     "title": "Schedule: All tasks (list)",
     "file": "055-schedule-all-tasks.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 56,
@@ -403,21 +403,21 @@
     "title": "Notifications panel",
     "file": "058-notifications-panel.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 59,
     "title": "Settings modal: Earn credits (gift)",
     "file": "059-settings-earn-credits.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 60,
     "title": "Settings: Team",
     "file": "060-settings-team.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 61,
@@ -445,7 +445,7 @@
     "title": "Settings: Plans & credit usage",
     "file": "064-settings-plans.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 65,
@@ -501,7 +501,7 @@
     "title": "Profile menu",
     "file": "072-profile-menu.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 73,
@@ -515,7 +515,7 @@
     "title": "Company switcher",
     "file": "074-company-switcher.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 75,
@@ -529,7 +529,7 @@
     "title": "Ted panel: Runs tab",
     "file": "076-home-ted-runs-tab.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   },
   {
     "number": 77,
@@ -599,6 +599,6 @@
     "title": "Visitors: breakdown panels",
     "file": "086-visitors-breakdowns.png",
     "surface": "signed-in",
-    "localComparison": false
+    "localComparison": true
   }
 ]

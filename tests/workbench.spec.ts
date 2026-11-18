@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -24,6 +25,14 @@ const session = {
   session: { email: 'owner@example.test', name: 'Demo Owner' },
   creditBalance: { available: '10.0000000000' },
 };
+
+async function captureWorkspace(page: Page, file: string) {
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({
+    path: 'test-results/visual/' + file,
+    animations: 'disabled',
+  });
+}
 
 async function seedWorkbench(page: Page) {
   await page.setViewportSize({ width: 1920, height: 772 });
@@ -96,16 +105,29 @@ test('Home shows Run work in the dock and keeps read notifications in history', 
   await page.goto(workbench);
 
   const dock = page.getByRole('navigation', { name: 'Workspace applications' });
+  await expect(dock).toBeVisible();
+  await captureWorkspace(page, '002-home-waiting-for-you.png');
+  await page.getByRole('button', { name: new RegExp(company.name) }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Your businesses' }),
+  ).toBeVisible();
+  await captureWorkspace(page, '074-company-switcher.png');
+  await page.keyboard.press('Escape');
   await dock.getByRole('button', { name: 'Documents' }).press('Enter');
   await expect(
     page
       .getByRole('region', { name: 'In Run' })
       .getByRole('link', { name: 'Launch brief' }),
   ).toHaveAttribute('href', workbench + '/library?item=' + work.id);
+  await captureWorkspace(page, '012-home-dock-documents.png');
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Notifications, 1 unread' }).click();
   const notifications = page.getByRole('dialog', { name: 'Notifications' });
+  await expect(
+    notifications.getByRole('link', { name: /Launch brief/ }),
+  ).toBeVisible();
+  await captureWorkspace(page, '058-notifications-panel.png');
   await notifications.getByRole('button', { name: 'Mark all read' }).click();
   await expect(
     notifications.getByRole('link', { name: /Launch brief.*Read/ }),
@@ -118,10 +140,13 @@ test('Home shows Run work in the dock and keeps read notifications in history', 
 
   await page.keyboard.press('Control+k');
   const search = page.getByRole('dialog', { name: 'Search your workspaces' });
+  await expect(search.getByRole('textbox')).toBeVisible();
+  await captureWorkspace(page, '049-search-palette.png');
   await search.getByRole('textbox').fill('Launch');
   await expect(
     search.getByRole('link', { name: /Launch brief.*Demo Shop/ }),
   ).toHaveAttribute('href', `/f/${work.id}/library?item=${work.id}`);
+  await captureWorkspace(page, '050-search-palette-query.png');
 });
 
 test('Workspace settings creates an invitation and reads the vault list without values', async ({
@@ -159,6 +184,7 @@ test('Workspace settings creates an invitation and reads the vault list without 
   await page.getByLabel('Invitation role').selectOption('viewer');
   await page.getByRole('button', { name: 'Create invitation' }).click();
   await expect(page.getByText('guest@example.test · viewer')).toBeVisible();
+  await captureWorkspace(page, '060-settings-team.png');
   await page.getByRole('button', { name: 'Vault', exact: true }).click();
   await expect(page.getByText('Test key', { exact: true })).toBeVisible();
   await expect(
@@ -224,6 +250,8 @@ test('Home opens a Run summary and Run controls can pause it', async ({
   });
   await page.goto(workbench);
   await page.getByRole('radio', { name: 'Runs', exact: true }).click();
+  await expect(page.getByRole('button', { name: run.goal })).toBeVisible();
+  await captureWorkspace(page, '076-home-ted-runs-tab.png');
   await page.getByRole('button', { name: run.goal }).click();
   const summary = page.getByRole('dialog', { name: 'Run summary' });
   await expect(
@@ -363,6 +391,10 @@ test('Visitors shows an empty period and lets keyboard users change the range', 
     path: 'test-results/visual/084-visitors-overview.png',
   });
 
+  await page
+    .getByRole('region', { name: 'Traffic sources' })
+    .scrollIntoViewIfNeeded();
+  await captureWorkspace(page, '086-visitors-breakdowns.png');
   await page.getByRole('button', { name: 'Last 7 days' }).press('Enter');
   await expect(
     page.getByRole('menuitemcheckbox', { name: 'Last 7 days' }),
@@ -557,6 +589,10 @@ test('restoring a saved version creates a pending draft and keeps the live snaps
   );
 
   await page.goto(workbench + '/build');
+  await expect(
+    page.getByRole('button', { name: /Live website/u }),
+  ).toBeVisible();
+  await captureWorkspace(page, '038-build-canvas-live.png');
   await page.getByRole('button', { name: /Live website/u }).click();
   const editor = page.getByRole('dialog');
   await editor.getByRole('button', { name: 'Recent versions' }).click();
@@ -574,6 +610,7 @@ test('restoring a saved version creates a pending draft and keeps the live snaps
   await expect(
     editor.getByRole('link', { name: 'View live site' }),
   ).toHaveAttribute('href', 'https://demo.example.test/');
+  await captureWorkspace(page, '051-approval-website-change.png');
 });
 
 test('Schedule switches calendar views and opens the task editor from the keyboard', async ({
@@ -611,6 +648,11 @@ test('Schedule switches calendar views and opens the task editor from the keyboa
   await expect(page.getByText('No tasks yet', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/visual/053-schedule-week.png' });
   await expect(page.getByLabel('Time grid')).toBeVisible();
+  await page.getByRole('radio', { name: 'Day', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Previous day' }),
+  ).toBeVisible();
+  await captureWorkspace(page, '054-schedule-day.png');
   await page.getByRole('radio', { name: 'Year', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Previous year' }),
@@ -629,6 +671,11 @@ test('Schedule switches calendar views and opens the task editor from the keyboa
     path: 'test-results/visual/056-schedule-new-task.png',
   });
   await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'All tasks', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'All tasks', exact: true }),
+  ).toBeVisible();
+  await captureWorkspace(page, '055-schedule-all-tasks.png');
   await expect(page.getByRole('dialog', { name: 'New task' })).toHaveCount(0);
 });
 
@@ -1094,8 +1141,16 @@ test('Billing shows a personal referral link and conversion totals', async ({
   );
   await page.goto(workbench);
   await page.getByRole('button', { name: 'Account menu' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await captureWorkspace(page, '072-profile-menu.png');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Billing', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Billing', exact: true }),
+  ).toBeVisible();
+  await captureWorkspace(page, '064-settings-plans.png');
   const referrals = page.getByRole('region', { name: 'Referrals' });
   await expect(referrals.getByLabel('Referral link')).toHaveValue(
     new URL('/api/referrals/visit?code=' + code, page.url()).href,
@@ -1104,6 +1159,8 @@ test('Billing shows a personal referral link and conversion totals', async ({
     referrals.getByText('3 sign-ups · 2 paid referrals'),
   ).toBeVisible();
   await expect(referrals.getByText(/Earn 5 credits/)).toBeVisible();
+  await referrals.scrollIntoViewIfNeeded();
+  await captureWorkspace(page, '059-settings-earn-credits.png');
 });
 
 test('Commerce insights shows provider totals, customer counts and the selected range', async ({
@@ -1187,4 +1244,56 @@ test('Build quotes each media capability and exposes the completed workspace ass
   await expect(
     media.getByRole('link', { name: 'Download voice' }),
   ).toHaveAttribute('href', new RegExp(endpoint + '/[0-9a-f-]{36}/asset$'));
+});
+
+test('the signed-in workspace fits mobile and the search dialog works with the keyboard', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [], hosting: false } }),
+  );
+  await page.route('**/api/me/search-work?*', (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.goto(workbench);
+  await expect(
+    page.getByRole('navigation', { name: 'Workspace applications' }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await page.keyboard.press('Control+k');
+  const search = page.getByRole('dialog', { name: 'Search your workspaces' });
+  const input = search.getByRole('textbox');
+  await expect(input).toBeFocused();
+  await input.fill('missing');
+  await expect(search.getByText('No matching results.')).toBeVisible();
+  const audit = await new AxeBuilder({ page })
+    .include('[role="dialog"]')
+    .withTags(['wcag2a', 'wcag2aa'])
+    .analyze();
+  expect(
+    audit.violations.map(({ id, nodes }) => ({
+      id,
+      targets: nodes.map(({ target }) => target),
+    })),
+  ).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(search).toBeHidden();
+  await page
+    .getByRole('navigation', { name: 'Main', exact: true })
+    .getByRole('link', { name: 'Build' })
+    .click();
+  await expect(
+    page.getByRole('region', { name: 'Chat with Pip' }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await page.setViewportSize({ width: 320, height: 760 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(320);
 });
