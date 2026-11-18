@@ -359,6 +359,7 @@ export const taskAutomations = pgTable(
     }),
     enabled: boolean().notNull().default(true),
     nextAt: date('next_at'),
+    emailAfter: date('email_after'),
     checkAt: date('check_at').defaultNow().notNull(),
     turnId: uuid('turn_id')
       .unique()
@@ -390,6 +391,9 @@ export const inboundEmails = pgTable(
     subject: text().notNull(),
     body: text(),
     html: text(),
+    recordedAt: date('recorded_at')
+      .default(sql`clock_timestamp()`)
+      .notNull(),
     receivedAt: date('received_at').notNull(),
   },
   (table) => [
@@ -398,7 +402,25 @@ export const inboundEmails = pgTable(
       table.businessId,
     ),
     index('inbound_email_inbox_idx').on(table.businessId, table.receivedAt),
+    index('inbound_email_recorded_idx').on(
+      table.businessId,
+      table.recordedAt,
+      table.id,
+    ),
   ],
+);
+
+export const taskEmailOccurrences = pgTable(
+  'task_email_occurrences',
+  {
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => taskAutomations.taskId, { onDelete: 'cascade' }),
+    emailId: uuid('email_id')
+      .notNull()
+      .references(() => inboundEmails.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.taskId, table.emailId] })],
 );
 
 export const outboundEmails = pgTable(

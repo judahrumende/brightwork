@@ -1014,28 +1014,45 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     try {
       const access = await authorize(request, reply, true);
       if (!access) return;
-      const { automatic, ...task } = z
+      const { automatic, whenEmailArrives, ...task } = z
         .object({
           title: z.string().trim().min(1).max(160),
           body: z.string().trim().max(4000),
-          dueAt: z.iso.datetime({ offset: true }),
+          dueAt: z.iso.datetime({ offset: true }).optional(),
           recurrence: z.enum(recurrenceRules).default('once'),
           automatic: z.boolean().default(false),
+          whenEmailArrives: z.boolean().default(false),
           scheduleTimezone: timeZone.default('UTC'),
         })
         .parse(request.body);
-      if (automatic && !canLeadRun(access.role))
+      const executes = automatic || whenEmailArrives;
+      if (executes && !canLeadRun(access.role))
         return reply
           .code(403)
           .send({ message: 'An owner or admin can schedule Pip execution.' });
-      if (automatic && !agentEnabled)
+      if (executes && !agentEnabled)
         return reply.code(503).send({
           message: 'Connect an LLM provider to schedule Pip execution.',
         });
-      const dueAt = new Date(task.dueAt);
-      if (automatic && (!task.body || dueAt.getTime() <= Date.now()))
+      const dueAt = task.dueAt ? new Date(task.dueAt) : null;
+      if (
+        whenEmailArrives &&
+        (dueAt || automatic || task.recurrence !== 'once')
+      )
         return reply.code(400).send({
-          message: 'Add instructions and choose a future time for Pip.',
+          message: 'Choose either a schedule or an incoming email trigger.',
+        });
+      if (whenEmailArrives && !context.inbound.address(access.id))
+        return reply
+          .code(503)
+          .send({ message: 'Connect inbound email to run this task.' });
+      if (
+        (!whenEmailArrives && !dueAt) ||
+        (executes && (!task.body || (dueAt && dueAt.getTime() <= Date.now())))
+      )
+        return reply.code(400).send({
+          message:
+            'Add instructions for Pip and choose a future time or an inbox trigger.',
         });
       return {
         item: await store.saveArtifact(
@@ -1045,7 +1062,8 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
             kind: 'task',
             dueAt,
           },
-          automatic ? access.accountId : undefined,
+          executes ? access.accountId : undefined,
+          whenEmailArrives,
         ),
       };
     } catch (error) {
