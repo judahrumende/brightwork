@@ -18,6 +18,7 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { Database } from '../db/database';
 import {
   agentTurns,
@@ -69,6 +70,7 @@ export function agentStore(db: Database) {
   async function saveWebsiteVersion(
     writer: Writer,
     row: typeof artifacts.$inferSelect,
+    revertedFromId?: string,
   ) {
     await writer.insert(websiteVersions).values({
       artifactId: row.id,
@@ -76,6 +78,7 @@ export function agentStore(db: Database) {
       document: row.body,
       pages: row.pages,
       title: row.title,
+      revertedFromId: revertedFromId ?? null,
     });
   }
   async function insertArtifact(writer: Writer, item: Artifact) {
@@ -522,6 +525,63 @@ export function agentStore(db: Database) {
         .orderBy(desc(artifacts.createdAt))
         .limit(200);
     },
+    async creations(businessId: string, id?: string) {
+      const publishedVersion = alias(websiteVersions, 'published_version');
+      return db
+        .select({
+          id: artifacts.id,
+          title: artifacts.title,
+          kind: artifacts.kind,
+          state: artifacts.state,
+          createdAt: artifacts.createdAt,
+          currentVersion: {
+            id: websiteVersions.id,
+            revision: websiteVersions.revision,
+            savedAt: websiteVersions.savedAt,
+          },
+          pages: sql<Array<{ slug: string; title: string }>>`(
+            SELECT coalesce(jsonb_agg(jsonb_build_object('slug', page ->> 'slug', 'title', page ->> 'title')), '[]'::jsonb)
+            FROM jsonb_array_elements(${artifacts.pages}) AS page
+          )`,
+          publication: {
+            id: publications.id,
+            revision: publications.draftRevision,
+            publishedAt: publications.publishedAt,
+          },
+          publishedVersionId: publishedVersion.id,
+        })
+        .from(artifacts)
+        .innerJoin(
+          websiteVersions,
+          and(
+            eq(websiteVersions.artifactId, artifacts.id),
+            eq(websiteVersions.revision, artifacts.revision),
+          ),
+        )
+        .leftJoin(
+          publications,
+          and(
+            eq(publications.artifactId, artifacts.id),
+            isNull(publications.unpublishedAt),
+          ),
+        )
+        .leftJoin(
+          publishedVersion,
+          and(
+            eq(publishedVersion.artifactId, artifacts.id),
+            eq(publishedVersion.revision, publications.draftRevision),
+          ),
+        )
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.kind, 'website'),
+            id ? eq(artifacts.id, id) : undefined,
+          ),
+        )
+        .orderBy(desc(artifacts.createdAt), desc(artifacts.id))
+        .limit(id ? 1 : 100);
+    },
     async workByKind(
       businessId: string,
       kind: 'email' | 'post' | 'website',
@@ -778,6 +838,7 @@ export function agentStore(db: Database) {
       title: string,
       body: string,
       pages?: Artifact['pages'],
+      revertedFromId?: string,
     ) {
       return db.transaction(async (tx) => {
         const [row] = await tx
@@ -793,11 +854,12 @@ export function agentStore(db: Database) {
             and(websiteScope(businessId, id), eq(artifacts.revision, revision)),
           )
           .returning();
-        if (row) await saveWebsiteVersion(tx, row);
+        if (row) await saveWebsiteVersion(tx, row, revertedFromId);
         return row;
       });
     },
     async websiteHistory(businessId: string, id: string) {
+      const parent = alias(websiteVersions, 'parent_version');
       return db
         .select({
           id: websiteVersions.id,
@@ -805,9 +867,18 @@ export function agentStore(db: Database) {
           title: websiteVersions.title,
           savedAt: websiteVersions.savedAt,
           bookmarked: websiteVersions.bookmarked,
+          revertedFromId: websiteVersions.revertedFromId,
+          parentVersionId: parent.id,
         })
         .from(websiteVersions)
         .innerJoin(artifacts, eq(artifacts.id, websiteVersions.artifactId))
+        .leftJoin(
+          parent,
+          and(
+            eq(parent.artifactId, websiteVersions.artifactId),
+            eq(parent.revision, sql`${websiteVersions.revision} - 1`),
+          ),
+        )
         .where(websiteScope(businessId, id))
         .orderBy(desc(websiteVersions.revision))
         .limit(100);

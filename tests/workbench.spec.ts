@@ -471,10 +471,17 @@ test('Build imports a draft, edits text and images, and restores a deployment', 
   await page.goto(workbench + '/build');
   await page.getByText('Import website', { exact: true }).click();
   await page.getByLabel('Website URL').fill('https://example.test/');
+  await page.screenshot({
+    path: 'test-results/visual/040-build-import-site.png',
+  });
   await page.getByRole('button', { name: 'Import page text' }).click();
   const dialog = page.getByRole('dialog', { name: 'Imported studio' });
   await dialog.getByRole('button', { name: 'Edit website' }).click();
   await dialog.getByText('Visual editing', { exact: true }).click();
+  await expect(dialog.getByLabel('Element text')).toBeVisible();
+  await page.screenshot({
+    path: 'test-results/visual/045-build-site-editor.png',
+  });
   await dialog.getByLabel('Element text').fill('Refined heading');
   await dialog.getByLabel('Image description').fill('Studio logo');
   const pixel =

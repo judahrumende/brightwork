@@ -57,6 +57,8 @@ const cases = [
     actual: '085-visitors-range-menu.png',
   },
   ...[
+    ['Build site import', '040-build-import-site.png'],
+    ['Build site editor', '045-build-site-editor.png'],
     ['Schedule month', '052-schedule-month.png'],
     ['Schedule week', '053-schedule-week.png'],
     ['New scheduled task', '056-schedule-new-task.png'],

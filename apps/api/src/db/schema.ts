@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { WebsitePage } from '@brightwork/shared';
 import {
   boolean,
@@ -343,6 +344,10 @@ export const websiteVersions = pgTable(
     pages: jsonb().$type<WebsitePage[]>().notNull().default([]),
     savedAt: date('saved_at').defaultNow().notNull(),
     bookmarked: boolean().default(false).notNull(),
+    revertedFromId: uuid('reverted_from_id').references(
+      (): AnyPgColumn => websiteVersions.id,
+      { onDelete: 'set null' },
+    ),
   },
   (t) => [
     uniqueIndex('website_artifact_revision').on(t.artifactId, t.revision),
