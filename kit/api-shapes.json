@@ -1816,6 +1816,7 @@
     {
       "method": "GET",
       "path": "/api/companies/:id/run/directions",
+      "optionalResponsePaths": ["held","sprint.items[].why"],
       "statuses": {
         "200": 84
       },
@@ -2504,6 +2505,7 @@
     {
       "method": "GET",
       "path": "/api/companies/:id/run/questions",
+      "optionalResponsePaths": ["questions[].answer"],
       "statuses": {
         "200": 82
       },

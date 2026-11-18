@@ -20,6 +20,8 @@ import {
   workspaceCredentials,
 } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
+import { observedContracts } from '../../../packages/shared/src/api-contracts.gen';
+import { runStore } from '../src/workspace/run-store';
 import { domainStore } from '../src/workspace/domains';
 import { stripeBilling } from '../src/workspace/stripe-billing';
 
@@ -783,6 +785,72 @@ test(
         headers: { cookie: separateCookie },
       });
       assert.equal(inaccessible.statusCode, 404);
+
+      const runs = runStore(database.db);
+      const run = await runs.create(studio, owner.companyList.userId, {
+        goal: 'Launch the studio',
+        steps: ['Prepare a launch brief'],
+        creditLimit: '2',
+        publishWebsites: false,
+      });
+      assert.ok(run);
+      const runTurn = await runs.advance();
+      assert.ok(runTurn?.turnId);
+      const [runQuestion] = await database.db
+        .insert(artifacts)
+        .values({
+          businessId: studio,
+          turnId: runTurn.turnId,
+          kind: 'question',
+          title: 'Which audience?',
+          body: 'The launch brief needs an audience.',
+          state: 'pending',
+        })
+        .returning();
+      assert.ok(runQuestion);
+      await runs.control(studio, run.id, 'pause');
+      async function readRun(
+        view: 'directions' | 'questions' | 'tasks',
+        actor = freshCookie,
+      ) {
+        return server.inject({
+          url: `/api/companies/${studio}/run/${view}`,
+          headers: { cookie: actor },
+        });
+      }
+      const directions = await readRun('directions');
+      assert.equal(directions.statusCode, 200);
+      const plan = observedContracts[
+        'GET /api/companies/:id/run/directions'
+      ].response.parse(directions.json());
+      assert.equal(plan.sessionId, run.id);
+      assert.ok(plan.held);
+      assert.equal(plan.sprint.items[0]?.goal, 'Prepare a launch brief');
+      const tasks = await readRun('tasks');
+      assert.equal(tasks.statusCode, 200);
+      assert.deepEqual(tasks.json().tasks, plan.sprint.items);
+      const open = await readRun('questions');
+      assert.equal(open.statusCode, 200);
+      const questionContract =
+        observedContracts['GET /api/companies/:id/run/questions'].response;
+      assert.equal(
+        questionContract.parse(open.json()).questions[0]?.id,
+        runQuestion.id,
+      );
+      assert.ok(
+        await agentStore(database.db).answerQuestion(
+          studio,
+          runQuestion.id,
+          'Local founders',
+        ),
+      );
+      const answered = await readRun('questions');
+      assert.equal(
+        questionContract.parse(answered.json()).questions[0]?.answer?.text,
+        'Local founders',
+      );
+      for (const view of ['directions', 'questions', 'tasks'] as const)
+        assert.equal((await readRun(view, separateCookie)).statusCode, 404);
 
       const settings = `/api/companies/${studio}/settings`;
       const outsider = await session(separateCookie);

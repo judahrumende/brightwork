@@ -518,7 +518,7 @@ export const observedContracts = {
     responseTypes: ["application/json"],
     queryKeys: [],
     request: z.unknown(),
-    response: z.looseObject({ ["sessionId"]: z.string(), ["directions"]: z.array(z.unknown()), ["held"]: z.looseObject({ ["why"]: z.string(), ["since"]: z.iso.datetime({ offset: true }) }), ["aim"]: z.looseObject({ ["kind"]: z.string(), ["title"]: z.string() }), ["sprint"]: z.looseObject({ ["goals"]: z.array(z.looseObject({ ["id"]: z.string(), ["goal"]: z.string(), ["status"]: z.string() })), ["items"]: z.array(z.looseObject({ ["id"]: z.string(), ["goal"]: z.string(), ["kind"]: z.string(), ["status"]: z.string(), ["why"]: z.string() })) }) }),
+    response: z.looseObject({ ["sessionId"]: z.string(), ["directions"]: z.array(z.unknown()), ["held"]: z.looseObject({ ["why"]: z.string(), ["since"]: z.iso.datetime({ offset: true }) }).optional(), ["aim"]: z.looseObject({ ["kind"]: z.string(), ["title"]: z.string() }), ["sprint"]: z.looseObject({ ["goals"]: z.array(z.looseObject({ ["id"]: z.string(), ["goal"]: z.string(), ["status"]: z.string() })), ["items"]: z.array(z.looseObject({ ["id"]: z.string(), ["goal"]: z.string(), ["kind"]: z.string(), ["status"]: z.string(), ["why"]: z.string().optional() })) }) }),
   },
   "GET /api/companies/:id/run/session": {
     statuses: [200],
@@ -602,7 +602,7 @@ export const observedContracts = {
     responseTypes: ["application/json"],
     queryKeys: [],
     request: z.unknown(),
-    response: z.looseObject({ ["sessionId"]: z.string(), ["questions"]: z.array(z.looseObject({ ["id"]: z.string(), ["kind"]: z.string(), ["question"]: z.string(), ["why"]: z.string(), ["instead"]: z.string(), ["askedAt"]: z.iso.datetime({ offset: true }), ["answer"]: z.looseObject({ ["text"]: z.string(), ["files"]: z.number(), ["at"]: z.iso.datetime({ offset: true }) }) })), ["files"]: z.boolean() }),
+    response: z.looseObject({ ["sessionId"]: z.string(), ["questions"]: z.array(z.looseObject({ ["id"]: z.string(), ["kind"]: z.string(), ["question"]: z.string(), ["why"]: z.string(), ["instead"]: z.string(), ["askedAt"]: z.iso.datetime({ offset: true }), ["answer"]: z.looseObject({ ["text"]: z.string(), ["files"]: z.number(), ["at"]: z.iso.datetime({ offset: true }) }).optional() })), ["files"]: z.boolean() }),
   },
   "GET /api/companies/:id/inbox/threads": {
     statuses: [200],

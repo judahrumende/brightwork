@@ -471,6 +471,48 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       if (!reply.sent) return reportError(error, reply);
     }
   });
+  for (const view of ['directions', 'questions', 'tasks'] as const) {
+    app.get(path + '/run/' + view, async (request, reply) => {
+      try {
+        const access = await authorize(request, reply);
+        if (!access) return;
+        const [run] = await context.runs.list(access.id);
+        const sessionId = run?.id ?? '';
+        if (view === 'questions')
+          return {
+            sessionId,
+            questions: run
+              ? await context.runs.questions(access.id, run.id)
+              : [],
+            files: false,
+          };
+        const items =
+          run?.steps.map((step) => ({
+            id: run.id + ':' + step.position,
+            goal: step.instruction,
+            kind: 'step',
+            status: step.finishedAt ? 'completed' : (step.status ?? 'pending'),
+          })) ?? [];
+        if (view === 'tasks') return { tasks: items };
+        return {
+          sessionId,
+          directions: [],
+          aim: { kind: run ? 'goal' : 'idle', title: run?.goal ?? '' },
+          ...(run?.pausedAt
+            ? { held: { why: 'Paused by the workspace', since: run.pausedAt } }
+            : {}),
+          sprint: {
+            goals: run
+              ? [{ id: run.id, goal: run.goal, status: run.state }]
+              : [],
+            items,
+          },
+        };
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    });
+  }
   app.get(path + '/run/read', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
