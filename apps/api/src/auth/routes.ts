@@ -14,6 +14,7 @@ import { inboundMail } from '../workspace/inbound-mail';
 import { z } from 'zod';
 import { connectDatabase } from '../db/database';
 import type { AuthEnv } from './config';
+import { planCompanyLimit, registerPublicPlans } from './public-plans';
 import { authProviders } from './providers';
 import { authStore } from './store';
 import type { Account, ProfileUpdate } from './store';
@@ -145,6 +146,14 @@ export function registerAuth(
   env: AuthEnv,
   providerRequest?: typeof fetch,
 ) {
+  const creditSettings = creditConfig.parse(process.env);
+  app.get('/api/landing-test', async () => ({ arm: 'control' }));
+  registerPublicPlans(
+    app,
+    env,
+    creditSettings.STARTER_CREDITS,
+    providerRequest,
+  );
   if (!(env.DATABASE_URL && env.AUTH_SECRET && env.REDIS_URL)) {
     app.all('/api/auth/*', async (_request, reply) =>
       reply
@@ -160,7 +169,7 @@ export function registerAuth(
   const secret = env.AUTH_SECRET;
   const database = connectDatabase(env.DATABASE_URL);
   const store = authStore(database.db, secret);
-  const credits = creditLedger(database.db, creditConfig.parse(process.env));
+  const credits = creditLedger(database.db, creditSettings);
   const cache = new Redis(env.REDIS_URL, {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
@@ -729,7 +738,7 @@ export function registerAuth(
             plan: currentBilling?.paid ? 'test-subscription' : null,
             canSpend: currentBilling?.paid ?? false,
             canGrant: false,
-            companyLimit: 1,
+            companyLimit: planCompanyLimit,
           },
           subscription: currentBilling?.canOpenPortal
             ? {
