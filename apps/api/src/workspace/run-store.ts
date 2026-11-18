@@ -166,6 +166,65 @@ export function runStore(db: Database) {
       return run ? summarize(run) : null;
     },
 
+    async queue(businessId: string, runId: string) {
+      const [run] = await db
+        .select({ state: businessRuns.state })
+        .from(businessRuns)
+        .where(
+          and(
+            eq(businessRuns.businessId, businessId),
+            eq(businessRuns.id, runId),
+          ),
+        );
+      if (!run) return null;
+      const [steps, [turn]] = await Promise.all([
+        db
+          .select({
+            position: runSteps.position,
+            prompt: runSteps.instruction,
+            attempt: runSteps.attempt,
+            turnId: runSteps.turnId,
+            state: agentTurns.state,
+          })
+          .from(runSteps)
+          .leftJoin(
+            agentTurns,
+            and(
+              eq(agentTurns.id, runSteps.turnId),
+              eq(agentTurns.businessId, businessId),
+            ),
+          )
+          .where(and(eq(runSteps.runId, runId), isNull(runSteps.completedAt)))
+          .orderBy(asc(runSteps.position)),
+        db
+          .select()
+          .from(agentTurns)
+          .where(
+            and(
+              eq(agentTurns.businessId, businessId),
+              eq(agentTurns.runId, runId),
+            ),
+          )
+          .orderBy(
+            sql`case when ${agentTurns.state} in ('running', 'queued') then 0 else 1 end`,
+            desc(agentTurns.createdAt),
+            desc(agentTurns.id),
+          )
+          .limit(1),
+      ]);
+      return {
+        paused: run.state === 'paused',
+        items: ['completed', 'failed'].includes(run.state)
+          ? []
+          : steps.map(({ state, ...step }) => ({
+              id: runId + ':' + step.position,
+              ...step,
+              status: state ?? 'pending',
+            })),
+        turn,
+      };
+    },
+
     async turns(businessId: string, runId: string, limit: number) {
       const [run] = await db
         .select({ id: businessRuns.id })

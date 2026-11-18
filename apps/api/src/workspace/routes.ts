@@ -557,6 +557,57 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return reportError(error, reply);
     }
   });
+  app.get(path + '/ted/chats/:resource/queue', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const runQueue = await context.runs.queue(access.id, resource);
+      const direct = runQueue
+        ? undefined
+        : await store.readTurn(access.id, resource);
+      if (!runQueue && (!direct || direct.runId))
+        return reply.code(404).send({ message: 'Chat not found.' });
+      const turn = runQueue?.turn ?? direct;
+      const items =
+        runQueue?.items ??
+        (direct?.state === 'queued'
+          ? [
+              {
+                id: direct.id,
+                turnId: direct.id,
+                prompt: direct.prompt,
+                status: direct.state,
+              },
+            ]
+          : []);
+      return conditionalWorkspaceRead(request, reply, {
+        chatId: resource,
+        revision: turn?.revision ?? 0,
+        paused: runQueue?.paused ?? false,
+        items,
+        ...(turn ? { turn: turnSnapshot(turn) } : {}),
+      });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+
+  app.get(path + '/ted/chats/:resource', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const turns = await context.runs.turns(access.id, resource, 50);
+      if (turns) return { id: resource, turns: turns.map(turnSnapshot) };
+      const direct = await store.readTurn(access.id, resource);
+      if (!direct || direct.runId)
+        return reply.code(404).send({ message: 'Chat not found.' });
+      return { id: resource, turns: [turnSnapshot(direct)] };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/ted/unattended/:resource', async (request, reply) => {
     try {
       const access = await authorize(request, reply);
