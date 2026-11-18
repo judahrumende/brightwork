@@ -12,6 +12,7 @@ import { authEnv } from '../src/auth/config';
 import { registerAuth } from '../src/auth/routes';
 import { authStore } from '../src/auth/store';
 import { connectDatabase } from '../src/db/database';
+import { agentStore } from '../src/workspace/agent-store';
 import { runStore } from '../src/workspace/run-store';
 import { artifacts } from '../src/db/schema';
 
@@ -100,6 +101,28 @@ try {
     state: 'pending',
   });
   await runs.control(workspace.id, run.id, 'pause');
+  const workStore = agentStore(database.db);
+  await workStore.saveArtifact({
+    businessId: workspace.id,
+    kind: 'email',
+    title: 'Fixture email draft',
+    body: 'Review this outreach message.',
+    state: 'pending',
+  });
+  await workStore.saveArtifact({
+    businessId: workspace.id,
+    kind: 'post',
+    title: 'Fixture social post',
+    body: 'Review this announcement.',
+    state: 'pending',
+  });
+  await workStore.saveArtifact({
+    businessId: workspace.id,
+    kind: 'website',
+    title: 'Fixture website',
+    body: '<p>Review the new homepage.</p>',
+    state: 'pending',
+  });
   const fixtureIds = Object.fromEntries(
     [...workspaceIds].map((id) => [id, workspace.id]),
   );

@@ -875,6 +875,88 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       }
     },
   );
+  for (const { route, kind } of [
+    { route: '/inbox/drafts', kind: 'email' },
+    { route: '/social/posts', kind: 'post' },
+  ] as const) {
+    app.get(path + route, async (request, reply) => {
+      try {
+        const access = await authorize(request, reply);
+        if (!access) return;
+        const { limit, waiting } = z
+          .object({
+            limit: z.coerce.number().int().min(1).max(100).default(50),
+            waiting: z.enum(['true', 'false']).default('false'),
+          })
+          .parse(request.query);
+        const items = await store.workByKind(
+          access.id,
+          kind,
+          waiting === 'true',
+          limit,
+        );
+        return {
+          items: items.map((item) => describeWork(item, new Date())),
+          nextCursor: null,
+        };
+      } catch (error) {
+        return reportError(error, reply);
+      }
+    });
+  }
+  app.get(path + '/inbox/changes', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { seen } = z
+        .object({ seen: z.string().max(256).optional() })
+        .parse(request.query);
+      const deadline = Date.now() + 20_000;
+      const stop = new AbortController();
+      const close = () => stop.abort();
+      reply.raw.once('close', close);
+      try {
+        for (;;) {
+          const state = await Promise.all([
+            context.inbound.list(access.id),
+            store.inboxRevisionRows(access.id),
+          ]);
+          const revision = createHash('sha256')
+            .update(JSON.stringify(state))
+            .digest('base64url');
+          if (reply.raw.destroyed || stop.signal.aborted) return reply.hijack();
+          if (revision !== seen || Date.now() >= deadline) return { revision };
+          await delay(1_000, undefined, { signal: stop.signal });
+        }
+      } catch (error) {
+        if (stop.signal.aborted) return reply.hijack();
+        throw error;
+      } finally {
+        reply.raw.off('close', close);
+      }
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(path + '/build/website-waits', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const items = await store.workByKind(access.id, 'website', true, 100);
+      return {
+        companyId: access.id,
+        websites: items.map(({ id, title, state, revision }) => ({
+          id,
+          title,
+          state,
+          revision,
+        })),
+        unscanned: [],
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
   app.get(path + '/work/summary', async (request, reply) => {
     try {
       const access = await authorize(request, reply);

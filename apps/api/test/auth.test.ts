@@ -895,6 +895,87 @@ test(
       ] as const)
         assert.equal((await readRun(view, separateCookie)).statusCode, 404);
 
+      {
+        const get = (route: string, cookie = freshCookie) =>
+          server.inject({
+            url: '/api/companies/' + studio + route,
+            headers: { cookie },
+          });
+        const store = agentStore(database.db);
+        const emailDraft = await store.saveArtifact({
+          businessId: studio,
+          kind: 'email',
+          title: 'Fixture email approval',
+          body: 'Review this draft.',
+          state: 'pending',
+        });
+        const otherEmail = await store.saveArtifact({
+          businessId: shop,
+          kind: 'email',
+          title: 'Different workspace',
+          body: 'Private fixture.',
+          state: 'pending',
+        });
+        const postDraft = await store.saveArtifact({
+          businessId: studio,
+          kind: 'post',
+          title: 'Fixture post',
+          body: 'Review this post.',
+          state: 'pending',
+        });
+        const website = await store.saveArtifact({
+          businessId: studio,
+          kind: 'website',
+          title: 'Fixture website',
+          body: '<p>Review this website</p>',
+          state: 'pending',
+        });
+        const drafts = await get('/inbox/drafts?waiting=true&limit=100');
+        const draftIds = drafts
+          .json<{ items: { id: string }[] }>()
+          .items.map(({ id }) => id);
+        assert.ok(draftIds.includes(emailDraft.id));
+        assert.ok(!draftIds.includes(otherEmail.id));
+        const posts = await get('/social/posts?waiting=true&limit=100');
+        assert.ok(
+          posts
+            .json<{ items: { id: string }[] }>()
+            .items.some(({ id }) => id === postDraft.id),
+        );
+        const waits = await get('/build/website-waits');
+        assert.ok(
+          waits
+            .json<{ websites: { id: string }[] }>()
+            .websites.some(({ id }) => id === website.id),
+        );
+        const before = (await get('/inbox/changes')).json<{
+          revision: string;
+        }>().revision;
+        assert.equal((await get('/inbox/changes')).json().revision, before);
+        const poll = get('/inbox/changes?seen=' + encodeURIComponent(before));
+        await new Promise((resolve) => setTimeout(resolve, 75));
+        await database.db
+          .update(artifacts)
+          .set({ state: 'approved' })
+          .where(eq(artifacts.id, emailDraft.id));
+        const changed = await poll;
+        assert.equal(changed.statusCode, 200);
+        assert.notEqual(changed.json().revision, before);
+        const after = await get('/inbox/drafts?waiting=true&limit=100');
+        assert.ok(
+          !after
+            .json<{ items: { id: string }[] }>()
+            .items.some(({ id }) => id === emailDraft.id),
+        );
+        for (const route of [
+          '/inbox/changes',
+          '/inbox/drafts',
+          '/social/posts',
+          '/build/website-waits',
+        ])
+          assert.equal((await get(route, separateCookie)).statusCode, 404);
+      }
+
       const settings = `/api/companies/${studio}/settings`;
       const outsider = await session(separateCookie);
       assert.equal(
