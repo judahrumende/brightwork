@@ -24,6 +24,7 @@ type Dashboard = {
   products: StoreProduct[];
   counts: { openRequests: number; awaitingFulfillment: number };
   paymentReady?: boolean;
+  directCheckout?: boolean;
   zones?: StoreDeliveryZone[];
   deliveryRevision?: number;
 };
@@ -265,6 +266,31 @@ export function StoreDashboard({
             <p>The catalog opens to shoppers after you publish the site.</p>
           )}
           <p>Store currency · {store.currency}</p>
+          <div>
+            <h3>Stripe test checkout</h3>
+            <p>
+              {store.directCheckout && store.paymentReady
+                ? 'Shoppers can pay directly from the catalog in test mode.'
+                : 'Shoppers can submit an order request for you to review.'}
+            </p>
+            {!readOnly && (store.paymentReady || store.directCheckout) && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  void save({
+                    action: 'checkout',
+                    enabled: !store.directCheckout,
+                  })
+                }
+              >
+                {store.directCheckout
+                  ? 'Turn off test checkout'
+                  : 'Enable test checkout'}
+              </Button>
+            )}
+          </div>
           {!readOnly && !store.products.length && (
             <label>
               Currency{' '}

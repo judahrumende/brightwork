@@ -299,6 +299,19 @@ export function registerAuth(
           referralCredits: env.STRIPE_REFERRAL_CREDITS,
         })
       : null;
+  const sellerPayments =
+    env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
+      ? stripeConnect(
+          database.db,
+          {
+            key: env.STRIPE_TEST_KEY,
+            secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
+            identityKey: secret,
+            origin,
+          },
+          providerRequest,
+        )
+      : undefined;
   const hosting = siteHosting(
     app,
     workspace,
@@ -319,21 +332,9 @@ export function registerAuth(
           paymentOrigin: origin,
         }
       : undefined,
+    sellerPayments,
   );
   billing?.register(app);
-  const sellerPayments =
-    env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
-      ? stripeConnect(
-          database.db,
-          {
-            key: env.STRIPE_TEST_KEY,
-            secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
-            identityKey: secret,
-            origin,
-          },
-          providerRequest,
-        )
-      : undefined;
   sellerPayments?.register(app);
   app.get('/api/sales/:id', async (request, reply) => {
     reply.header('Cache-Control', 'no-store');

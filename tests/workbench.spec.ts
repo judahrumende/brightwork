@@ -1415,6 +1415,7 @@ test('a generated store opens its dashboard below the preview and saves a produc
   const products: object[] = [];
   let zones: object[] = [];
   let deliveryRevision = 0;
+  let directCheckout = false;
   const png =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
   await page.route(
@@ -1520,6 +1521,11 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await page.route('**' + api + '/work/' + id + '/store', (route) => {
     if (route.request().method() === 'POST') {
       const data = route.request().postDataJSON();
+      if (data.action === 'checkout') {
+        expect(data.enabled).toBe(!directCheckout);
+        directCheckout = data.enabled;
+        return route.fulfill({ json: { saved: true } });
+      }
       if (data.action === 'delivery') {
         expect(data).toEqual({
           action: 'delivery',
@@ -1580,6 +1586,7 @@ test('a generated store opens its dashboard below the preview and saves a produc
         products,
         orders: [order],
         paymentReady: true,
+        directCheckout,
         zones,
         deliveryRevision,
         counts: { openRequests: 0, awaitingFulfillment: 1 },
@@ -1605,6 +1612,18 @@ test('a generated store opens its dashboard below the preview and saves a produc
   ).toBeVisible();
   await dialog.getByRole('button', { name: 'Dashboard', exact: true }).click();
   const dashboard = dialog.getByRole('region', { name: 'Store dashboard' });
+  await dashboard.getByRole('button', { name: 'Enable test checkout' }).click();
+  await expect(
+    dashboard.getByText(
+      'Shoppers can pay directly from the catalog in test mode.',
+    ),
+  ).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Turn off test checkout' })
+    .click();
+  await expect(
+    dashboard.getByRole('button', { name: 'Enable test checkout' }),
+  ).toBeEnabled();
   await dashboard.getByRole('radio', { name: 'Products' }).click();
   await dashboard.getByRole('button', { name: 'Add product' }).click();
   await dashboard.getByLabel('Name', { exact: true }).fill('Pour-over kettle');

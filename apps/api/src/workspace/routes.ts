@@ -1313,6 +1313,7 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     }),
     z.object({ action: z.literal('order'), id: z.uuid(), status: orderAction }),
     z.object({ action: z.literal('payment'), id: z.uuid() }),
+    z.object({ action: z.literal('checkout'), enabled: z.boolean() }),
     z.object({ action: z.literal('close_payment'), id: z.uuid() }),
   ]);
   app.post(storePath, async (request, reply) => {
@@ -1331,6 +1332,25 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       );
       if (!dashboard)
         return reply.code(404).send({ message: 'Store not found.' });
+      if (update.action === 'checkout') {
+        if (
+          update.enabled &&
+          !(await context.sellerPayments?.readyForCheckout(access.id))
+        )
+          return reply.code(409).send({
+            message:
+              'Connect a ready Stripe test seller in Workspace settings before enabling checkout.',
+          });
+        if (
+          await store.generatedStore.setCheckout(
+            access.id,
+            resource,
+            update.enabled,
+          )
+        )
+          return { saved: true };
+        return reply.code(404).send({ message: 'Store not found.' });
+      }
       if (update.action === 'payment' || update.action === 'close_payment') {
         if (!context.sellerPayments)
           return reply

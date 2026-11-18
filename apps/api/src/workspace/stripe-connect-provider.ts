@@ -88,6 +88,7 @@ export function stripeConnectProvider(
         'checkout/sessions',
         {
           mode: 'payment',
+          'adaptive_pricing[enabled]': 'false',
           'payment_method_types[0]': 'card',
           client_reference_id: order,
           'line_items[0][price_data][currency]': currency.parse(input.currency),

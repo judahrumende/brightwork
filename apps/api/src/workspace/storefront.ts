@@ -5,6 +5,7 @@ import {
   readBuyer,
   registerBuyerRoutes,
 } from './store-buyer-routes';
+import type { stripeConnect } from './stripe-connect';
 import type { BuyerAccess } from './store-buyer-routes';
 import { escape } from './storefront-html';
 import { sendStorePhoto } from './store-product-photo';
@@ -45,6 +46,7 @@ export function registerStorefront(
   origin: (id: string) => string,
   limitOrder: (key: string) => Promise<void>,
   buyerAccess?: BuyerAccess,
+  payments?: Pick<ReturnType<typeof stripeConnect>, 'checkout'>,
 ) {
   void app.register((scope, _opts, done) => {
     scope.addContentTypeParser(
@@ -64,7 +66,7 @@ export function registerStorefront(
         .header('Referrer-Policy', 'same-origin')
         .header(
           'Content-Security-Policy',
-          "sandbox allow-forms allow-same-origin; default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+          "sandbox allow-forms allow-same-origin; default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https://checkout.stripe.com; base-uri 'none'; frame-ancestors 'none'",
         );
       next();
     });
@@ -80,6 +82,7 @@ export function registerStorefront(
       const site = siteId(request.hostname)!;
       const store = await stores.catalog(site);
       if (!store) return reply.code(404).send('Store not found');
+      const direct = Boolean(payments && store.directCheckout);
       const buyer = await readBuyer(
         buyerAccess,
         site,
@@ -160,9 +163,10 @@ export function registerStorefront(
           h2,h3{margin:0} img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#f8f7f4;border-radius:.5rem;margin-bottom:1rem}.option{display:grid;gap:.5rem;margin-top:1rem}.option img{max-width:12rem;margin-bottom:0} form,label{display:grid;gap:.5rem}form{margin-top:1rem;gap:1rem}
           input,button,select{font:inherit;padding:.5rem .75rem;width:100%;border-radius:.375rem;border:1px solid #88867e}fieldset{display:grid;gap:.5rem;border:1px solid #ddd9d0;border-radius:.5rem}button{background:#254a3e;color:white;cursor:pointer}
         </style>
-        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>Choose quantities and send one order request for the store to confirm.</p>
+        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>${direct ? 'Choose quantities and check out with Stripe in test mode.' : 'Choose quantities and send one order request for the store to confirm.'}</p>
         <form method="post" action="${zones.length ? quotePath : orderPath}">
           <input type="hidden" name="id" value="${randomUUID()}">
+          ${direct ? '<input type="hidden" name="pay" value="stripe">' : ''}
           <section aria-label="Products">${products || '<p>Products will appear here when they are available.</p>'}</section>
           ${
             available
@@ -171,7 +175,7 @@ export function registerStorefront(
                     ? `<p>Order email · ${escape(buyer)}</p>`
                     : '<label>Email for your order <input type="email" required name="email" maxlength="254" autocomplete="email"></label>'
                 }
-          ${deliveryFields}<button>${zones.length ? 'Review order' : 'Request order'}</button></div>`
+          ${deliveryFields}<button>${zones.length ? 'Review order' : direct ? 'Continue to Stripe' : 'Request order'}</button></div>`
               : ''
           }
         </form></main></html>`);
@@ -195,6 +199,11 @@ export function registerStorefront(
         ...fields.data,
         ...(buyer ? { email: buyer } : {}),
       };
+      const direct = values.pay === 'stripe';
+      if (direct && !payments)
+        return reply
+          .code(503)
+          .send('Stripe checkout is temporarily unavailable.');
       const reviewing = request.routeOptions.url === quotePath;
       const quote = z.uuid().safeParse(values.quote);
       const cart = Object.entries(values).filter(([key]) =>
@@ -278,16 +287,59 @@ export function registerStorefront(
           <div><dt>Tax</dt><dd>${money(review.delivery.tax)}</dd></div>
           <div><dt>Total</dt><dd><strong>${money(storeOrderTotal(review.items, review.delivery))}</strong></dd></div></dl>
           <form method="post" action="${orderPath}"><input type="hidden" name="quote" value="${review.id}">
-          <button>Submit order request</button></form>`,
+          ${direct ? '<input type="hidden" name="pay" value="stripe">' : ''}
+          <button>${direct ? 'Continue to Stripe' : 'Submit order request'}</button></form>`,
           ),
         );
       }
       const orderId = quote.success
-        ? await stores.placeDelivery(id, quote.data, buyer)
-        : result.success && (await stores.request(id, result.data))
+        ? await stores.placeDelivery(id, quote.data, buyer, direct)
+        : result.success && (await stores.request(id, result.data, direct))
           ? result.data.id
           : null;
       if (!orderId) return changed();
+      if (direct && payments) {
+        const sale = await stores.buyerSale(id, orderId);
+        if (!sale) return changed();
+        if (sale.paid)
+          return reply
+            .type('text/html; charset=utf-8')
+            .send(
+              checkoutPage('Payment received', `<p>Reference: ${orderId}</p>`),
+            );
+        let url: string | null = null;
+        try {
+          url = await payments.checkout(sale.id);
+        } catch {
+          request.log.warn(
+            { sale: sale.id },
+            'Could not create store checkout',
+          );
+        }
+        if (url) return reply.redirect(url, 303);
+        const retryFields = quote.success
+          ? { quote: quote.data, pay: 'stripe' }
+          : values;
+        return reply
+          .code(503)
+          .type('text/html; charset=utf-8')
+          .send(
+            checkoutPage(
+              'Checkout unavailable',
+              `
+            <p>Retry checkout for the same order. Reference: ${orderId}</p>
+            <form method="post" action="${orderPath}">
+              ${Object.entries(retryFields)
+                .map(
+                  ([key, value]) =>
+                    `<input type="hidden" name="${escape(key)}" value="${escape(value)}">`,
+                )
+                .join('')}
+              <button>Retry Stripe checkout</button>
+            </form>`,
+            ),
+          );
+      }
       return reply
         .type('text/html; charset=utf-8')
         .send(

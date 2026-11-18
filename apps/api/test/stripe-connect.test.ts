@@ -10,6 +10,7 @@ import { artifacts, businesses, publications } from '../src/db/schema';
 import { generatedStores } from '../src/workspace/generated-store';
 import { commerceInsights } from '../src/workspace/commerce-insights';
 import { stripeConnect } from '../src/workspace/stripe-connect';
+import { registerStorefront } from '../src/workspace/storefront';
 
 const url = process.env.TEST_DATABASE_URL;
 test(
@@ -65,6 +66,7 @@ test(
     let paymentIntent = 'pi_Sale';
     let storeFixture = false;
     let failCheckoutCreation = false;
+    let directFixture = false;
     const connect = stripeConnect(
       db,
       { origin, secret, key: 'sk_test_fixture' },
@@ -107,6 +109,13 @@ test(
           submissions++;
           if (storeFixture) {
             const fields = new URLSearchParams(String(request?.body));
+            if (directFixture) {
+              assert.ok(fields.get('client_reference_id'));
+              checkoutOrder = {
+                ...checkoutOrder,
+                id: fields.get('client_reference_id')!,
+              };
+            }
             assert.equal(fields.get('client_reference_id'), checkoutOrder.id);
             assert.equal(
               fields.get('line_items[0][price_data][unit_amount]'),
@@ -555,5 +564,174 @@ test(
         },
       ],
     });
+
+    assert.ok(
+      await stores.setDelivery(owner.id, site.id, 2, [
+        {
+          country: 'AU',
+          shipping: 250,
+          taxRate: 1000,
+          freeAbove: null,
+          taxShipping: true,
+        },
+      ]),
+    );
+    const storefront = Fastify();
+    t.after(() => storefront.close());
+    const shopHost = site.id + '.shops.example.test';
+    registerStorefront(
+      storefront,
+      stores,
+      (hostname) => (hostname === shopHost ? site.id : null),
+      () => 'https://' + shopHost,
+      async () => {},
+      undefined,
+      connect,
+    );
+    const headers = {
+      host: shopHost,
+      origin: 'https://' + shopHost,
+      'content-type': 'application/x-www-form-urlencoded',
+    };
+    const catalog = () =>
+      storefront.inject({ method: 'GET', url: '/store/catalog', headers });
+    assert.doesNotMatch((await catalog()).body, /name="pay"/u);
+    assert.equal(await stores.setCheckout(other.id, site.id, true), false);
+    assert.equal(await stores.setCheckout(owner.id, site.id, true), true);
+    assert.match((await catalog()).body, /name="pay" value="stripe"/u);
+    const product = (await stores.read(owner.id, site.id))!.products.find(
+      ({ stock }) => stock > 0,
+    )!;
+    const cart = {
+      id: randomUUID(),
+      [`cart:${product.id}:${product.revision}`]: '1',
+      email: 'direct-buyer@example.test',
+      pay: 'stripe',
+      country: 'AU',
+      name: 'Fixture Buyer',
+      street: '123 Test Street',
+      city: 'Perth',
+      region: 'WA',
+      postalCode: '6000',
+      unit: '',
+    };
+    const post = (url: string, fields: Record<string, string>) =>
+      storefront.inject({
+        method: 'POST',
+        url,
+        headers,
+        payload: new URLSearchParams(fields).toString(),
+      });
+    const review = await post('/store/review', cart);
+    assert.equal(review.statusCode, 200, review.body);
+    assert.match(review.body, /Continue to Stripe/u);
+    const quote = review.body.match(/name="quote" value="([^"]+)"/u)?.[1];
+    assert.ok(quote);
+    const payment = { quote, pay: 'stripe' };
+    const rival = await post('/store/review', cart);
+    const rivalQuote = rival.body.match(/name="quote" value="([^"]+)"/u)?.[1];
+    assert.ok(rivalQuote);
+    directFixture = true;
+    session = 'cs_test_DirectStore';
+    const amount = Math.round((product.price + 250) * 1.1);
+    checkoutOrder = { ...checkoutOrder, amount };
+    capturedAmount = amount;
+    failCheckoutCreation = true;
+    const blocked = await post('/store/orders', payment);
+    assert.equal(blocked.statusCode, 503);
+    assert.match(blocked.body, /Retry Stripe checkout/u);
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.products.find(
+        ({ id }) => id === product.id,
+      )?.stock,
+      0,
+    );
+    const conflicting = await post('/store/orders', {
+      quote: rivalQuote,
+      pay: 'stripe',
+    });
+    assert.equal(conflicting.statusCode, 409);
+    const before = submissions;
+    const [redirect, retry] = await Promise.all([
+      post('/store/orders', payment),
+      post('/store/orders', payment),
+    ]);
+    assert.equal(redirect.statusCode, 303);
+    assert.equal(redirect.headers.location, link);
+    assert.equal(retry.headers.location, link);
+    assert.equal(submissions, before + 1);
+    assert.equal(
+      (await stores.buyerSale(site.id, quote))?.id,
+      checkoutOrder.id,
+    );
+
+    checkoutStatus = 'expired';
+    capturedAmount++;
+    assert.equal(
+      (await webhook(68, 'checkout.session.expired', session)).statusCode,
+      204,
+    );
+    assert.equal(
+      (await stores.buyerSale(site.id, quote))?.id,
+      checkoutOrder.id,
+    );
+    capturedAmount = amount;
+    assert.equal(
+      (await webhook(69, 'checkout.session.expired', session)).statusCode,
+      204,
+    );
+    assert.equal(
+      (await webhook(70, 'checkout.session.expired', session)).statusCode,
+      204,
+    );
+    assert.equal(await stores.buyerSale(site.id, quote), undefined);
+    const expired = await stores.read(owner.id, site.id);
+    assert.equal(
+      expired?.orders.find(({ id }) => id === quote)?.status,
+      'cancelled',
+    );
+    assert.equal(
+      expired?.products.find(({ id }) => id === product.id)?.stock,
+      1,
+    );
+    assert.equal(await connect.checkout(checkoutOrder.id), null);
+    const updatedProduct = expired!.products.find(
+      ({ id }) => id === product.id,
+    )!;
+    const paidReview = await post('/store/review', {
+      ...cart,
+      [`cart:${product.id}:${product.revision}`]: '0',
+      [`cart:${product.id}:${updatedProduct.revision}`]: '1',
+    });
+    const paidQuote = paidReview.body.match(
+      /name="quote" value="([^"]+)"/u,
+    )?.[1];
+    assert.ok(paidQuote, paidReview.body);
+    session = 'cs_test_DirectPaid';
+    paymentIntent = 'pi_DirectPaid';
+    assert.equal(
+      (await post('/store/orders', { quote: paidQuote, pay: 'stripe' }))
+        .statusCode,
+      303,
+    );
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.counts?.awaitingFulfillment,
+      0,
+    );
+    checkoutStatus = 'complete';
+    assert.equal(
+      (await webhook(71, 'checkout.session.completed', session)).statusCode,
+      204,
+    );
+    assert.ok((await stores.buyerSale(site.id, paidQuote))?.paid);
+    assert.equal(
+      (await stores.read(owner.id, site.id))?.counts?.awaitingFulfillment,
+      1,
+    );
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, paidQuote, 'fulfilled'),
+    );
+    assert.equal(await stores.setCheckout(owner.id, site.id, false), true);
+    assert.doesNotMatch((await catalog()).body, /name="pay"/u);
   },
 );
