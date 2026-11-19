@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { shopifyConnectionInput } from './shopify-orders';
 import type { shopifyOrders } from './shopify-orders';
 import { saleInput } from './stripe-connect';
-import type { stripeConnect } from './stripe-connect';
+import type { StripeConnectModes } from './stripe-connect';
 import { smsConnectionInput } from './sms';
 import type { workspaceSms } from './sms';
 import { teamRole } from './team';
@@ -23,7 +23,7 @@ export function registerWorkspaceSettings(
   context: {
     team: ReturnType<typeof teamStore>;
     commerce: ReturnType<typeof shopifyOrders> | undefined;
-    sellerPayments: ReturnType<typeof stripeConnect> | undefined;
+    sellerPayments: StripeConnectModes | undefined;
     sms: ReturnType<typeof workspaceSms> | undefined;
     vault: ReturnType<typeof vaultStore> | undefined;
     domains: ReturnType<typeof domainStore>;
@@ -34,6 +34,9 @@ export function registerWorkspaceSettings(
   const { team, vault, domains, commerce, sms, sellerPayments } = context;
   const base = '/api/companies/:id/settings';
   const target = z.object({ resource: z.uuid() });
+  const stripeMode = z.object({
+    mode: z.enum(['test', 'live']).default('test'),
+  });
   type Access = NonNullable<Awaited<ReturnType<Authorize>>>;
   function handle(
     write: boolean,
@@ -88,33 +91,43 @@ export function registerWorkspaceSettings(
   );
   app.get(
     base + '/stripe-connect',
-    handle(false, async (_request, _reply, access) => ({
-      enabled: Boolean(sellerPayments),
-      ...((await sellerPayments?.overview(access.id)) ?? {
-        seller: null,
-        orders: [],
-      }),
-    })),
+    handle(false, async (request, _reply, access) => {
+      const { mode } = stripeMode.parse(request.query);
+      const service = sellerPayments?.forMode(mode);
+      return {
+        enabled: Boolean(service),
+        mode,
+        availableModes: sellerPayments?.availableModes() ?? [],
+        ...((await service?.overview(access.id)) ?? {
+          seller: null,
+          orders: [],
+        }),
+      };
+    }),
   );
   app.post(
     base + '/stripe-connect/onboarding',
-    handle(true, async (_request, reply, access) => {
-      if (!sellerPayments)
+    handle(true, async (request, reply, access) => {
+      const { mode } = stripeMode.parse(request.query);
+      const service = sellerPayments?.forMode(mode);
+      if (!service)
         return reply
           .code(503)
           .send({ message: 'Stripe Connect is unavailable.' });
-      return { url: await sellerPayments.onboarding(access.id) };
+      return { url: await service.onboarding(access.id) };
     }),
   );
   app.post(
     base + '/stripe-connect/sales',
     handle(true, async (request, reply, access) => {
-      if (!sellerPayments)
+      const { mode } = stripeMode.parse(request.query);
+      const service = sellerPayments?.forMode(mode);
+      if (!service)
         return reply
           .code(503)
           .send({ message: 'Stripe Connect is unavailable.' });
       const input = saleInput.parse(request.body);
-      if (!(await sellerPayments.create(access.id, input)))
+      if (!(await service.create(access.id, input)))
         return reply
           .code(409)
           .send({ message: 'Check seller readiness and sale details.' });
@@ -124,10 +137,13 @@ export function registerWorkspaceSettings(
   app.post(
     base + '/stripe-connect/history/refresh',
     handle(true, async (request, reply, access) => {
+      const { mode } = stripeMode.parse(request.query);
       const { after } = z
         .object({ after: z.uuid().optional() })
         .parse(request.body);
-      const result = await sellerPayments?.repairHistory(access.id, after);
+      const result = await sellerPayments
+        ?.forMode(mode)
+        ?.repairHistory(access.id, after);
       if (!result)
         return reply.code(404).send({ message: 'Stripe seller unavailable.' });
       return result;

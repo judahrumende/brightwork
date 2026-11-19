@@ -36,6 +36,7 @@ export type StoreOrder = {
   currency: z.infer<typeof storeCurrency>;
   status: z.infer<typeof storeOrderStatus>;
   saleId: string | null;
+  paymentMode: 'test' | 'live' | null;
   payment:
     | 'awaiting_payment'
     | 'paid'
@@ -120,5 +121,6 @@ export type StoreReportDay = {
 
 export type StoreReport = {
   currency: z.infer<typeof storeCurrency>;
+  mode: 'test' | 'live';
   days: StoreReportDay[];
 };

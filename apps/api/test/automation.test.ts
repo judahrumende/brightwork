@@ -625,12 +625,9 @@ test(
         },
         pages: Array<string | (() => Promise<string>)>,
         denyPage = false,
+        requirements = 'Build the requested website changes.',
       ) {
-        const turn = await agent.addTurn(
-          workspaceId,
-          account.id,
-          'Build the requested website changes.',
-        );
+        const turn = await agent.addTurn(workspaceId, account.id, requirements);
         const modelKeys: string[] = [];
         let pageCalls = 0;
         let planned = false;
@@ -645,13 +642,28 @@ test(
           },
           async (messages, tools, options) => {
             if (!tools.length) {
-              if (options?.json)
+              if (options?.json) {
+                assert.match(
+                  messages[0]?.content ?? '',
+                  /Set a clear audience/u,
+                );
+                if (/online shop/iu.test(requirements))
+                  assert.match(
+                    messages[0]?.content ?? '',
+                    /Foundable’s managed catalog/u,
+                  );
                 return {
                   calls: [],
                   text: JSON.stringify(input),
                   usage: { prompt_tokens: 10, completion_tokens: 12 },
                 };
+              }
               assert.equal(options?.maxTokens, 8192);
+              if (/online shop/iu.test(requirements))
+                assert.match(
+                  messages[0]?.content ?? '',
+                  /Link every shop or product action to \/store\/catalog/u,
+                );
               const page = pages[pageCalls++];
               assert.ok(page);
               if (
@@ -832,6 +844,8 @@ test(
           changes: [writePage('', 'Home')],
         },
         [fixturePage('Fieldwork')],
+        false,
+        'Make an online shop for Fieldwork products.',
       );
       assert.equal(shop.turn?.state, 'completed');
       const shopId = (await agent.listArtifacts(business.id)).find(

@@ -13,6 +13,7 @@ import {
 import {
   boolean,
   integer,
+  primaryKey,
   pgTable,
   text,
   timestamp,
@@ -22,6 +23,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Database } from '../db/database';
 import { verifyStripeSignature } from './stripe-client';
+import type { StripeMode } from './stripe-client';
 import {
   accountId,
   currency,
@@ -29,16 +31,26 @@ import {
   stripeConnectProvider,
 } from './stripe-connect-provider';
 
-const sellers = pgTable('stripe_sellers', {
-  businessId: uuid('business_id').primaryKey(),
-  accountId: text('account_id').notNull(),
-  chargesEnabled: boolean('charges_enabled').notNull().default(false),
-  payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
-  detailsSubmitted: boolean('details_submitted').notNull().default(false),
-});
+const sellers = pgTable(
+  'stripe_sellers',
+  {
+    businessId: uuid('business_id').notNull(),
+    mode: text({ enum: ['test', 'live'] })
+      .notNull()
+      .default('test'),
+    accountId: text('account_id').notNull(),
+    chargesEnabled: boolean('charges_enabled').notNull().default(false),
+    payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
+    detailsSubmitted: boolean('details_submitted').notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.businessId, t.mode] })],
+);
 const sales = pgTable('stripe_sales', {
   id: uuid().primaryKey(),
   businessId: uuid('business_id').notNull(),
+  mode: text({ enum: ['test', 'live'] })
+    .notNull()
+    .default('test'),
   accountId: text('account_id').notNull(),
   title: text().notNull(),
   currency: text().notNull(),
@@ -62,9 +74,16 @@ const sales = pgTable('stripe_sales', {
     .defaultNow()
     .notNull(),
 });
-const events = pgTable('stripe_connect_events', {
-  id: text().primaryKey(),
-});
+const events = pgTable(
+  'stripe_connect_events',
+  {
+    id: text().notNull(),
+    mode: text({ enum: ['test', 'live'] })
+      .notNull()
+      .default('test'),
+  },
+  (t) => [primaryKey({ columns: [t.mode, t.id] })],
+);
 export const saleInput = z.strictObject({
   id: z.uuid(),
   title: z.string().trim().min(1).max(200),
@@ -75,7 +94,7 @@ const eventInput = z.object({
   id: z.string().regex(/^evt_[a-z0-9]+$/iu),
   type: z.string(),
   account: accountId.optional(),
-  livemode: z.literal(false),
+  livemode: z.boolean(),
   created: z.int().nonnegative().max(4_102_444_800),
   data: z.object({ object: z.object({ id: z.string().max(200) }) }),
 });
@@ -87,13 +106,21 @@ export function stripeConnect(
   options: {
     key: string;
     secret: string;
+    mode?: StripeMode;
     origin: string;
     identityKey?: string;
   },
   transport?: typeof fetch,
 ) {
-  const stripe = stripeConnectProvider(options.key, options.origin, transport);
-  const sellerScope = (id: string) => eq(sellers.businessId, id);
+  const mode = options.mode ?? 'test';
+  const stripe = stripeConnectProvider(
+    options.key,
+    options.origin,
+    transport,
+    mode,
+  );
+  const sellerScope = (id: string) =>
+    and(eq(sellers.businessId, id), eq(sellers.mode, mode));
   const accountFields = (
     account: Awaited<ReturnType<typeof stripe.account>>,
   ) => ({
@@ -102,7 +129,7 @@ export function stripeConnect(
     detailsSubmitted: account.details_submitted,
   });
   const scopedOrder = (id: string, account: string) =>
-    and(eq(sales.id, id), eq(sales.accountId, account));
+    and(eq(sales.id, id), eq(sales.accountId, account), eq(sales.mode, mode));
 
   function buyerKey(
     businessId: string,
@@ -143,6 +170,7 @@ export function stripeConnect(
       join generated_stores store on store.site_id = orders.site_id
       join stripe_sales sale on sale.id = orders.sale_id
       where sale.id = ${saleId} and sale.account_id = ${account}
+        and sale.mode = ${mode}
         and sale.direct_checkout and orders.status = 'confirmed'
       for update of store
     `);
@@ -186,7 +214,10 @@ export function stripeConnect(
   }
 
   async function recoverSale(id: string) {
-    const [sale] = await db.select().from(sales).where(eq(sales.id, id));
+    const [sale] = await db
+      .select()
+      .from(sales)
+      .where(and(eq(sales.id, id), eq(sales.mode, mode)));
     if (!sale || sale.paidAt || sale.closedAt) return false;
     if (!sale.checkoutAttemptedAt)
       return db.transaction((tx) =>
@@ -280,7 +311,7 @@ export function stripeConnect(
     const batch = await db.execute<{ id: string }>(sql`
       with due as (
         select id from stripe_sales
-        where direct_checkout and closed_at is null and paid_at is null
+        where mode = ${mode} and direct_checkout and closed_at is null and paid_at is null
           and checkout_recover_at <= now()
         order by checkout_recover_at, id limit 8 for update skip locked
       )
@@ -323,7 +354,7 @@ export function stripeConnect(
             paidAt: sales.paidAt,
           })
           .from(sales)
-          .where(eq(sales.businessId, id))
+          .where(and(eq(sales.businessId, id), eq(sales.mode, mode)))
           .orderBy(desc(sales.createdAt))
           .limit(100),
       ]);
@@ -345,6 +376,7 @@ export function stripeConnect(
         .where(
           and(
             eq(sales.businessId, businessId),
+            eq(sales.mode, mode),
             eq(sales.accountId, seller.accountId),
             isNotNull(sales.paidAt),
             isNotNull(sales.checkoutId),
@@ -387,7 +419,7 @@ export function stripeConnect(
                 eq(sales.businessId, businessId),
                 eq(sales.checkoutId, sale.checkoutId),
                 isNull(sales.customerKey),
-                sql`exists (select 1 from ${sellers} where ${sellers.businessId} = ${businessId} and ${sellers.accountId} = ${seller.accountId})`,
+                sql`exists (select 1 from ${sellers} where ${sellers.businessId} = ${businessId} and ${sellers.mode} = ${mode} and ${sellers.accountId} = ${seller.accountId})`,
               ),
             )
             .returning({ id: sales.id });
@@ -412,6 +444,7 @@ export function stripeConnect(
           .insert(sellers)
           .values({
             businessId: id,
+            mode,
             accountId: account.id,
             ...accountFields(account),
           })
@@ -426,12 +459,18 @@ export function stripeConnect(
       if (!seller || !ready(seller)) return false;
       await db
         .insert(sales)
-        .values({ ...input, businessId: id, accountId: seller.accountId })
+        .values({ ...input, businessId: id, mode, accountId: seller.accountId })
         .onConflictDoNothing();
       const [sale] = await db
         .select()
         .from(sales)
-        .where(and(eq(sales.id, input.id), eq(sales.businessId, id)));
+        .where(
+          and(
+            eq(sales.id, input.id),
+            eq(sales.businessId, id),
+            eq(sales.mode, mode),
+          ),
+        );
       return Boolean(
         sale &&
         sale.title === input.title &&
@@ -458,6 +497,7 @@ export function stripeConnect(
           .where(
             and(
               eq(sales.businessId, businessId),
+              eq(sales.mode, mode),
               sql`exists (
             select 1 from generated_store_orders where site_id = ${siteId}
               and id = ${orderId} and sale_id = ${sales.id} and status = 'confirmed'
@@ -490,7 +530,7 @@ export function stripeConnect(
         await tx
           .update(sales)
           .set({ closedAt: new Date() })
-          .where(eq(sales.id, sale.id));
+          .where(and(eq(sales.id, sale.id), eq(sales.mode, mode)));
         return true;
       });
     },
@@ -505,7 +545,9 @@ export function stripeConnect(
           amountRefunded: sales.amountRefunded,
         })
         .from(sales)
-        .where(and(eq(sales.id, id), isNull(sales.closedAt)));
+        .where(
+          and(eq(sales.id, id), eq(sales.mode, mode), isNull(sales.closedAt)),
+        );
       return result ?? null;
     },
     async checkout(id: string) {
@@ -519,11 +561,13 @@ export function stripeConnect(
         .where(
           and(
             eq(sales.id, id),
+            eq(sales.mode, mode),
             isNull(sales.closedAt),
             isNull(sales.paidAt),
             eq(sales.amountRefunded, 0),
             sql`exists (select 1 from stripe_sellers as seller
             where seller.business_id = ${sales.businessId} and seller.account_id = ${sales.accountId}
+            and seller.mode = ${mode}
             and seller.details_submitted and seller.charges_enabled and seller.payouts_enabled)`,
           ),
         )
@@ -533,8 +577,14 @@ export function stripeConnect(
         const [record] = await tx
           .select({ order: sales, seller: sellers })
           .from(sales)
-          .innerJoin(sellers, eq(sales.businessId, sellers.businessId))
-          .where(eq(sales.id, id))
+          .innerJoin(
+            sellers,
+            and(
+              eq(sales.businessId, sellers.businessId),
+              eq(sales.mode, sellers.mode),
+            ),
+          )
+          .where(and(eq(sales.id, id), eq(sales.mode, mode)))
           .for('update', { of: sales });
         if (
           !record ||
@@ -542,6 +592,7 @@ export function stripeConnect(
           record.order.closedAt ||
           record.order.amountRefunded > 0 ||
           record.seller.accountId !== record.order.accountId ||
+          record.seller.mode !== mode ||
           !ready(record.seller)
         )
           return null;
@@ -594,7 +645,7 @@ export function stripeConnect(
         await tx
           .update(sales)
           .set({ checkoutId: session.id })
-          .where(eq(sales.id, id));
+          .where(and(eq(sales.id, id), eq(sales.mode, mode)));
         return session.url;
       });
     },
@@ -639,7 +690,9 @@ export function stripeConnect(
           (_req, body, done) => done(null, body),
         );
         hooks.post(
-          '/api/webhooks/stripe-connect',
+          mode === 'test'
+            ? '/api/webhooks/stripe-connect'
+            : '/api/webhooks/stripe-connect/live',
           { bodyLimit: 256_000 },
           async (req, res) => {
             if (
@@ -660,18 +713,25 @@ export function stripeConnect(
             const parsed = eventInput.safeParse(raw);
             if (!parsed.success) return res.code(400).send();
             const event = parsed.data;
+            if (event.livemode !== (mode === 'live'))
+              return res.code(400).send();
             const objectId = event.data.object.id;
             await db.transaction(async (tx) => {
               const [claimed] = await tx
                 .insert(events)
-                .values({ id: event.id })
+                .values({ id: event.id, mode })
                 .onConflictDoNothing()
                 .returning();
               if (!claimed || !event.account) return;
               const [seller] = await tx
                 .select()
                 .from(sellers)
-                .where(eq(sellers.accountId, event.account))
+                .where(
+                  and(
+                    eq(sellers.accountId, event.account),
+                    eq(sellers.mode, mode),
+                  ),
+                )
                 .for('update');
               if (!seller) return;
               if (
@@ -795,3 +855,78 @@ export function stripeConnect(
     },
   };
 }
+
+type StripeCredentials = { key: string; secret: string };
+
+export function stripeConnectModes(
+  db: Database,
+  credentials: Partial<Record<StripeMode, StripeCredentials>>,
+  options: { origin: string; identityKey?: string },
+  transport?: typeof fetch,
+) {
+  const modes = {
+    test: credentials.test
+      ? stripeConnect(
+          db,
+          { ...credentials.test, ...options, mode: 'test' },
+          transport,
+        )
+      : undefined,
+    live: credentials.live
+      ? stripeConnect(
+          db,
+          { ...credentials.live, ...options, mode: 'live' },
+          transport,
+        )
+      : undefined,
+  };
+  async function saleMode(id: string) {
+    const [sale] = await db.execute<{ mode: StripeMode }>(sql`
+      select mode from stripe_sales where id = ${id}::uuid
+    `);
+    return sale?.mode;
+  }
+  return {
+    forMode(mode: StripeMode) {
+      return modes[mode];
+    },
+    availableModes() {
+      return (Object.keys(modes) as StripeMode[]).filter((mode) =>
+        Boolean(modes[mode]),
+      );
+    },
+    register(app: FastifyInstance) {
+      modes.test?.register(app);
+      modes.live?.register(app);
+    },
+    async readyForCheckout(businessId: string, mode: StripeMode = 'test') {
+      return (await modes[mode]?.readyForCheckout(businessId)) ?? false;
+    },
+    async checkout(id: string) {
+      const mode = await saleMode(id);
+      return mode ? (modes[mode]?.checkout(id) ?? null) : null;
+    },
+    async publicOrder(id: string) {
+      const mode = await saleMode(id);
+      return mode ? (modes[mode]?.publicOrder(id) ?? null) : null;
+    },
+    async closeStoreCheckout(
+      businessId: string,
+      siteId: string,
+      orderId: string,
+    ) {
+      const [order] = await db.execute<{ mode: StripeMode }>(sql`
+        select sale.mode from generated_store_orders orders
+        join stripe_sales sale on sale.id = orders.sale_id
+        where orders.site_id = ${siteId}::uuid and orders.id = ${orderId}::uuid
+          and sale.business_id = ${businessId}::uuid
+      `);
+      return order
+        ? (modes[order.mode]?.closeStoreCheckout(businessId, siteId, orderId) ??
+            false)
+        : false;
+    },
+  };
+}
+
+export type StripeConnectModes = ReturnType<typeof stripeConnectModes>;

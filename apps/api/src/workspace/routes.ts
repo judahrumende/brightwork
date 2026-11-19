@@ -33,7 +33,7 @@ import { canLeadRun } from './run-store';
 import type { runStore } from './run-store';
 import type { mailStore } from './mail-store';
 import { smsReplyInput } from './sms';
-import type { stripeConnect } from './stripe-connect';
+import type { StripeConnectModes } from './stripe-connect';
 import type { workspaceSms } from './sms';
 import type { inboundMail } from './inbound-mail';
 
@@ -47,7 +47,7 @@ type Context = {
   store: ReturnType<typeof agentStore>;
   team: ReturnType<typeof teamStore>;
   commerce: ReturnType<typeof shopifyOrders> | undefined;
-  sellerPayments: ReturnType<typeof stripeConnect> | undefined;
+  sellerPayments: StripeConnectModes | undefined;
   media: ReturnType<typeof mediaStore>;
   mediaRates: Partial<Record<MediaKind, string>>;
   salesInsights: (
@@ -1237,7 +1237,11 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       return {
         ...dashboard,
         paymentReady:
-          (await context.sellerPayments?.readyForCheckout(access.id)) ?? false,
+          (await context.sellerPayments?.readyForCheckout(
+            access.id,
+            dashboard.paymentMode,
+          )) ?? false,
+        paymentModes: context.sellerPayments?.availableModes() ?? [],
       };
     } catch (error) {
       return reportError(error, reply);
@@ -1314,6 +1318,10 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
     z.object({ action: z.literal('order'), id: z.uuid(), status: orderAction }),
     z.object({ action: z.literal('payment'), id: z.uuid() }),
     z.object({ action: z.literal('checkout'), enabled: z.boolean() }),
+    z.object({
+      action: z.literal('payment_mode'),
+      mode: z.enum(['test', 'live']),
+    }),
     z.object({ action: z.literal('close_payment'), id: z.uuid() }),
   ]);
   app.post(storePath, async (request, reply) => {
@@ -1335,17 +1343,41 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
       if (update.action === 'checkout') {
         if (
           update.enabled &&
-          !(await context.sellerPayments?.readyForCheckout(access.id))
+          !(await context.sellerPayments?.readyForCheckout(
+            access.id,
+            dashboard.paymentMode,
+          ))
         )
           return reply.code(409).send({
             message:
-              'Connect a ready Stripe test seller in Workspace settings before enabling checkout.',
+              'Connect a ready Stripe seller for the selected payment mode in Workspace settings before enabling checkout.',
           });
         if (
           await store.generatedStore.setCheckout(
             access.id,
             resource,
             update.enabled,
+          )
+        )
+          return { saved: true };
+        return reply.code(404).send({ message: 'Store not found.' });
+      }
+      if (update.action === 'payment_mode') {
+        if (
+          !(await context.sellerPayments?.readyForCheckout(
+            access.id,
+            update.mode,
+          ))
+        )
+          return reply.code(409).send({
+            message:
+              'Connect and finish onboarding for a Stripe seller in that payment mode before selecting it.',
+          });
+        if (
+          await store.generatedStore.setPaymentMode(
+            access.id,
+            resource,
+            update.mode,
           )
         )
           return { saved: true };

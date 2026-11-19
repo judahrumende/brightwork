@@ -24,6 +24,8 @@ type Dashboard = {
   products: StoreProduct[];
   counts: { openRequests: number; awaitingFulfillment: number };
   paymentReady?: boolean;
+  paymentMode: 'test' | 'live';
+  paymentModes: Array<'test' | 'live'>;
   directCheckout?: boolean;
   zones?: StoreDeliveryZone[];
   deliveryRevision?: number;
@@ -267,10 +269,31 @@ export function StoreDashboard({
           )}
           <p>Store currency · {store.currency}</p>
           <div>
-            <h3>Stripe test checkout</h3>
+            <h3>Stripe checkout</h3>
+            <label>
+              Payment mode{' '}
+              <select
+                value={store.paymentMode}
+                disabled={busy || readOnly}
+                onChange={(event) =>
+                  void save({
+                    action: 'payment_mode',
+                    mode: event.target.value,
+                  })
+                }
+              >
+                {store.paymentModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode === 'test' ? 'Test' : 'Live'}
+                  </option>
+                ))}
+              </select>
+            </label>
             <p>
               {store.directCheckout && store.paymentReady
-                ? 'Shoppers can pay directly from the catalog in test mode.'
+                ? 'Shoppers can pay directly from the catalog in ' +
+                  store.paymentMode +
+                  ' mode.'
                 : 'Shoppers can submit an order request for you to review.'}
             </p>
             {!readOnly && (store.paymentReady || store.directCheckout) && (
@@ -286,8 +309,8 @@ export function StoreDashboard({
                 }
               >
                 {store.directCheckout
-                  ? 'Turn off test checkout'
-                  : 'Enable test checkout'}
+                  ? 'Turn off direct checkout'
+                  : 'Enable direct checkout'}
               </Button>
             )}
           </div>
@@ -532,14 +555,18 @@ export function StoreDashboard({
           }
         />
       )}
-      {section === 'Report' && <StoreReport endpoint={endpoint} />}
+      {section === 'Report' && (
+        <StoreReport endpoint={endpoint} mode={store.paymentMode} />
+      )}
       {section === 'Orders' && (
         <>
           <h3>Order requests</h3>
           <p>
             Confirming an order reserves stock.{' '}
             {store.paymentReady
-              ? 'You can share a Stripe test payment link for confirmed orders.'
+              ? 'You can share a Stripe ' +
+                store.paymentMode +
+                ' payment link for confirmed orders.'
               : 'Arrange payment with the customer separately.'}
           </p>
           <StoreListFilters
@@ -618,7 +645,12 @@ export function StoreDashboard({
                       </td>
                       <td>
                         <span className={styles.status}>{order.status}</span>
-                        {order.payment && <p>{paymentLabels[order.payment]}</p>}
+                        {order.payment && (
+                          <p>
+                            {paymentLabels[order.payment]} ·{' '}
+                            {order.paymentMode === 'live' ? 'Live' : 'Test'}
+                          </p>
+                        )}
                       </td>
                       {!readOnly && (
                         <td>
@@ -651,7 +683,9 @@ export function StoreDashboard({
                                     })
                                   }
                                 >
-                                  Create test payment link
+                                  {'Create ' +
+                                    store.paymentMode +
+                                    ' payment link'}
                                 </Button>
                               )}
                             {order.status === 'confirmed' &&

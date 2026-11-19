@@ -16,14 +16,23 @@ function recentRange() {
   };
 }
 
-export function StoreReport({ endpoint }: { endpoint: string }) {
+export function StoreReport({
+  endpoint,
+  mode,
+}: {
+  endpoint: string;
+  mode: 'test' | 'live';
+}) {
   const [range, setRange] = useState(recentRange);
   const report = useQuery({
     queryKey: ['store-data', endpoint, 'report', range],
     queryFn: ({ signal }) =>
-      api<Report>(endpoint + '/report?' + new URLSearchParams(range), {
-        signal,
-      }),
+      api<Report>(
+        endpoint + '/report?' + new URLSearchParams({ ...range, mode }),
+        {
+          signal,
+        },
+      ),
   });
   function changeRange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +75,7 @@ export function StoreReport({ endpoint }: { endpoint: string }) {
   return (
     <>
       <h3>Store report</h3>
+      <p>{mode === 'test' ? 'Test' : 'Live'} Stripe payment data</p>
       <form className={styles.listFilters} onSubmit={changeRange}>
         <label>
           From (UTC)

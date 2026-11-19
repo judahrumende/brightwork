@@ -8,6 +8,7 @@ export function storeOrderRows(filter: SQL, limit: number) {
               'unitPrice', unit_price, 'quantity', quantity) order by product_name, product_id)
              from generated_store_order_lines where site_id = orders.site_id and order_id = orders.id) as items,
             orders.sale_id as "saleId",
+            sales.mode as "paymentMode",
             case
               when sales.id is null then null
               when sales.closed_at is not null then 'closed'

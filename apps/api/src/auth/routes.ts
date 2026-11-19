@@ -29,7 +29,7 @@ import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
 import { shopifyOrders } from '../workspace/shopify-orders';
 import { referralProgram } from '../workspace/referrals';
-import { stripeConnect } from '../workspace/stripe-connect';
+import { stripeConnectModes } from '../workspace/stripe-connect';
 import { stripeBilling } from '../workspace/stripe-billing';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
@@ -300,15 +300,29 @@ export function registerAuth(
         })
       : null;
   const sellerPayments =
-    env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
-      ? stripeConnect(
+    (env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET) ||
+    (env.STRIPE_LIVE_KEY && env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET)
+      ? stripeConnectModes(
           database.db,
           {
-            key: env.STRIPE_TEST_KEY,
-            secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
-            identityKey: secret,
-            origin,
+            ...(env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
+              ? {
+                  test: {
+                    key: env.STRIPE_TEST_KEY,
+                    secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
+                  },
+                }
+              : {}),
+            ...(env.STRIPE_LIVE_KEY && env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET
+              ? {
+                  live: {
+                    key: env.STRIPE_LIVE_KEY,
+                    secret: env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET,
+                  },
+                }
+              : {}),
           },
+          { identityKey: secret, origin },
           providerRequest,
         )
       : undefined;

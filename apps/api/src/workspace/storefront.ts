@@ -5,7 +5,7 @@ import {
   readBuyer,
   registerBuyerRoutes,
 } from './store-buyer-routes';
-import type { stripeConnect } from './stripe-connect';
+import type { StripeConnectModes } from './stripe-connect';
 import type { BuyerAccess } from './store-buyer-routes';
 import { escape } from './storefront-html';
 import { sendStorePhoto } from './store-product-photo';
@@ -46,7 +46,7 @@ export function registerStorefront(
   origin: (id: string) => string,
   limitOrder: (key: string) => Promise<void>,
   buyerAccess?: BuyerAccess,
-  payments?: Pick<ReturnType<typeof stripeConnect>, 'checkout'>,
+  payments?: Pick<StripeConnectModes, 'checkout'>,
 ) {
   void app.register((scope, _opts, done) => {
     scope.addContentTypeParser(

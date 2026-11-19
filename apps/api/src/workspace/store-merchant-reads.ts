@@ -22,6 +22,7 @@ export const merchantReportQuery = z
   .object({
     from: z.iso.date(),
     through: z.iso.date(),
+    mode: z.enum(['test', 'live']).default('test'),
   })
   .refine(({ from, through }) => {
     const days = (Date.parse(through) - Date.parse(from)) / 86_400_000;
@@ -104,6 +105,7 @@ export function reportRows(
       from generated_store_orders as orders
       join stripe_sales sale on sale.id = orders.sale_id and sale.business_id = ${businessId}
       where orders.site_id = ${siteId} and sale.currency = lower(orders.currency)
+        and sale.mode = ${range.mode ?? 'test'}
         and sale.paid_at >= ${from}::timestamptz and sale.paid_at < (${through})
       group by day
     )

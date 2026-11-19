@@ -22,9 +22,15 @@ export function verifyStripeSignature(
   );
 }
 
-export function stripeClient(key: string, transport: typeof fetch = fetch) {
-  if (!/^(sk|rk)_test_/u.test(key))
-    throw new Error('Use a Stripe test-mode key.');
+export type StripeMode = 'test' | 'live';
+
+export function stripeClient(
+  key: string,
+  transport: typeof fetch = fetch,
+  mode: StripeMode = 'test',
+) {
+  if (!new RegExp('^(sk|rk)_' + mode + '_', 'u').test(key))
+    throw new Error('Use a Stripe ' + mode + '-mode key.');
   return async function stripe(
     path: string,
     body?: Record<string, string>,

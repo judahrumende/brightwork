@@ -9,7 +9,10 @@ import postgres from 'postgres';
 import { artifacts, businesses, publications } from '../src/db/schema';
 import { generatedStores } from '../src/workspace/generated-store';
 import { commerceInsights } from '../src/workspace/commerce-insights';
-import { stripeConnect } from '../src/workspace/stripe-connect';
+import {
+  stripeConnect,
+  stripeConnectModes,
+} from '../src/workspace/stripe-connect';
 import { registerStorefront } from '../src/workspace/storefront';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -216,6 +219,69 @@ test(
       },
     );
     connect.register(app);
+    const liveSecret = 'synthetic-live-stripe-hook-secret';
+    const liveConnect = stripeConnect(
+      db,
+      {
+        origin,
+        secret: liveSecret,
+        key: 'sk_live_fixture',
+        mode: 'live',
+      },
+      async (input) => {
+        const path = new URL(String(input)).pathname;
+        if (path.startsWith('/v1/accounts'))
+          return Response.json({
+            id: accountId,
+            charges_enabled: active,
+            payouts_enabled: active,
+            details_submitted: active,
+          });
+        if (path === '/v1/account_links')
+          return Response.json({
+            url: 'https://connect.stripe.com/setup/live',
+          });
+        throw new Error('Unexpected live Stripe fixture request.');
+      },
+    );
+    liveConnect.register(app);
+    const liveOrder = { ...order, id: randomUUID(), title: 'Live sale' };
+    const routedLiveOrder = liveOrder;
+    const payments = stripeConnectModes(
+      db,
+      {
+        test: { key: 'sk_test_fixture', secret },
+        live: { key: 'sk_live_fixture', secret: liveSecret },
+      },
+      { origin },
+      async (input, request) => {
+        assert.equal(
+          new Headers(request?.headers).get('authorization'),
+          'Bearer sk_live_fixture',
+        );
+        assert.equal(
+          new Headers(request?.headers).get('stripe-account'),
+          accountId,
+        );
+        assert.equal(new URL(String(input)).pathname, '/v1/checkout/sessions');
+        assert.equal(request?.method, 'POST');
+        const body = new URLSearchParams(String(request?.body));
+        assert.equal(body.get('client_reference_id'), routedLiveOrder.id);
+        return Response.json({
+          id: 'cs_live_ModeRouted',
+          livemode: true,
+          payment_status: 'unpaid',
+          status: 'open',
+          amount_total: routedLiveOrder.amount,
+          currency: routedLiveOrder.currency,
+          payment_intent: null,
+          client_reference_id: routedLiveOrder.id,
+          created: Math.floor(Date.now() / 1000),
+          metadata: { brightwork_sale: routedLiveOrder.id },
+          url: 'https://checkout.stripe.com/c/pay/live-routed',
+        });
+      },
+    );
     function webhook(
       id: number,
       type: string,
@@ -246,6 +312,29 @@ test(
         },
       });
     }
+    function liveWebhook(id: number, live: boolean) {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const payload = JSON.stringify({
+        id: 'evt_live' + id,
+        type: 'account.updated',
+        account: accountId,
+        created: timestamp,
+        livemode: live,
+        data: { object: { id: accountId } },
+      });
+      const signature = createHmac('sha256', liveSecret)
+        .update(timestamp + '.' + payload)
+        .digest('hex');
+      return app.inject({
+        method: 'POST',
+        url: '/api/webhooks/stripe-connect/live',
+        payload,
+        headers: {
+          'content-type': 'application/json',
+          'stripe-signature': 't=' + timestamp + ',v1=' + signature,
+        },
+      });
+    }
     assert.equal(
       await connect.onboarding(owner.id),
       'https://connect.stripe.com/setup/test',
@@ -267,6 +356,34 @@ test(
       204,
     );
     assert.equal((await connect.overview(owner.id)).seller?.ready, true);
+    assert.equal(
+      await liveConnect.onboarding(owner.id),
+      'https://connect.stripe.com/setup/live',
+    );
+    assert.equal((await liveConnect.overview(owner.id)).seller?.ready, true);
+    assert.equal((await liveWebhook(1, false)).statusCode, 400);
+    assert.equal((await liveWebhook(1, true)).statusCode, 204);
+    const [sellerModes] = await connection`
+      select count(*)::int as count from stripe_sellers
+      where business_id = ${owner.id} and account_id = ${accountId}
+    `;
+    assert.equal(sellerModes?.count, 2);
+    assert.equal(await liveConnect.create(owner.id, liveOrder), true);
+    assert.deepEqual(
+      (await liveConnect.overview(owner.id)).orders.map(({ id }) => id),
+      [liveOrder.id],
+    );
+    assert.deepEqual(
+      (await connect.overview(owner.id)).orders.map(({ id }) => id),
+      [],
+    );
+    assert.deepEqual(payments.availableModes(), ['test', 'live']);
+    assert.equal((await payments.publicOrder(liveOrder.id))?.id, liveOrder.id);
+    assert.equal(
+      await payments.checkout(liveOrder.id),
+      'https://checkout.stripe.com/c/pay/live-routed',
+    );
+    assert.equal(await connect.checkout(liveOrder.id), null);
     assert.equal(await connect.create(owner.id, order), true);
     assert.equal(
       await connect.create(owner.id, { ...order, amount: 2000 }),
@@ -409,6 +526,43 @@ test(
         active: true,
       }),
     );
+    assert.ok(await stores.setPaymentMode(owner.id, site.id, 'live'));
+    const liveRequest = randomUUID();
+    const liveProduct = (await stores.read(owner.id, site.id))?.products[0];
+    assert.ok(liveProduct);
+    assert.ok(
+      await stores.request(site.id, {
+        id: liveRequest,
+        email: 'live-buyer@example.test',
+        items: [
+          {
+            productId: liveProduct.id,
+            revision: liveProduct.revision,
+            quantity: 1,
+          },
+        ],
+      }),
+    );
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, liveRequest, 'confirmed'),
+    );
+    const liveSaleId = await stores.createPayment(
+      owner.id,
+      site.id,
+      liveRequest,
+    );
+    assert.ok(liveSaleId);
+    const [liveSale] = await connection`
+      select mode from stripe_sales where id = ${liveSaleId}
+    `;
+    assert.equal(liveSale?.mode, 'live');
+    assert.ok(
+      await liveConnect.closeStoreCheckout(owner.id, site.id, liveRequest),
+    );
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, liveRequest, 'cancelled'),
+    );
+    assert.ok(await stores.setPaymentMode(owner.id, site.id, 'test'));
     storeFixture = true;
     async function reserveOrder(withDelivery = false) {
       const dashboard = await stores.read(owner!.id, site!.id);
@@ -608,11 +762,12 @@ test(
     });
     assert.deepEqual(report, {
       currency: 'AUD',
+      mode: 'test',
       days: [
         {
           day,
-          requests: 3,
-          cancelled: 2,
+          requests: 4,
+          cancelled: 3,
           paidOrders: 2,
           gross: '19175',
           refunds: '9000',

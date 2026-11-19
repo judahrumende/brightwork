@@ -1,4 +1,4 @@
-import type { stripeConnect } from './stripe-connect';
+import type { StripeConnectModes } from './stripe-connect';
 import type { BuyerAccess } from './store-buyer-routes';
 import { registerStorefront, storePublicRoute } from './storefront';
 import { randomUUID } from 'node:crypto';
@@ -22,7 +22,7 @@ export function siteHosting(
   domain: string | undefined,
   limitOrder: (key: string) => Promise<void>,
   buyerAccess?: BuyerAccess,
-  payments?: Pick<ReturnType<typeof stripeConnect>, 'checkout'>,
+  payments?: Pick<StripeConnectModes, 'checkout'>,
 ) {
   const parsed = hostSchema.safeParse(domain);
   if (!parsed.success) return null;

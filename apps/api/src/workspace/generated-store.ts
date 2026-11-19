@@ -87,7 +87,8 @@ const storeScope = (businessId: string) => sql`exists (
   select 1 from workspace_artifacts where id = generated_stores.site_id
   and business_id = ${businessId} and kind = 'website'
 )`;
-const readyStripeSeller = sql`details_submitted and charges_enabled and payouts_enabled`;
+const readyStripeSeller = (mode: 'test' | 'live') =>
+  sql`mode = ${mode} and details_submitted and charges_enabled and payouts_enabled`;
 const liveScope = sql`exists (
   select 1 from website_publications where artifact_id = generated_stores.site_id and unpublished_at is null
   and draft_revision >= generated_stores.first_revision
@@ -104,6 +105,7 @@ type CheckoutStore = {
   zones: StoreDeliveryZone[];
   deliveryRevision: number;
   directCheckout: boolean;
+  paymentMode: 'test' | 'live';
   businessId: string;
 };
 type CheckoutQuote = {
@@ -118,7 +120,9 @@ type CheckoutQuote = {
 export function generatedStores(db: Database) {
   async function scopedStore(businessId: string, siteId: string) {
     const [store] = await db.execute<Omit<CheckoutStore, 'businessId'>>(sql`
-      select currency, delivery_zones as zones, delivery_revision as "deliveryRevision", direct_checkout as "directCheckout" from generated_stores where site_id = ${siteId} and ${storeScope(businessId)}
+      select currency, delivery_zones as zones, delivery_revision as "deliveryRevision",
+        direct_checkout as "directCheckout", payment_mode as "paymentMode"
+      from generated_stores where site_id = ${siteId} and ${storeScope(businessId)}
     `);
     return store;
   }
@@ -127,6 +131,7 @@ export function generatedStores(db: Database) {
     const [store] = await tx.execute<CheckoutStore>(sql`
       select currency, delivery_zones as zones, delivery_revision as "deliveryRevision",
         direct_checkout as "directCheckout",
+        payment_mode as "paymentMode",
         (select business_id from workspace_artifacts where id = generated_stores.site_id) as "businessId"
       from generated_stores where site_id = ${siteId} and ${liveScope} for update
     `);
@@ -213,6 +218,7 @@ export function generatedStores(db: Database) {
     items: StoreOrderLine[],
     delivery: StoreDelivery | null,
     direct: boolean,
+    paymentMode: 'test' | 'live' = 'test',
   ) {
     const amount = storeOrderTotal(items, delivery);
     const first = items[0];
@@ -226,10 +232,10 @@ export function generatedStores(db: Database) {
       ? sql`date_trunc('second', now()) + interval '45 minutes'`
       : sql`null`;
     const [sale] = await tx.execute<{ id: string }>(sql`
-      insert into stripe_sales(id, business_id, account_id, title, currency, amount, direct_checkout, checkout_hold_until, checkout_recover_at)
-      select ${randomUUID()}, business_id, account_id, ${title}, ${currency.toLowerCase()}, ${amount}, ${direct},
+      insert into stripe_sales(id, business_id, mode, account_id, title, currency, amount, direct_checkout, checkout_hold_until, checkout_recover_at)
+      select ${randomUUID()}, business_id, ${paymentMode}, account_id, ${title}, ${currency.toLowerCase()}, ${amount}, ${direct},
         ${deadline}, ${deadline}
-      from stripe_sellers where business_id = ${businessId} and ${readyStripeSeller}
+      from stripe_sellers where business_id = ${businessId} and ${readyStripeSeller(paymentMode)}
       returning id
     `);
     return sale?.id ?? null;
@@ -254,6 +260,7 @@ export function generatedStores(db: Database) {
           items,
           delivery,
           true,
+          store.paymentMode,
         )
       : null;
     if (direct && !saleId) return false;
@@ -353,7 +360,11 @@ export function generatedStores(db: Database) {
       const days = await db.execute<StoreReportDay>(
         reportRows(businessId, siteId, range),
       );
-      return { currency: store.currency, days: Array.from(days) };
+      return {
+        currency: store.currency,
+        mode: range.mode ?? 'test',
+        days: Array.from(days),
+      };
     },
     async saveProduct(
       businessId: string,
@@ -483,11 +494,15 @@ export function generatedStores(db: Database) {
         currency: string;
         zones: StoreDeliveryZone[];
         title: string;
+        paymentMode: 'test' | 'live';
         directCheckout: boolean;
       }>(sql`
-        select generated_stores.currency, delivery_zones as zones, coalesce(website_versions.title, 'Store') as title,
+        select generated_stores.currency, generated_stores.payment_mode as "paymentMode",
+          delivery_zones as zones, coalesce(website_versions.title, 'Store') as title,
           direct_checkout and exists (
-            select 1 from stripe_sellers where business_id = site.business_id and ${readyStripeSeller}
+            select 1 from stripe_sellers where business_id = site.business_id
+              and mode = generated_stores.payment_mode
+              and details_submitted and charges_enabled and payouts_enabled
           ) as "directCheckout"
         from generated_stores join workspace_artifacts site on site.id = generated_stores.site_id
         join website_publications on website_publications.artifact_id = generated_stores.site_id
@@ -523,6 +538,17 @@ export function generatedStores(db: Database) {
     async setCheckout(businessId: string, siteId: string, enabled: boolean) {
       const [store] = await db.execute(sql`
         update generated_stores set direct_checkout = ${enabled}
+        where site_id = ${siteId} and ${storeScope(businessId)} returning site_id
+      `);
+      return Boolean(store);
+    },
+    async setPaymentMode(
+      businessId: string,
+      siteId: string,
+      mode: 'test' | 'live',
+    ) {
+      const [store] = await db.execute(sql`
+        update generated_stores set payment_mode = ${mode}
         where site_id = ${siteId} and ${storeScope(businessId)} returning site_id
       `);
       return Boolean(store);
@@ -649,8 +675,9 @@ export function generatedStores(db: Database) {
     },
     async createPayment(businessId: string, siteId: string, id: string) {
       return db.transaction(async (tx) => {
-        const [store] = await tx.execute(sql`
-          select site_id from generated_stores where site_id = ${siteId} and ${storeScope(businessId)} for update
+        const [store] = await tx.execute<{ paymentMode: 'test' | 'live' }>(sql`
+          select payment_mode as "paymentMode" from generated_stores
+          where site_id = ${siteId} and ${storeScope(businessId)} for update
         `);
         if (!store) return null;
         const [order] = await tx.execute<{
@@ -675,6 +702,7 @@ export function generatedStores(db: Database) {
           lines,
           order.delivery,
           false,
+          store.paymentMode,
         );
         if (!saleId) return null;
         await tx.execute(sql`
