@@ -1099,16 +1099,17 @@ test('Stripe Connect creates a shareable sale and waits for payment confirmation
   await page.route('**' + base + '/shopify', (route) =>
     route.fulfill({ json: { enabled: false, shops: [], totals: [] } }),
   );
-  await page.route('**' + endpoint, (route) =>
+  await page.route(new RegExp(endpoint + '(?:\\?|$)', 'u'), (route) =>
     route.fulfill({
       json: {
         enabled: true,
+        availableModes: ['test'],
         seller: { ready: true, detailsSubmitted: true },
         orders: submitted ? [sale()] : [],
       },
     }),
   );
-  await page.route('**' + endpoint + '/sales', (route) => {
+  await page.route(new RegExp(endpoint + '/sales(?:\\?|$)', 'u'), (route) => {
     expect(route.request().postDataJSON()).toMatchObject({
       title: 'Fixture sale',
       amount: 1999,
@@ -1583,6 +1584,8 @@ test('a generated store opens its dashboard below the preview and saves a produc
     return route.fulfill({
       json: {
         currency: 'AUD',
+        paymentMode: 'test',
+        paymentModes: ['test'],
         products,
         orders: [order],
         paymentReady: true,
@@ -1612,17 +1615,19 @@ test('a generated store opens its dashboard below the preview and saves a produc
   ).toBeVisible();
   await dialog.getByRole('button', { name: 'Dashboard', exact: true }).click();
   const dashboard = dialog.getByRole('region', { name: 'Store dashboard' });
-  await dashboard.getByRole('button', { name: 'Enable test checkout' }).click();
+  await dashboard
+    .getByRole('button', { name: 'Enable direct checkout' })
+    .click();
   await expect(
     dashboard.getByText(
       'Shoppers can pay directly from the catalog in test mode.',
     ),
   ).toBeVisible();
   await dashboard
-    .getByRole('button', { name: 'Turn off test checkout' })
+    .getByRole('button', { name: 'Turn off direct checkout' })
     .click();
   await expect(
-    dashboard.getByRole('button', { name: 'Enable test checkout' }),
+    dashboard.getByRole('button', { name: 'Enable direct checkout' }),
   ).toBeEnabled();
   await dashboard.getByRole('radio', { name: 'Products' }).click();
   await dashboard.getByRole('button', { name: 'Add product' }).click();
