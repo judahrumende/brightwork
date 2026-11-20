@@ -19,6 +19,14 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { ignoreRestSiblings: true },
+      ],
+    },
+  },
+  {
     files: ['**/*.{js,mjs,ts,tsx}'],
     languageOptions: { globals: globals.node },
   },

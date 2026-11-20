@@ -1,4 +1,13 @@
 import { generatedStores } from './generated-store';
+import {
+  appCollectionDefinitions,
+  prepareGeneratedAppRecordsForRevision,
+  type AppCollectionDefinition,
+} from './generated-app-records';
+import {
+  generatedAppSourceFiles,
+  generatedAppSourceHash,
+} from './generated-app-source';
 import { storeCurrency } from '@brightwork/shared';
 import type { z } from 'zod';
 import { websiteReviews } from './website-review';
@@ -32,6 +41,7 @@ import {
   businessRuns,
   calendarEvents,
   chatAttachments,
+  generatedAppSourceRevisions,
   members,
   notificationReads,
   outboundEmails,
@@ -83,6 +93,7 @@ export function agentStore(db: Database) {
     writer: Writer,
     row: typeof artifacts.$inferSelect,
     revertedFromId?: string,
+    runtimeMode: 'static' | 'store' | 'app' = 'static',
   ) {
     const [version] = await writer
       .insert(websiteVersions)
@@ -92,6 +103,8 @@ export function agentStore(db: Database) {
         document: row.body,
         pages: row.pages,
         title: row.title,
+        turnId: row.turnId,
+        runtimeMode,
         revertedFromId: revertedFromId ?? null,
       })
       .returning({ id: websiteVersions.id });
@@ -112,9 +125,48 @@ export function agentStore(db: Database) {
     db
       .select({
         ...getTableColumns(artifacts),
+        runtimeMode: sql<'static' | 'store' | 'app' | null>`(
+          select runtime_mode from website_versions
+          where artifact_id = ${artifacts.id} and revision = ${artifacts.revision}
+          limit 1
+        )`,
+        appRevision: sql<number | null>`case
+          when exists (select 1 from website_versions draft_app
+            where draft_app.artifact_id = ${artifacts.id}
+              and draft_app.revision = ${artifacts.revision} and draft_app.runtime_mode = 'app')
+          then ${artifacts.revision}
+          else (select publication_app.draft_revision from website_publications publication_app
+            join website_versions live_app on live_app.artifact_id = publication_app.artifact_id
+              and live_app.revision = publication_app.draft_revision and live_app.runtime_mode = 'app'
+            where publication_app.artifact_id = ${artifacts.id}
+              and publication_app.unpublished_at is null limit 1)
+        end`,
         storeLive: sql<boolean>`exists (select 1 from generated_stores
+          join website_versions live_store on live_store.artifact_id = generated_stores.site_id
+            and live_store.revision = ${publications.draftRevision} and live_store.runtime_mode = 'store'
           where site_id = ${artifacts.id} and first_revision <= ${publications.draftRevision})`,
-        isStore: sql<boolean>`exists (select 1 from generated_stores where site_id = ${artifacts.id})`,
+        isStore: sql<boolean>`exists (select 1 from generated_stores
+          where site_id = ${artifacts.id} and (
+            exists (select 1 from website_versions draft_store
+              where draft_store.artifact_id = ${artifacts.id}
+                and draft_store.revision = ${artifacts.revision} and draft_store.runtime_mode = 'store')
+            or exists (select 1 from website_publications publication_store
+              join website_versions live_store on live_store.artifact_id = publication_store.artifact_id
+                and live_store.revision = publication_store.draft_revision and live_store.runtime_mode = 'store'
+              where publication_store.artifact_id = ${artifacts.id}
+                and publication_store.unpublished_at is null)
+          ))`,
+        isApp: sql<boolean>`exists (
+          select 1 from website_versions draft_app
+          where draft_app.artifact_id = ${artifacts.id}
+            and draft_app.revision = ${artifacts.revision} and draft_app.runtime_mode = 'app'
+        ) or exists (
+          select 1 from website_publications publication_app
+          join website_versions live_app on live_app.artifact_id = publication_app.artifact_id
+            and live_app.revision = publication_app.draft_revision and live_app.runtime_mode = 'app'
+          where publication_app.artifact_id = ${artifacts.id}
+            and publication_app.unpublished_at is null
+        )`,
         liveVersionId: publications.id,
         liveDraftRevision: publications.draftRevision,
         publishWithRun: businessRuns.publishWebsites,
@@ -505,11 +557,29 @@ export function agentStore(db: Database) {
       title: string;
       body: string;
       pages: NonNullable<Artifact['pages']>;
+      runtimeMode?: 'static' | 'store' | 'app';
+      appCollections?: AppCollectionDefinition[];
+      sourceFiles?: { path: string; content: string }[];
+      sourceBuildResult?: { log: string; previewDocument: string };
       storeCurrency?: z.infer<typeof storeCurrency>;
       base?: Pick<typeof artifacts.$inferSelect, 'id' | 'revision' | 'state'>;
     }) {
       const { businessId, turnId, toolCallId, title, body, pages, base } =
         input;
+      const appCollections = input.appCollections
+        ? appCollectionDefinitions.parse(input.appCollections)
+        : undefined;
+      const sourceFiles = input.sourceFiles
+        ? generatedAppSourceFiles.parse(input.sourceFiles)
+        : undefined;
+      if (
+        input.sourceBuildResult &&
+        (!sourceFiles ||
+          Buffer.byteLength(input.sourceBuildResult.previewDocument, 'utf8') >
+            1_000_000 ||
+          !/^<!doctype html>/iu.test(input.sourceBuildResult.previewDocument))
+      )
+        throw new Error('A verified app build must include a bounded preview.');
       return db.transaction(async (tx) => {
         const [turn] = await tx
           .select({ parts: agentTurns.parts })
@@ -559,18 +629,74 @@ export function agentStore(db: Database) {
               }),
             ];
         if (!site) return null;
+        const [priorVersion] = base
+          ? await tx
+              .select({ runtimeMode: websiteVersions.runtimeMode })
+              .from(websiteVersions)
+              .where(
+                and(
+                  eq(websiteVersions.artifactId, base.id),
+                  eq(websiteVersions.revision, base.revision),
+                ),
+              )
+          : [];
+        const runtimeMode = input.storeCurrency
+          ? 'store'
+          : (input.runtimeMode ?? priorVersion?.runtimeMode ?? 'static');
+        if (runtimeMode === 'app' && !sourceFiles)
+          throw new Error('App source is required for an app build.');
+        if (runtimeMode !== 'app' && sourceFiles)
+          throw new Error('Source projects are only supported for app builds.');
         if (input.storeCurrency) {
           await tx.execute(sql`insert into generated_stores(site_id, currency, first_revision)
             values (${site.id}, ${input.storeCurrency}, ${site.revision}) on conflict (site_id) do nothing`);
         }
-        const version = await saveWebsiteVersion(tx, site);
+        const version = await saveWebsiteVersion(
+          tx,
+          site,
+          undefined,
+          runtimeMode,
+        );
         if (!version) throw new Error('Could not save website version');
+        if (runtimeMode === 'app' && appCollections) {
+          for (const collection of appCollections)
+            await tx.execute(sql`insert into generated_app_collections
+              (site_id, revision, name, read_access, write_access, owner_scoped, fields, actions)
+              values (${site.id}, ${site.revision}, ${collection.name}, ${collection.readAccess}, ${collection.writeAccess}, ${collection.ownerScoped}, ${JSON.stringify(collection.fields)}::jsonb, ${JSON.stringify(collection.actions)}::jsonb)
+              on conflict (site_id, revision, name) do update set
+                read_access = excluded.read_access, write_access = excluded.write_access,
+                owner_scoped = excluded.owner_scoped, fields = excluded.fields,
+                actions = excluded.actions, updated_at = now()`);
+        }
+        if (runtimeMode === 'app' && sourceFiles) {
+          await tx.insert(generatedAppSourceRevisions).values({
+            siteId: site.id,
+            revision: site.revision,
+            baseRevision: base?.revision ?? null,
+            sourceFiles,
+            sourceHash: generatedAppSourceHash(sourceFiles),
+            buildState: input.sourceBuildResult ? 'passed' : 'queued',
+            ...(input.sourceBuildResult
+              ? {
+                  buildLog: input.sourceBuildResult.log.slice(0, 16_000),
+                  previewDocument: input.sourceBuildResult.previewDocument,
+                  builtAt: new Date(),
+                }
+              : {}),
+          });
+        }
         const output = {
           id: site.id,
           title,
           state: site.state,
           revision: site.revision,
           versionId: version.id,
+          ...(sourceFiles
+            ? {
+                sourceRevision: site.revision,
+                sourceHash: generatedAppSourceHash(sourceFiles),
+              }
+            : {}),
         };
         const parts = turn.parts.map((entry) =>
           entry === part
@@ -581,6 +707,9 @@ export function agentStore(db: Database) {
           `Saved “${title}” as website revision ${site.revision} for review in Build.` +
           (input.storeCurrency
             ? ' Open Dashboard below the preview to add products.'
+            : '') +
+          (sourceFiles
+            ? ' App source is saved; isolated build verification is pending.'
             : '');
         parts.push({ type: 'text', text: answer });
         await tx
@@ -796,6 +925,98 @@ export function agentStore(db: Database) {
         .limit(1);
       return item;
     },
+    async appCollections(businessId: string, siteId: string, revision: number) {
+      const collections = await db.execute(sql`
+        select name, read_access as "readAccess", write_access as "writeAccess",
+          owner_scoped as "ownerScoped", fields, actions
+        from generated_app_collections
+        where site_id = ${siteId}::uuid and revision = ${revision}
+          and exists (select 1 from workspace_artifacts site
+            where site.id = ${siteId}::uuid and site.business_id = ${businessId}::uuid
+              and site.kind = 'website')
+        order by name
+      `);
+      return appCollectionDefinitions.parse(collections);
+    },
+    async buildProjects(businessId: string) {
+      return db
+        .select({
+          id: artifacts.id,
+          title: artifacts.title,
+          kind: websiteVersions.runtimeMode,
+        })
+        .from(artifacts)
+        .innerJoin(
+          websiteVersions,
+          and(
+            eq(websiteVersions.artifactId, artifacts.id),
+            eq(websiteVersions.revision, artifacts.revision),
+          ),
+        )
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.kind, 'website'),
+            inArray(websiteVersions.runtimeMode, ['store', 'app']),
+          ),
+        )
+        .orderBy(asc(artifacts.title))
+        .limit(200);
+    },
+    async appSourceRevision(
+      businessId: string,
+      siteId: string,
+      revision: number,
+    ) {
+      const [source] = await db
+        .select({
+          revision: generatedAppSourceRevisions.revision,
+          sourceFiles: generatedAppSourceRevisions.sourceFiles,
+          sourceHash: generatedAppSourceRevisions.sourceHash,
+          buildState: generatedAppSourceRevisions.buildState,
+          buildLog: generatedAppSourceRevisions.buildLog,
+        })
+        .from(generatedAppSourceRevisions)
+        .innerJoin(
+          artifacts,
+          eq(generatedAppSourceRevisions.siteId, artifacts.id),
+        )
+        .where(
+          and(
+            eq(generatedAppSourceRevisions.siteId, siteId),
+            eq(generatedAppSourceRevisions.revision, revision),
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.kind, 'website'),
+          ),
+        );
+      return source ?? null;
+    },
+    async appSourcePreview(
+      businessId: string,
+      siteId: string,
+      revision: number,
+    ) {
+      const [preview] = await db
+        .select({
+          buildState: generatedAppSourceRevisions.buildState,
+          previewDocument: generatedAppSourceRevisions.previewDocument,
+        })
+        .from(generatedAppSourceRevisions)
+        .innerJoin(
+          artifacts,
+          eq(generatedAppSourceRevisions.siteId, artifacts.id),
+        )
+        .where(
+          and(
+            eq(artifacts.businessId, businessId),
+            eq(artifacts.id, siteId),
+            eq(generatedAppSourceRevisions.revision, revision),
+            eq(artifacts.kind, 'website'),
+          ),
+        )
+        .limit(1);
+      return preview ?? null;
+    },
     async workSummary(businessId: string) {
       return db
         .select({
@@ -997,8 +1218,29 @@ export function agentStore(db: Database) {
       body: string,
       pages?: Artifact['pages'],
       revertedFromId?: string,
+      runtimeMode?: 'static' | 'store' | 'app',
     ) {
       return db.transaction(async (tx) => {
+        const [priorVersion] = await tx
+          .select({ runtimeMode: websiteVersions.runtimeMode })
+          .from(websiteVersions)
+          .where(
+            and(
+              eq(websiteVersions.artifactId, id),
+              eq(websiteVersions.revision, revision),
+            ),
+          );
+        const [revertedVersion] = revertedFromId
+          ? await tx
+              .select({ revision: websiteVersions.revision })
+              .from(websiteVersions)
+              .where(
+                and(
+                  eq(websiteVersions.artifactId, id),
+                  eq(websiteVersions.id, revertedFromId),
+                ),
+              )
+          : [];
         const [row] = await tx
           .update(artifacts)
           .set({
@@ -1012,7 +1254,42 @@ export function agentStore(db: Database) {
             and(websiteScope(businessId, id), eq(artifacts.revision, revision)),
           )
           .returning();
-        if (row) await saveWebsiteVersion(tx, row, revertedFromId);
+        if (row) {
+          await saveWebsiteVersion(
+            tx,
+            row,
+            revertedFromId,
+            runtimeMode ?? priorVersion?.runtimeMode ?? 'static',
+          );
+          if ((runtimeMode ?? priorVersion?.runtimeMode) === 'app') {
+            let sourceRevision = revertedVersion?.revision ?? revision;
+            const [sourceSchema] = await tx.execute<{ revision: number }>(sql`
+              select revision from generated_app_collections
+              where site_id = ${id}::uuid and revision = ${sourceRevision}
+              limit 1`);
+            if (!sourceSchema && !revertedVersion) {
+              const [publishedSchema] = await tx.execute<{
+                revision: number;
+              }>(sql`
+                select publication.draft_revision as revision
+                from website_publications publication
+                join generated_app_collections collection
+                  on collection.site_id = publication.artifact_id
+                    and collection.revision = publication.draft_revision
+                where publication.artifact_id = ${id}::uuid
+                  and publication.unpublished_at is null and publication.runtime_mode = 'app'
+                limit 1`);
+              if (publishedSchema) sourceRevision = publishedSchema.revision;
+            }
+            await tx.execute(sql`insert into generated_app_collections
+              (site_id, revision, name, read_access, write_access, owner_scoped, fields, actions)
+              select site_id, ${row.revision}, name, read_access, write_access,
+                owner_scoped, fields, actions
+              from generated_app_collections
+              where site_id = ${id}::uuid and revision = ${sourceRevision}
+              on conflict (site_id, revision, name) do nothing`);
+          }
+        }
         return row;
       });
     },
@@ -1103,9 +1380,23 @@ export function agentStore(db: Database) {
           html: publications.document,
           pages: publications.pages,
           revision: publications.draftRevision,
+          runtimeMode: publications.runtimeMode,
+          sourceHash: generatedAppSourceRevisions.sourceHash,
+          sourceBuildState: generatedAppSourceRevisions.buildState,
+          sourceFiles: generatedAppSourceRevisions.sourceFiles,
         })
         .from(publications)
         .innerJoin(artifacts, eq(artifacts.id, publications.artifactId))
+        .leftJoin(
+          generatedAppSourceRevisions,
+          and(
+            eq(generatedAppSourceRevisions.siteId, publications.artifactId),
+            eq(
+              generatedAppSourceRevisions.revision,
+              publications.draftRevision,
+            ),
+          ),
+        )
         .where(
           and(
             websiteScope(businessId, id),
@@ -1113,7 +1404,19 @@ export function agentStore(db: Database) {
             isNull(publications.unpublishedAt),
           ),
         );
-      return row;
+      if (!row) return null;
+      const { sourceHash, sourceBuildState, sourceFiles, ...deployment } = row;
+      if (row.runtimeMode !== 'app') return deployment;
+      if (!sourceHash || sourceBuildState !== 'passed' || !sourceFiles)
+        return null;
+      return {
+        ...deployment,
+        source: {
+          sourceHash,
+          buildState: sourceBuildState,
+          sourceFiles,
+        },
+      };
     },
     async rollbackDeployment(
       businessId: string,
@@ -1135,6 +1438,25 @@ export function agentStore(db: Database) {
             and(eq(publications.artifactId, id), eq(publications.id, source)),
           );
         if (!snapshot?.unpublishedAt) return null;
+        if (snapshot.runtimeMode === 'app') {
+          const [revisionSchema] = await tx.execute<{ revision: number }>(sql`
+            select revision from generated_app_collections
+            where site_id = ${id}::uuid and revision = ${snapshot.draftRevision}
+            limit 1`);
+          const [anySchema] = await tx.execute<{ revision: number }>(sql`
+            select revision from generated_app_collections
+            where site_id = ${id}::uuid limit 1`);
+          if (!revisionSchema && anySchema) return null;
+          if (
+            revisionSchema &&
+            !(await prepareGeneratedAppRecordsForRevision(
+              tx,
+              id,
+              snapshot.draftRevision,
+            ))
+          )
+            return null;
+        }
         const active = and(
           eq(publications.artifactId, id),
           isNull(publications.unpublishedAt),
@@ -1156,6 +1478,7 @@ export function agentStore(db: Database) {
             document: snapshot.document,
             pages: snapshot.pages,
             draftRevision: snapshot.draftRevision,
+            runtimeMode: snapshot.runtimeMode,
             rollbackSourceId: snapshot.id,
           })
           .returning({ id: publications.id });
@@ -1164,8 +1487,28 @@ export function agentStore(db: Database) {
     },
     async published(id: string) {
       const [row] = await db
-        .select({ document: publications.document, pages: publications.pages })
+        .select({
+          document: publications.document,
+          pages: publications.pages,
+          runtimeMode: publications.runtimeMode,
+          revision: publications.draftRevision,
+          businessId: artifacts.businessId,
+          sourceDocument: generatedAppSourceRevisions.previewDocument,
+          sourceFiles: generatedAppSourceRevisions.sourceFiles,
+          sourceBuildState: generatedAppSourceRevisions.buildState,
+        })
         .from(publications)
+        .innerJoin(artifacts, eq(artifacts.id, publications.artifactId))
+        .leftJoin(
+          generatedAppSourceRevisions,
+          and(
+            eq(generatedAppSourceRevisions.siteId, publications.artifactId),
+            eq(
+              generatedAppSourceRevisions.revision,
+              publications.draftRevision,
+            ),
+          ),
+        )
         .where(
           and(
             eq(publications.artifactId, id),

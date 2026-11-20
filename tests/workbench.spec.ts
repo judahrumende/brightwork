@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 const company = {
   id: 'ccb49979-7e87-41e3-887f-1a001e37ec12',
@@ -179,6 +180,30 @@ test('Workspace settings creates an invitation and reads the vault list without 
       },
     }),
   );
+  let githubConfigured = false;
+  await page.route('**' + base + '/github', (route) => {
+    if (route.request().method() === 'POST') {
+      expect(route.request().postDataJSON()).toEqual({
+        repo: 'owner/storefront',
+        branch: 'main',
+        token: 'fixture-token-value',
+      });
+      githubConfigured = true;
+      return route.fulfill({ json: { configured: true } });
+    }
+    if (route.request().method() === 'DELETE') {
+      githubConfigured = false;
+      return route.fulfill({ json: { removed: true } });
+    }
+    return route.fulfill({
+      json: {
+        available: true,
+        configured: githubConfigured,
+        repo: githubConfigured ? 'owner/storefront' : '',
+        branch: 'main',
+      },
+    });
+  });
   await page.goto(workbench + '/settings');
   await page.getByLabel('Invite by email').fill('guest@example.test');
   await page.getByLabel('Invitation role').selectOption('viewer');
@@ -190,6 +215,506 @@ test('Workspace settings creates an invitation and reads the vault list without 
   await expect(
     page.getByRole('button', { name: 'Reveal credential' }),
   ).toBeVisible();
+  await page.getByRole('button', { name: 'GitHub', exact: true }).click();
+  await page.getByLabel('Repository (owner/name)').fill('owner/storefront');
+  await page.getByLabel('Branch').fill('main');
+  await page
+    .getByLabel(/Fine-grained personal access token/)
+    .fill('fixture-token-value');
+  await page.getByRole('button', { name: 'Connect repository' }).click();
+  await expect(
+    page.getByText(/Connected to owner\/storefront · main/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Disconnect GitHub' }).click();
+  await expect(
+    page.getByText(/Connected to owner\/storefront · main/),
+  ).toHaveCount(0);
+});
+
+test('App dashboard explains a rejected collection schema migration', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const site = {
+    id: '7d6e93e6-c30e-45cc-adba-1745d0bbdf8f',
+    kind: 'website',
+    title: 'Task app',
+    body: '<!doctype html><html><body><main>Task app</main></body></html>',
+    pages: [],
+    state: 'approved',
+    dueAt: null,
+    recurrence: 'once',
+    scheduleTimezone: 'UTC',
+    upcoming: [],
+    publicUrl: null,
+    runtimeMode: 'app',
+    answer: null,
+    revision: 2,
+    liveDraftRevision: 1,
+  };
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [site], hosting: true } }),
+  );
+  const appEndpoint = api + '/work/apps/' + site.id;
+  await page.route('**' + appEndpoint + '/collections', (route) =>
+    route.fulfill({
+      json: {
+        collections: [
+          {
+            name: 'tasks',
+            readAccess: 'public',
+            writeAccess: 'authenticated',
+            ownerScoped: false,
+            fields: [{ name: 'title', type: 'text', required: true }],
+            actions: [],
+          },
+        ],
+      },
+    }),
+  );
+  let createdCollection: unknown;
+  let submittedMigrations: unknown;
+  await page.route('**' + appEndpoint + '/collections/**', (route) => {
+    if (route.request().url().endsWith('/collections/notes')) {
+      createdCollection = route.request().postDataJSON();
+      return route.fulfill({ json: { saved: true } });
+    }
+    const body = route.request().postDataJSON() as { migrations?: unknown[] };
+    if (body.migrations?.length) {
+      submittedMigrations = body.migrations;
+      return route.fulfill({ json: { saved: true } });
+    }
+    return route.fulfill({
+      status: 409,
+      json: {
+        message:
+          'This collection change conflicts with existing app data. Add compatible defaults or correct the affected records first.',
+      },
+    });
+  });
+  await page.route('**' + appEndpoint + '/records?*', (route) =>
+    route.fulfill({ json: { records: [] } }),
+  );
+  await page.route('**' + appEndpoint + '/source?*', (route) =>
+    route.fulfill({
+      json: {
+        buildState: 'passed',
+        document:
+          '<!doctype html><html><body><main>Task app</main></body></html>',
+      },
+    }),
+  );
+  await page.route('**' + appEndpoint + '/code', (route) =>
+    route.fulfill({
+      json: {
+        source: {
+          revision: 2,
+          sourceFiles: [
+            {
+              path: 'src/App.tsx',
+              content: 'export default function App(){return <main/>}',
+            },
+            { path: 'src/styles.css', content: 'main { color: navy; }' },
+          ],
+          sourceHash: 'a'.repeat(64),
+          buildState: 'passed',
+          buildLog: '',
+        },
+        github: { repo: 'example/apps', branch: 'main' },
+      },
+    }),
+  );
+  await page.route('**' + appEndpoint + '/code/github', (route) => {
+    expect(route.request().postDataJSON()).toEqual({ revision: 2 });
+    return route.fulfill({
+      json: {
+        url: 'https://github.com/example/apps/commit/' + 'b'.repeat(40),
+        changed: true,
+      },
+    });
+  });
+  await page.route('**' + appEndpoint + '/users', (route) =>
+    route.fulfill({ json: { users: [], invitations: [] } }),
+  );
+  await page.route('**' + appEndpoint + '/analytics', (route) =>
+    route.fulfill({
+      json: {
+        analytics: {
+          recordCount: 4,
+          userCount: 2,
+          fileCount: 1,
+          storageBytes: '9',
+          storageCredits: '0.0000000000',
+          storageCreditsPerMib: '0.0000000000',
+          collectionCount: 3,
+          activityLast7Days: 5,
+          modelCredits: 0.25,
+          toolCredits: 0.05,
+          totalCredits: 0.3,
+          mediaJobs: 1,
+          mediaCredits: '1.25',
+        },
+      },
+    }),
+  );
+
+  await page.goto(workbench + '/build');
+  await page.getByRole('button', { name: 'Open Task app' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Dashboard' }).click();
+  const dashboard = dialog.getByRole('region', {
+    name: 'Task app app dashboard',
+  });
+  await dashboard.getByRole('radio', { name: 'Analytics' }).click();
+  await expect(dashboard.getByText('9 bytes')).toBeVisible();
+  await expect(
+    dashboard
+      .locator('dt')
+      .filter({ hasText: 'Storage credits' })
+      .locator('..'),
+  ).toContainText('0.00');
+  await expect(dashboard.getByText('0.25')).toBeVisible();
+  await expect(dashboard.getByText('0.05')).toBeVisible();
+  await expect(dashboard.getByText('0.30')).toBeVisible();
+  await expect(dashboard.getByText('1.25')).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Collections' }).click();
+  await dashboard.getByLabel('Collection name').fill('notes');
+  await dashboard.getByRole('button', { name: 'Create collection' }).click();
+  await expect
+    .poll(() => createdCollection)
+    .toEqual({
+      readAccess: 'authenticated',
+      writeAccess: 'authenticated',
+      ownerScoped: true,
+    });
+  const fields = dashboard.getByRole('textbox', {
+    name: 'tasks collection fields',
+  });
+  await fields.fill(
+    JSON.stringify([
+      { name: 'title', type: 'text', required: true },
+      { name: 'reviewed', type: 'boolean', required: true },
+    ]),
+  );
+  await dashboard
+    .getByRole('button', { name: 'Save collection fields' })
+    .click();
+  await expect(dashboard.getByRole('alert')).toContainText(
+    'conflicts with existing app data',
+  );
+  const migrations = dashboard.getByLabel('tasks one-time data migrations');
+  await migrations.fill(
+    JSON.stringify([{ operation: 'setField', field: 'reviewed', value: true }]),
+  );
+  await dashboard
+    .getByRole('button', { name: 'Save collection fields' })
+    .click();
+  await expect(dashboard.getByRole('status')).toContainText('Changes saved.');
+  await expect
+    .poll(() => submittedMigrations)
+    .toEqual([{ operation: 'setField', field: 'reviewed', value: true }]);
+  await expect(migrations).toHaveValue('');
+  await dashboard.getByRole('radio', { name: 'Code' }).click();
+  const downloadReady = page.waitForEvent('download');
+  await dashboard
+    .getByRole('button', { name: 'Export source revision' })
+    .click();
+  const download = await downloadReady;
+  expect(download.suggestedFilename()).toBe('foundable-app-r2.json');
+  const exportedSource = JSON.parse(
+    await readFile((await download.path())!, 'utf8'),
+  );
+  expect(exportedSource).toEqual({
+    format: 'foundable-app-source-v1',
+    revision: 2,
+    sourceHash: 'a'.repeat(64),
+    build: {
+      runtime: 'node24',
+      framework: 'vite-react-typescript',
+      entrypoint: 'src/main.tsx',
+      commands: ['npm install', 'npm run typecheck', 'npm run build'],
+      output: 'dist/preview.html',
+    },
+    files: [
+      {
+        path: 'src/App.tsx',
+        content: 'export default function App(){return <main/>}',
+      },
+      { path: 'src/styles.css', content: 'main { color: navy; }' },
+    ],
+  });
+  await dashboard.getByRole('button', { name: 'Sync source revision' }).click();
+  await expect(
+    dashboard
+      .getByRole('status')
+      .filter({ hasText: 'Source synced to GitHub.' }),
+  ).toContainText('Source synced to GitHub.');
+  await expect(
+    dashboard.getByRole('link', { name: 'View commit' }),
+  ).toHaveAttribute(
+    'href',
+    'https://github.com/example/apps/commit/' + 'b'.repeat(40),
+  );
+});
+
+test('generated app preview saves records and invokes scoped server functions', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const site = {
+    id: '7d6e93e6-c30e-45cc-adba-1745d0bbdf8f',
+    kind: 'website',
+    title: 'Task app',
+    body: '<!doctype html><html><body><main>Task app</main></body></html>',
+    pages: [],
+    state: 'approved',
+    dueAt: null,
+    recurrence: 'once',
+    scheduleTimezone: 'UTC',
+    upcoming: [],
+    publicUrl: null,
+    runtimeMode: 'app',
+    answer: null,
+    revision: 2,
+    liveDraftRevision: 1,
+  };
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [site], hosting: true } }),
+  );
+  const appEndpoint = api + '/work/apps/' + site.id + '/preview';
+  const compiledDocument = `<!doctype html><html><body>
+    <main data-foundable-records="tasks">
+      <label>Task title <input name="title" data-foundable-field></label>
+      <button type="button" data-foundable-create>Save task</button>
+      <div data-foundable-record-list></div>
+    </main><output id="function-result"></output><output id="storage-result"></output><output id="jobs-result"></output><output id="network-result"></output><img id="external-image" src="https://example.invalid/tracker.png">
+    <script type="module">
+      const functionResult = await window.foundableFunctions.invoke("echo", { message: "hello" });
+      document.querySelector("#function-result").textContent = functionResult.message;
+      const uploaded = await window.foundableStorage.put("note.txt", "text/plain", "SGVsbG8=");
+      const downloaded = await window.foundableStorage.get(uploaded.file.id);
+      const files = await window.foundableStorage.list();
+      await window.foundableStorage.remove(uploaded.file.id);
+      document.querySelector("#storage-result").textContent = uploaded.file.name + ":" + downloaded.file.data + ":" + files.files.length + ":removed";
+      const job = await window.foundableJobs.schedule("tasks", "d3d3ff7a-4eed-4562-9f39-8148201ca65f", "mark_done", "2026-12-01T10:00:00.000Z");
+      const jobs = await window.foundableJobs.list();
+      await window.foundableJobs.cancel(job.job.id);
+      document.querySelector("#jobs-result").textContent = job.job.state + ":" + jobs.jobs.length + ":cancelled";
+      document.querySelector("#network-result").textContent = await fetch("https://example.invalid/tracker").then(() => "allowed", () => "blocked");
+    </script>
+  </body></html>`;
+  await page.route('**' + appEndpoint + '/source?revision=2', (route) =>
+    route.fulfill({
+      json: { buildState: 'passed', document: compiledDocument },
+    }),
+  );
+  const records: { id: string; data: Record<string, unknown> }[] = [];
+  await page.route('**' + appEndpoint + '/records?*', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    expect(url.searchParams.get('revision')).toBe('2');
+    expect(url.searchParams.get('collection')).toBe('tasks');
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { records } });
+      return;
+    }
+    expect(request.method()).toBe('POST');
+    const data = request.postDataJSON();
+    expect(data).toEqual({ title: 'Write tests' });
+    const record = { id: 'd3d3ff7a-4eed-4562-9f39-8148201ca65f', data };
+    records.push(record);
+    await route.fulfill({ json: { record } });
+  });
+  await page.route(
+    '**' + appEndpoint + '/functions/echo?revision=2',
+    async (route) => {
+      expect(route.request().method()).toBe('POST');
+      expect(route.request().postDataJSON()).toEqual({
+        input: { message: 'hello' },
+      });
+      await route.fulfill({ json: { result: { message: 'Function ok' } } });
+    },
+  );
+  const previewFileId = 'ac0155a1-4d96-4239-b321-7ae723994f85';
+  let previewFile: {
+    id: string;
+    name: string;
+    mime: string;
+    data: string;
+  } | null = null;
+  await page.route(
+    '**' + appEndpoint + '/storage?revision=2',
+    async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          json: { files: previewFile ? [previewFile] : [] },
+        });
+        return;
+      }
+      expect(route.request().postDataJSON()).toEqual({
+        name: 'note.txt',
+        mime: 'text/plain',
+        data: 'SGVsbG8=',
+      });
+      previewFile = {
+        id: previewFileId,
+        name: 'note.txt',
+        mime: 'text/plain',
+        data: 'SGVsbG8=',
+      };
+      await route.fulfill({ status: 201, json: { file: previewFile } });
+    },
+  );
+  await page.route(
+    '**' + appEndpoint + '/storage/' + previewFileId + '?revision=2',
+    async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: { file: previewFile } });
+        return;
+      }
+      expect(route.request().method()).toBe('DELETE');
+      previewFile = null;
+      await route.fulfill({ status: 204 });
+    },
+  );
+  const previewJobId = '109ac614-94af-4320-a8dd-3afed84d4695';
+  let previewJob: Record<string, unknown> | null = null;
+  await page.route('**' + appEndpoint + '/jobs?revision=2', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { jobs: previewJob ? [previewJob] : [] } });
+      return;
+    }
+    const job = route.request().postDataJSON();
+    expect(job).toMatchObject({
+      collection: 'tasks',
+      recordId: 'd3d3ff7a-4eed-4562-9f39-8148201ca65f',
+      action: 'mark_done',
+      runAt: '2026-12-01T10:00:00.000Z',
+    });
+    expect(job.id).toMatch(/^[0-9a-f-]{36}$/u);
+    previewJob = { ...job, id: previewJobId, state: 'queued' };
+    await route.fulfill({ status: 202, json: { job: previewJob } });
+  });
+  await page.route(
+    '**' + appEndpoint + '/jobs/' + previewJobId + '?revision=2',
+    async (route) => {
+      expect(route.request().method()).toBe('DELETE');
+      previewJob = null;
+      await route.fulfill({ status: 204 });
+    },
+  );
+
+  await page.goto(workbench + '/build');
+  await page.getByRole('button', { name: 'Open Task app' }).click();
+  const preview = page.frameLocator('iframe[title="Website draft preview"]');
+  await expect(preview.locator('#function-result')).toHaveText('Function ok');
+  await expect(preview.locator('#storage-result')).toHaveText(
+    'note.txt:SGVsbG8=:1:removed',
+  );
+  await expect(preview.locator('#jobs-result')).toHaveText(
+    'queued:1:cancelled',
+  );
+  await expect(preview.locator('#network-result')).toHaveText('blocked');
+  await expect(
+    preview.locator('meta[http-equiv="Content-Security-Policy"]'),
+  ).toHaveAttribute('content', /connect-src 'none'/u);
+  await expect
+    .poll(() =>
+      preview
+        .locator('#external-image')
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBe(0);
+  await preview.getByLabel('Task title').fill('Write tests');
+  await preview.getByRole('button', { name: 'Save task' }).click();
+  await expect(preview.locator('article')).toContainText('Write tests');
+  await expect(
+    page.getByText('This draft uses isolated preview data.'),
+  ).toBeVisible();
+  expect(records).toHaveLength(1);
+});
+
+test('store customer reviews a delivery cart and submits one order request', async ({
+  page,
+}) => {
+  const orderId = 'd738868d-42bc-42b5-8ac4-758ca6003c73';
+  const quoteId = 'f72b3e8e-f8e4-4b67-b4a5-79a0d0d0a13a';
+  await page.route('**/store/catalog', (route) =>
+    route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html><html lang="en"><body><main><h1>Shop</h1>
+        <form method="post" action="/store/review">
+          <input type="hidden" name="id" value="${orderId}">
+          <label>Email for your order <input type="email" name="email" required></label>
+          <label>Quantity<input type="number" name="cart:kettle:${1}" value="0" min="0" max="4"></label>
+          <label>Country<select name="country" required><option value="">Choose a destination</option><option value="AU">Australia</option></select></label>
+          <label>Recipient name<input name="name" required></label>
+          <label>Street address<input name="street" required></label>
+          <label>City<input name="city" required></label>
+          <label>State or region<input name="region"></label>
+          <label>Postcode<input name="postalCode"></label>
+          <label>Apartment or unit<input name="unit"></label>
+          <button>Review order</button>
+        </form></main></body></html>`,
+    }),
+  );
+  await page.route('**/store/review', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    const fields = new URLSearchParams(route.request().postData() ?? '');
+    expect(Object.fromEntries(fields)).toMatchObject({
+      id: orderId,
+      email: 'buyer@example.test',
+      'cart:kettle:1': '2',
+      country: 'AU',
+      name: 'Jordan Buyer',
+      street: '12 Market Street',
+      city: 'Perth',
+      region: 'WA',
+      postalCode: '6000',
+    });
+    await route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html><html lang="en"><body><main><h1>Review your order</h1>
+        <p>Total AUD $99.00</p>
+        <form method="post" action="/store/orders">
+          <input type="hidden" name="quote" value="${quoteId}">
+          <button>Submit order request</button>
+        </form></main></body></html>`,
+    });
+  });
+  await page.route('**/store/orders', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(
+      new URLSearchParams(route.request().postData() ?? '').get('quote'),
+    ).toBe(quoteId);
+    await route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html><html lang="en"><body><main><h1>Order requested</h1>
+        <p>The store has received your request. No payment was taken.</p>
+        <p>Reference: ${orderId}</p></main></body></html>`,
+    });
+  });
+
+  await page.goto('/store/catalog');
+  await page.getByLabel('Email for your order').fill('buyer@example.test');
+  await page.getByLabel('Quantity').fill('2');
+  await page.getByLabel('Country').selectOption('AU');
+  await page.getByLabel('Recipient name').fill('Jordan Buyer');
+  await page.getByLabel('Street address').fill('12 Market Street');
+  await page.getByLabel('City').fill('Perth');
+  await page.getByLabel('State or region').fill('WA');
+  await page.getByLabel('Postcode').fill('6000');
+  await page.getByRole('button', { name: 'Review order' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Review your order' }),
+  ).toBeVisible();
+  await expect(page.getByText('Total AUD $99.00')).toBeVisible();
+  await page.getByRole('button', { name: 'Submit order request' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Order requested' }),
+  ).toBeVisible();
+  await expect(page.getByText('Reference: ' + orderId)).toBeVisible();
+  await expect(page.getByText('No payment was taken.')).toBeVisible();
 });
 
 test('Home opens a Run summary and Run controls can pause it', async ({
@@ -462,6 +987,7 @@ test('Build imports a draft, edits text and images, and restores a deployment', 
   await page.route('**' + work + '/deployments', (route) =>
     route.fulfill({
       json: {
+        github: { repo: 'example/sites', branch: 'main' },
         deployments: [
           {
             id: live,
@@ -497,7 +1023,16 @@ test('Build imports a draft, edits text and images, and restores a deployment', 
     (route) => {
       expect(route.request().postDataJSON()).toEqual({ expectedLive: live });
       rolledBack = true;
-      return route.fulfill({ json: {} });
+      return route.fulfill({
+        json: {
+          deploymentId: '8079c807-b360-44f3-8664-76c65c55ecab',
+          url: 'https://site.example.test',
+          github: {
+            url: 'https://github.com/example/sites/commit/abcdef0123456789abcdef0123456789abcdef01',
+            changed: true,
+          },
+        },
+      });
     },
   );
   await page.goto(workbench + '/build');
@@ -538,6 +1073,13 @@ test('Build imports a draft, edits text and images, and restores a deployment', 
   await expect(
     history.getByText('Revision 1 · Live · Rolled back'),
   ).toBeVisible();
+  await expect(history.getByText('Synced to GitHub.')).toBeVisible();
+  await expect(
+    history.getByRole('link', { name: 'View commit' }),
+  ).toHaveAttribute(
+    'href',
+    'https://github.com/example/sites/commit/abcdef0123456789abcdef0123456789abcdef01',
+  );
 });
 
 test('restoring a saved version creates a pending draft and keeps the live snapshot', async ({
@@ -1244,6 +1786,19 @@ test('Build quotes each media capability and exposes the completed workspace ass
   await page.route('**' + api + '/work', (route) =>
     route.fulfill({ json: { items: [], hosting: false } }),
   );
+  await page.route('**' + api + '/work/projects', (route) =>
+    route.fulfill({
+      json: {
+        projects: [
+          {
+            id: 'ca03c1b5-314a-457e-b553-95849e3b0ace',
+            title: 'Demo Store',
+            kind: 'store',
+          },
+        ],
+      },
+    }),
+  );
   const endpoint = api + '/media';
   const rates = { image: '1', video: '4', voice: '2' };
   const jobs: object[] = [];
@@ -1253,6 +1808,7 @@ test('Build quotes each media capability and exposes the completed workspace ass
     const request = route.request().postDataJSON();
     expect(request).toEqual({
       id: expect.any(String),
+      siteId: 'ca03c1b5-314a-457e-b553-95849e3b0ace',
       kind: 'voice',
       prompt: 'Welcome to our shop',
       quotedCredits: '2',
@@ -1270,9 +1826,13 @@ test('Build quotes each media capability and exposes the completed workspace ass
     media.getByRole('button', { name: 'Generate for 4 credits' }),
   ).toBeVisible();
   await media.getByLabel('Media type').selectOption('voice');
+  await media
+    .getByLabel('Attach media usage to')
+    .selectOption('ca03c1b5-314a-457e-b553-95849e3b0ace');
   await media.getByLabel('Script').fill('Welcome to our shop');
   await media.getByRole('button', { name: 'Generate for 2 credits' }).click();
   await expect(media.getByText('Voice · Ready · 2 credits')).toBeVisible();
+  await expect(media.getByText('Project: Demo Store')).toBeVisible();
   await expect(
     media.getByRole('link', { name: 'Download voice' }),
   ).toHaveAttribute('href', new RegExp(endpoint + '/[0-9a-f-]{36}/asset$'));
@@ -1402,6 +1962,7 @@ test('a generated store opens its dashboard below the preview and saves a produc
   page,
 }) => {
   await seedWorkbench(page);
+  await page.setViewportSize({ width: 390, height: 844 });
   const id = 'e4674721-7544-4ce9-b7cb-9dcbd85b356a';
   const item = {
     id,
@@ -1414,9 +1975,17 @@ test('a generated store opens its dashboard below the preview and saves a produc
     publicUrl: null,
   };
   const products: object[] = [];
+  const discounts: object[] = [];
   let zones: object[] = [];
   let deliveryRevision = 0;
   let directCheckout = false;
+  let paymentMode: 'test' | 'live' = 'test';
+  const paymentConfirmations: string[] = [];
+  page.on('dialog', async (dialog) => {
+    if (dialog.type() !== 'confirm') return;
+    paymentConfirmations.push(dialog.message());
+    await dialog.accept();
+  });
   const png =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
   await page.route(
@@ -1428,6 +1997,18 @@ test('a generated store opens its dashboard below the preview and saves a produc
       }),
   );
   const saleId = 'fa9fbe6c-2b5e-40d1-a607-def73dc6f746';
+  const expectedTracking = [
+    {
+      carrier: 'Parcel Post',
+      number: 'PKG-123',
+      url: 'https://track.example.test/PKG-123',
+    },
+    {
+      carrier: 'Parcel Post',
+      number: 'PKG-124',
+      url: 'https://track.example.test/PKG-124',
+    },
+  ];
   const order = {
     id: 'order',
     email: 'buyer@example.test',
@@ -1450,7 +2031,54 @@ test('a generated store opens its dashboard below the preview and saves a produc
     ],
     saleId: null as string | null,
     payment: null as string | null,
+    tracking: null as { carrier: string; number: string; url: string } | null,
   };
+  await page.route('**' + api + '/work/' + id + '/store/emails**', (route) => {
+    const older = new URL(route.request().url()).searchParams.has('before');
+    return route.fulfill({
+      json: {
+        emails: [
+          {
+            id: older ? 'store-email-2' : 'store-email-1',
+            orderId: order.id,
+            event: older
+              ? 'order_received'
+              : 'tracking:Parcel Post:PKG-123:https://track.example.test/PKG-123',
+            recipient: older ? 'older@example.test' : order.email,
+            status: older ? 'queued' : 'accepted',
+            attempts: 1,
+            providerId: older ? null : 'email-provider-1',
+            note: null,
+            createdAt: order.createdAt,
+          },
+        ],
+        next: older ? null : { before: order.createdAt, id: order.id },
+      },
+    });
+  });
+  await page.route('**' + api + '/work/' + id + '/store/activity**', (route) =>
+    route.fulfill({
+      json: {
+        activity: [
+          {
+            id: 'activity-1',
+            kind: 'order.requested',
+            summary: 'Received a new customer order.',
+            actor: null,
+            createdAt: order.createdAt,
+          },
+          {
+            id: 'activity-2',
+            kind: 'payment.received',
+            summary: 'Payment received for order order.',
+            actor: null,
+            createdAt: order.createdAt,
+          },
+        ],
+        next: null,
+      },
+    }),
+  );
   await page.route('**' + api + '/work', (route) =>
     route.fulfill({ json: { items: [item], hosting: true } }),
   );
@@ -1505,6 +2133,18 @@ test('a generated store opens its dashboard below the preview and saves a produc
       return route.fulfill({
         json: {
           currency: 'AUD',
+          mode: params.get('mode') ?? 'test',
+          usage: {
+            products: 2,
+            variants: 1,
+            photoCount: 1,
+            photoBytes: '68',
+            modelCredits: '0.15',
+            toolCredits: '0.05',
+            totalCredits: '0.20',
+            mediaJobs: 1,
+            mediaCredits: '4',
+          },
           days: [
             {
               day,
@@ -1527,6 +2167,11 @@ test('a generated store opens its dashboard below the preview and saves a produc
         directCheckout = data.enabled;
         return route.fulfill({ json: { saved: true } });
       }
+      if (data.action === 'payment_mode') {
+        expect(data.mode).toBe('live');
+        paymentMode = data.mode;
+        return route.fulfill({ json: { saved: true } });
+      }
       if (data.action === 'delivery') {
         expect(data).toEqual({
           action: 'delivery',
@@ -1545,10 +2190,35 @@ test('a generated store opens its dashboard below the preview and saves a produc
         deliveryRevision++;
         return route.fulfill({ json: { saved: true } });
       }
+      if (data.action === 'discount') {
+        expect(data.discount).toMatchObject({
+          code: 'WELCOME10',
+          percentOff: 10,
+          active: true,
+        });
+        discounts.push({
+          ...data.discount,
+          usedCount: 0,
+          revision: 1,
+          expiresAt: data.discount.expiresAt,
+        });
+        return route.fulfill({ json: { saved: true } });
+      }
       if (data.action === 'payment') {
         expect(data).toEqual({ action: 'payment', id: order.id });
         order.saleId = saleId;
         order.payment = 'awaiting_payment';
+        return route.fulfill({ json: { saved: true } });
+      }
+      if (data.action === 'order') {
+        expect(data).toEqual({
+          action: 'order',
+          id: order.id,
+          status: 'fulfilled',
+          tracking: expectedTracking.shift(),
+        });
+        order.status = 'fulfilled';
+        order.tracking = data.tracking;
         return route.fulfill({ json: { saved: true } });
       }
       if (data.product.parentId) {
@@ -1584,9 +2254,10 @@ test('a generated store opens its dashboard below the preview and saves a produc
     return route.fulfill({
       json: {
         currency: 'AUD',
-        paymentMode: 'test',
-        paymentModes: ['test'],
+        paymentMode,
+        paymentModes: ['test', 'live'],
         products,
+        discounts,
         orders: [order],
         paymentReady: true,
         directCheckout,
@@ -1615,6 +2286,9 @@ test('a generated store opens its dashboard below the preview and saves a produc
   ).toBeVisible();
   await dialog.getByRole('button', { name: 'Dashboard', exact: true }).click();
   const dashboard = dialog.getByRole('region', { name: 'Store dashboard' });
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(390);
   await dashboard
     .getByRole('button', { name: 'Enable direct checkout' })
     .click();
@@ -1629,6 +2303,32 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await expect(
     dashboard.getByRole('button', { name: 'Enable direct checkout' }),
   ).toBeEnabled();
+  await dashboard.getByLabel('Payment mode').selectOption('live');
+  await expect.poll(() => paymentMode).toBe('live');
+  expect(paymentConfirmations[0]).toContain('can charge real payments');
+  await dashboard
+    .getByRole('button', { name: 'Enable direct checkout' })
+    .click();
+  expect(paymentConfirmations[1]).toContain(
+    'Shoppers will be charged real payments',
+  );
+  await expect(
+    dashboard.getByText(
+      'Shoppers can pay directly from the catalog in live mode.',
+    ),
+  ).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Turn off direct checkout' })
+    .click();
+  await dashboard.getByRole('radio', { name: 'Activity' }).click();
+  await expect(
+    dashboard.getByText('Received a new customer order.'),
+  ).toBeVisible();
+  await expect(
+    dashboard.getByRole('row', {
+      name: /Payment received for order order\. Stripe/u,
+    }),
+  ).toBeVisible();
   await dashboard.getByRole('radio', { name: 'Products' }).click();
   await dashboard.getByRole('button', { name: 'Add product' }).click();
   await dashboard.getByLabel('Name', { exact: true }).fill('Pour-over kettle');
@@ -1668,7 +2368,7 @@ test('a generated store opens its dashboard below the preview and saves a produc
     }),
   ).toBeVisible();
   await dashboard
-    .getByRole('button', { name: 'Create test payment link' })
+    .getByRole('button', { name: 'Create live payment link' })
     .click();
   await expect(
     dashboard.getByRole('link', { name: /Open payment link/u }),
@@ -1676,6 +2376,34 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await expect(
     dashboard.getByRole('button', { name: 'Fulfill', exact: true }),
   ).toHaveCount(0);
+  order.payment = 'paid';
+  await dashboard.getByLabel('Search orders').fill('kettle');
+  await dashboard.getByRole('button', { name: 'Search', exact: true }).click();
+  const trackingPrompts = [
+    'PKG-123',
+    'Parcel Post',
+    'https://track.example.test/PKG-123',
+    'PKG-124',
+    'Parcel Post',
+    'https://track.example.test/PKG-124',
+  ];
+  page.on('dialog', async (dialog) => {
+    expect(dialog.type()).toBe('prompt');
+    await dialog.accept(trackingPrompts.shift());
+  });
+  await dashboard.getByRole('button', { name: 'Fulfill', exact: true }).click();
+  await expect(
+    dashboard.getByRole('link', { name: 'Parcel Post · PKG-123' }),
+  ).toHaveAttribute('href', 'https://track.example.test/PKG-123');
+  await dashboard
+    .getByRole('button', { name: 'Update tracking', exact: true })
+    .click();
+  await expect(
+    dashboard.getByRole('link', { name: 'Parcel Post · PKG-124' }),
+  ).toHaveAttribute('href', 'https://track.example.test/PKG-124');
+  expect(trackingPrompts).toEqual([]);
+  expect(expectedTracking).toEqual([]);
+  page.removeAllListeners('dialog');
   await dashboard.getByLabel('Search orders').fill('kettle');
   await dashboard
     .getByRole('combobox', { name: 'Order status' })
@@ -1705,6 +2433,9 @@ test('a generated store opens its dashboard below the preview and saves a produc
   await dashboard.getByLabel('From (UTC)').fill('2026-11-01');
   await dashboard.getByLabel('Through (UTC)').fill('2026-11-02');
   await dashboard.getByRole('button', { name: 'Apply dates' }).click();
+  await expect(dashboard.getByText('68 bytes')).toBeVisible();
+  await expect(dashboard.getByText('0.20', { exact: true })).toBeVisible();
+  await expect(dashboard.getByText('4.00', { exact: true })).toBeVisible();
   await expect(
     dashboard.getByRole('rowheader', { name: '2026-11-01' }),
   ).toBeVisible();
@@ -1720,10 +2451,133 @@ test('a generated store opens its dashboard below the preview and saves a produc
     .getByRole('button', { name: 'Save shipping and tax' })
     .click();
   await expect(dashboard.getByRole('group', { name: 'AU' })).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Discounts' }).click();
+  await dashboard.getByRole('button', { name: 'Add discount code' }).click();
+  await dashboard.getByLabel('Code').fill('WELCOME10');
+  await dashboard.getByLabel('Percent off').fill('10');
+  await dashboard.getByRole('button', { name: 'Save discount' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: 'WELCOME10' }),
+  ).toBeVisible();
+  await expect(dashboard.getByText('10% off')).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Emails' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: 'buyer@example.test' }),
+  ).toBeVisible();
+  await expect(dashboard.getByText('Tracking updated')).toBeVisible();
+  await expect(dashboard.getByText('accepted', { exact: true })).toBeVisible();
+  await dashboard.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: 'older@example.test' }),
+  ).toBeVisible();
+  await expect(dashboard.getByText('queued', { exact: true })).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Previous', exact: true })
+    .click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: 'buyer@example.test' }),
+  ).toBeVisible();
   await dialog.getByRole('button', { name: 'Site preview' }).click();
   await expect(
     dialog
       .frameLocator('iframe[title="Website draft preview"]')
       .getByRole('heading', { name: 'Fieldwork store' }),
   ).toBeVisible();
+});
+
+test('merchant confirms a partial refund and sees the updated net payment', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const id = 'e4674721-7544-4ce9-b7cb-9dcbd85b356a';
+  const order = {
+    id: 'd738868d-42bc-42b5-8ac4-758ca6003c73',
+    email: 'buyer@example.test',
+    currency: 'AUD',
+    status: 'confirmed',
+    payment: 'paid',
+    paymentMode: 'test',
+    saleId: 'fa9fbe6c-2b5e-40d1-a607-def73dc6f746',
+    amountRefunded: 0,
+    createdAt: '2026-11-18T08:00:00.000Z',
+    items: [
+      {
+        productId: 'kettle',
+        productName: 'Pour-over kettle',
+        quantity: 1,
+        unitPrice: 1200,
+      },
+    ],
+  };
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id,
+            title: 'Refund shop',
+            kind: 'website',
+            isStore: true,
+            body: '<h1>Refund shop</h1>',
+            revision: 1,
+            state: 'approved',
+            publicUrl: null,
+          },
+        ],
+        hosting: true,
+      },
+    }),
+  );
+  const storeEndpoint = api + '/work/' + id + '/store';
+  await page.route(storeEndpoint, async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      expect(body.action).toBe('refund');
+      expect(body.id).toBe(order.id);
+      expect(body.amount).toBe(500);
+      expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/u);
+      order.amountRefunded += body.amount;
+      order.payment = 'partially_refunded';
+      await route.fulfill({ json: { saved: true } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        currency: 'AUD',
+        products: [],
+        counts: { openRequests: 0, awaitingFulfillment: 0 },
+        paymentReady: true,
+        paymentMode: 'test',
+        paymentModes: ['test'],
+        directCheckout: false,
+        zones: [],
+        deliveryRevision: 0,
+      },
+    });
+  });
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/orders(?:\\?|$)', 'u'),
+    (route) => route.fulfill({ json: { orders: [order], next: null } }),
+  );
+
+  await page.goto(workbench + '/build');
+  await page.getByRole('button', { name: 'Open Refund shop' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Dashboard' }).click();
+  const dashboard = dialog.getByRole('region', { name: 'Store dashboard' });
+  await dashboard.getByRole('radio', { name: 'Orders' }).click();
+  await expect(dashboard.getByText('Paid · Test')).toBeVisible();
+  const dialogs: string[] = [];
+  page.on('dialog', async (browserDialog) => {
+    dialogs.push(browserDialog.message());
+    if (browserDialog.type() === 'prompt') await browserDialog.accept('5.00');
+    else await browserDialog.accept();
+  });
+  await dashboard.getByRole('button', { name: 'Refund payment' }).click();
+  await expect(dashboard.getByText('Saved.')).toBeVisible();
+  await expect(dashboard.getByText('Partially refunded · Test')).toBeVisible();
+  await expect(
+    dashboard.getByText(/Refunded .*5\.00.*Net paid .*7\.00/u),
+  ).toBeVisible();
+  expect(dialogs).toHaveLength(2);
 });

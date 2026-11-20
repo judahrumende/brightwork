@@ -1,13 +1,15 @@
 import { storeBuyers } from '../src/workspace/store-buyers';
 import { productEdit } from '../src/workspace/generated-store';
 import { siteHosting } from '../src/workspace/publication';
+import { generatedAppRecords } from '../src/workspace/generated-app-records';
+import { generatedAppUsers } from '../src/workspace/generated-app-users';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Queue, Worker } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
@@ -19,6 +21,7 @@ import {
   inboundEmails,
   members,
   publications,
+  websiteVersions,
 } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
 import { creditConfig, creditLedger } from '../src/workspace/credits';
@@ -618,6 +621,10 @@ test(
         workspaceId: string,
         input: {
           storeCurrency?: 'AUD';
+          runtimeMode?: 'static' | 'store' | 'app';
+          appCollections?: Parameters<
+            typeof agent.saveGeneratedWebsite
+          >[0]['appCollections'];
           targetId?: string;
           title?: string;
           design: string;
@@ -643,9 +650,45 @@ test(
           async (messages, tools, options) => {
             if (!tools.length) {
               if (options?.json) {
+                if (
+                  requirements.includes('Convert this store') &&
+                  /Plan an interactive web app/u.test(
+                    messages[0]?.content ?? '',
+                  )
+                ) {
+                  assert.match(
+                    messages[1]?.content ?? '',
+                    /"storefrontRequested":false/u,
+                    messages[1]?.content.match(
+                      /"storefrontRequested":\s*\w+/u,
+                    )?.[0],
+                  );
+                  assert.doesNotMatch(
+                    messages[0]?.content ?? '',
+                    /Plan a storefront around the supplied products/u,
+                  );
+                }
+                if (
+                  messages[0]?.content.includes(
+                    'Generate the customer-facing React source',
+                  )
+                )
+                  return {
+                    calls: [],
+                    text: JSON.stringify({
+                      files: [
+                        {
+                          path: 'src/App.tsx',
+                          content:
+                            'export default function App() { return <main>Tasks</main>; }',
+                        },
+                      ],
+                    }),
+                    usage: { prompt_tokens: 10, completion_tokens: 12 },
+                  };
                 assert.match(
                   messages[0]?.content ?? '',
-                  /Set a clear audience/u,
+                  /In the design brief, state the product and audience/u,
                 );
                 if (/online shop/iu.test(requirements))
                   assert.match(
@@ -700,6 +743,14 @@ test(
               usage: { prompt_tokens: 10, completion_tokens: 12 },
             };
           },
+          undefined,
+          undefined,
+          async () => ({
+            passed: true,
+            log: 'Automation fixture source verification passed.',
+            previewDocument:
+              '<!doctype html><html><body><main>Verified app fixture</main></body></html>',
+          }),
         );
         await build(turn.id);
         return {
@@ -744,12 +795,31 @@ test(
       const chosen = await agent.workItem(business.id, siteId);
       assert.equal(chosen?.body, home);
       assert.equal(chosen?.pages[0]?.html, about);
+      await db
+        .update(websiteVersions)
+        .set({ runtimeMode: 'app' })
+        .where(
+          and(
+            eq(websiteVersions.artifactId, siteId),
+            eq(websiteVersions.revision, 1),
+          ),
+        );
+      await client`insert into generated_app_collections
+        (site_id, revision, name, fields, actions)
+        values (${siteId}, 1, 'records', '[]'::jsonb, '[]'::jsonb)`;
+      await client`insert into generated_app_source_revisions
+        (site_id, revision, source_files, source_hash, build_state, preview_document, built_at)
+        values (${siteId}, 1, '[]'::jsonb, 'automation-fixture', 'passed', '<!doctype html><html><body><main>Fixture app</main></body></html>', now())
+        on conflict (site_id, revision) do update set
+          build_state = 'passed', preview_document = excluded.preview_document, built_at = now()`;
       assert.ok(await agent.decide(business.id, siteId, 1, true, account.id));
       assert.ok(await agent.publish(business.id, siteId, 1, true));
+      assert.equal((await agent.published(siteId))?.runtimeMode, 'app');
 
       const target = {
         targetId: siteId,
         design: newSite.design,
+        appCollections: [{ name: 'tasks', fields: [] }],
         changes: [writePage('about', 'New About')],
       };
       const newAbout = fixturePage('New About');
@@ -762,6 +832,259 @@ test(
       assert.equal(secondBuild?.revision, 2);
       assert.equal(secondBuild?.creation_id, siteId);
       assert.equal(secondBuild?.state, 'completed');
+      const [secondVersion] = await db
+        .select({ runtimeMode: websiteVersions.runtimeMode })
+        .from(websiteVersions)
+        .where(
+          and(
+            eq(websiteVersions.artifactId, siteId),
+            eq(websiteVersions.revision, 2),
+          ),
+        );
+      assert.equal(secondVersion?.runtimeMode, 'app');
+      await client`insert into generated_app_source_revisions
+        (site_id, revision, base_revision, source_files, source_hash, build_state, preview_document, built_at)
+        values (${siteId}, 2, 1, '[]'::jsonb, 'automation-fixture-v2', 'passed', '<!doctype html><html><body><main>Fixture app v2</main></body></html>', now())
+        on conflict (site_id, revision) do update set
+          build_state = 'passed', preview_document = excluded.preview_document, built_at = now()`;
+      assert.ok(await agent.decide(business.id, siteId, 2, true, account.id));
+      assert.ok(await agent.publish(business.id, siteId, 2, true));
+      const siteDeployments = await agent.deployments(business.id, siteId);
+      const originalDeployment = siteDeployments.find(
+        (deployment) => deployment.revision === 1,
+      );
+      const currentDeployment = siteDeployments.find(
+        (deployment) => deployment.unpublishedAt === null,
+      );
+      assert.ok(originalDeployment && currentDeployment);
+      assert.ok(
+        await agent.rollbackDeployment(
+          business.id,
+          siteId,
+          originalDeployment.id,
+          currentDeployment.id,
+        ),
+      );
+      assert.equal((await agent.published(siteId))?.runtimeMode, 'app');
+      const appBaseDomain =
+        process.env.BROWSER_RUNTIME_SMOKE === '1'
+          ? 'localhost'
+          : 'sites.example.test';
+      const appHost = siteId + '.' + appBaseDomain;
+      const appSiteOrigin =
+        (process.env.BROWSER_RUNTIME_SMOKE === '1' ? 'http' : 'https') +
+        '://studio.example.test';
+      const appRuntimeServer = Fastify();
+      const appUserService = generatedAppUsers(db, 'app-runtime-test-secret');
+      const appRecordService = generatedAppRecords(db);
+      let appLoginCode = '';
+      let appRuntimePort: number | undefined;
+      if (process.env.BROWSER_RUNTIME_SMOKE === '1') {
+        await db
+          .update(publications)
+          .set({
+            document: `<!doctype html><html lang="en"><head><title>Runtime browser check</title><style>body{font:16px system-ui;margin:3rem}main{max-width:40rem;margin:auto}</style></head><body><main><h1>Runtime browser check</h1><section data-foundable-auth><label>Email<input type="email" data-foundable-email></label><label>Code<input inputmode="numeric" data-foundable-code></label><button type="button" data-foundable-auth-submit>Continue</button><button type="button" data-foundable-sign-out>Sign out</button><p data-foundable-auth-status></p></section><section data-foundable-records="browser-smoke"><label>Task<input name="title" data-foundable-field></label><button type="button" data-foundable-create>Save task</button><div data-foundable-record-list></div><p data-foundable-status></p></section></main></body></html>`,
+          })
+          .where(
+            and(
+              eq(publications.artifactId, siteId),
+              isNull(publications.unpublishedAt),
+            ),
+          );
+      }
+      siteHosting(
+        appRuntimeServer,
+        agent,
+        appSiteOrigin,
+        appBaseDomain,
+        async () => {},
+        {
+          buyers: storeBuyers(db, 'app-runtime-buyer-test-secret'),
+          sendCode: async () => {},
+          limit: async () => {},
+          paymentOrigin: 'https://studio.example.test',
+        },
+        undefined,
+        appRecordService,
+        appUserService,
+        async (_email, code) => {
+          appLoginCode = code;
+          if (process.env.BROWSER_RUNTIME_SMOKE === '1')
+            console.log('BROWSER_RUNTIME_OTP=' + code);
+        },
+      );
+      if (process.env.BROWSER_RUNTIME_SMOKE === '1') {
+        const address = await appRuntimeServer.listen({
+          host: '127.0.0.1',
+          port: 0,
+        });
+        appRuntimePort = Number(new URL(address).port);
+        console.log(
+          'BROWSER_RUNTIME_URL=http://' +
+            siteId +
+            '.localhost:' +
+            new URL(address).port +
+            '/',
+        );
+        const browserWaitSeconds = Number(
+          process.env.BROWSER_RUNTIME_WAIT_SECONDS ?? 45,
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, browserWaitSeconds * 1000),
+        );
+      }
+      const appHostHeader = appRuntimePort
+        ? appHost + ':' + appRuntimePort
+        : appHost;
+      try {
+        const appPage = await appRuntimeServer.inject({
+          url: '/',
+          headers: { host: appHostHeader },
+        });
+        assert.equal(appPage.statusCode, 200);
+        assert.match(appPage.body, /_foundable\/runtime\.js/u);
+        assert.match(
+          appPage.headers['content-security-policy'] ?? '',
+          /script-src 'self'/u,
+        );
+        const runtime = await appRuntimeServer.inject({
+          url: '/_foundable/runtime.js',
+          headers: { host: appHostHeader },
+        });
+        assert.equal(runtime.statusCode, 200);
+        const origin =
+          (process.env.BROWSER_RUNTIME_SMOKE === '1' ? 'http' : 'https') +
+          '://' +
+          appHostHeader;
+        const requestedLogin = await appRuntimeServer.inject({
+          method: 'POST',
+          url: '/__foundable/auth/challenge',
+          headers: { host: appHostHeader, origin },
+          payload: { email: 'app-user@example.test' },
+        });
+        assert.equal(requestedLogin.statusCode, 200);
+        const challengeId = requestedLogin.json().challenge as string;
+        const verifiedLogin = await appRuntimeServer.inject({
+          method: 'POST',
+          url: '/__foundable/auth/verify',
+          headers: { host: appHostHeader, origin },
+          payload: { challenge: challengeId, code: appLoginCode },
+        });
+        assert.equal(verifiedLogin.statusCode, 200);
+        const appCookieHeader = verifiedLogin.headers['set-cookie'];
+        const appCookie = (
+          Array.isArray(appCookieHeader) ? appCookieHeader[0] : appCookieHeader
+        )?.split(';', 1)[0];
+        assert.ok(appCookie);
+        const currentAppUser = await appRuntimeServer.inject({
+          url: '/__foundable/auth/me',
+          headers: { host: appHostHeader, cookie: appCookie },
+        });
+        assert.equal(currentAppUser.json().user.email, 'app-user@example.test');
+        await appRecordService.configureCollection(
+          business.id,
+          siteId,
+          'private-notes',
+          {
+            readAccess: 'authenticated',
+            writeAccess: 'authenticated',
+            ownerScoped: true,
+          },
+        );
+        assert.equal(
+          (
+            await appRuntimeServer.inject({
+              url: '/__foundable/records?collection=private-notes',
+              headers: { host: appHostHeader },
+            })
+          ).statusCode,
+          401,
+        );
+        const privateRecord = await appRuntimeServer.inject({
+          method: 'POST',
+          url: '/__foundable/records?collection=private-notes',
+          headers: { host: appHostHeader, origin, cookie: appCookie },
+          payload: { title: 'Private app record' },
+        });
+        assert.equal(privateRecord.statusCode, 201);
+        assert.match(
+          (
+            await appRuntimeServer.inject({
+              url: '/__foundable/records?collection=private-notes',
+              headers: { host: appHostHeader, cookie: appCookie },
+            })
+          ).body,
+          /Private app record/u,
+        );
+        await appRecordService.configureCollection(
+          business.id,
+          siteId,
+          'tasks',
+          {
+            readAccess: 'public',
+            writeAccess: 'public',
+            ownerScoped: false,
+            fields: [
+              { name: 'title', type: 'text', required: true },
+              { name: 'estimate', type: 'number', required: false },
+            ],
+          },
+        );
+        const invalidRecord = await appRuntimeServer.inject({
+          method: 'POST',
+          url: '/__foundable/records?collection=tasks',
+          headers: { host: appHostHeader, origin },
+          payload: { estimate: 'not-a-number' },
+        });
+        assert.equal(invalidRecord.statusCode, 400);
+        assert.equal(
+          invalidRecord.json().message,
+          'Record does not match the collection schema.',
+        );
+        const createdRecord = await appRuntimeServer.inject({
+          method: 'POST',
+          url: '/__foundable/records?collection=tasks',
+          headers: { host: appHostHeader, origin },
+          payload: { title: 'Persisted app record' },
+        });
+        assert.equal(createdRecord.statusCode, 201);
+        const recordId = createdRecord.json().record.id as string;
+        const updatedRecord = await appRuntimeServer.inject({
+          method: 'PUT',
+          url: '/__foundable/records/' + recordId + '?collection=tasks',
+          headers: { host: appHostHeader, origin },
+          payload: { title: 'Updated app record' },
+        });
+        assert.equal(updatedRecord.statusCode, 200);
+        const publicRecords = await appRuntimeServer.inject({
+          url: '/__foundable/records?collection=tasks',
+          headers: { host: appHostHeader },
+        });
+        assert.match(publicRecords.body, /Updated app record/u);
+        assert.equal(
+          (
+            await appRuntimeServer.inject({
+              method: 'DELETE',
+              url: '/__foundable/records/' + recordId + '?collection=tasks',
+              headers: { host: appHostHeader, origin },
+            })
+          ).statusCode,
+          204,
+        );
+        const signedOut = await appRuntimeServer.inject({
+          method: 'POST',
+          url: '/__foundable/auth/sign-out',
+          headers: { host: appHostHeader, origin, cookie: appCookie },
+          payload: {},
+        });
+        assert.equal(signedOut.statusCode, 200);
+        assert.equal(
+          await appUserService.user(siteId, appCookie.split('=')[1]),
+          null,
+        );
+      } finally {
+        await appRuntimeServer.close();
+      }
       assert.notEqual(secondBuild?.version_id, firstBuild.version_id);
       assert.notEqual(secondBuild?.source_hash, firstBuild.source_hash);
       assert.equal(
@@ -833,6 +1156,16 @@ test(
         (await agent.workItem(business.id, siteId))?.title,
         'Manual edit',
       );
+      const [manualVersion] = await db
+        .select({ runtimeMode: websiteVersions.runtimeMode })
+        .from(websiteVersions)
+        .where(
+          and(
+            eq(websiteVersions.artifactId, siteId),
+            eq(websiteVersions.revision, 3),
+          ),
+        );
+      assert.equal(manualVersion?.runtimeMode, 'app');
       assert.equal((await agent.published(siteId))?.pages[0]?.html, about);
 
       const shop = await websiteTurn(
@@ -877,7 +1210,54 @@ test(
         false,
       );
       assert.ok(
-        await agent.generatedStore.saveProduct(business.id, shopId, product),
+        await agent.generatedStore.saveProduct(
+          business.id,
+          shopId,
+          product,
+          account.id,
+        ),
+      );
+      const storeActivity = await agent.generatedStore.merchantActivity(
+        business.id,
+        shopId,
+        {},
+      );
+      assert.equal(storeActivity?.activity[0]?.kind, 'product.created');
+      assert.equal(storeActivity?.activity[0]?.actor, account.email);
+      assert.equal(
+        await agent.generatedStore.merchantActivity(
+          otherBusiness.id,
+          shopId,
+          {},
+        ),
+        null,
+      );
+      await client`
+        insert into generated_store_activity(site_id, actor_id, kind, summary)
+        select ${shopId}, ${account.id}, 'fixture', 'Fixture activity'
+        from generate_series(1, 27)
+      `;
+      const firstActivityPage = await agent.generatedStore.merchantActivity(
+        business.id,
+        shopId,
+        {},
+      );
+      assert.equal(firstActivityPage?.activity.length, 25);
+      assert.ok(firstActivityPage?.next);
+      const secondActivityPage = await agent.generatedStore.merchantActivity(
+        business.id,
+        shopId,
+        firstActivityPage!.next!,
+      );
+      assert.equal(secondActivityPage?.activity.length, 3);
+      assert.equal(secondActivityPage?.next, null);
+      assert.equal(
+        new Set(
+          [...firstActivityPage!.activity, ...secondActivityPage!.activity].map(
+            ({ id }) => id,
+          ),
+        ).size,
+        28,
       );
       const shopApp = Fastify();
       const buyers = storeBuyers(db, 'synthetic-buyer-test-secret');
@@ -913,6 +1293,7 @@ test(
         );
         assert.ok(await agent.decide(business.id, shopId, 1, true, account.id));
         assert.ok(await agent.publish(business.id, shopId, 1, true));
+        assert.equal((await agent.published(shopId))?.runtimeMode, 'store');
         const listing = await shopApp.inject({
           url: catalogPath,
           headers: { host },
@@ -1376,11 +1757,46 @@ test(
             .statusCode,
           401,
         );
+        const refundedOrderId = confirmed === firstId ? secondId : firstId;
+        const buyerRefundSaleId = randomUUID();
+        await client`insert into stripe_sales
+          (id, business_id, mode, account_id, title, currency, amount, amount_refunded, payment_id, paid_at)
+          values (${buyerRefundSaleId}, ${business.id}, 'test', 'acct_buyerfixture', 'Order payment', 'aud', ${savedProduct.price}, 125, 'pi_buyerrefund', now())`;
+        await client`update generated_store_orders set sale_id = ${buyerRefundSaleId}
+          where site_id = ${shopId} and id = ${refundedOrderId}`;
+        const merchantRefundOrder = (
+          await agent.generatedStore.read(business.id, shopId)
+        )?.orders.find((candidate) => candidate.id === refundedOrderId);
+        assert.equal(merchantRefundOrder?.amountRefunded, 125);
         const customerPage = await history(buyerCookie);
         assert.equal(customerPage.headers['cache-control'], 'no-store');
         assert.match(customerPage.body, new RegExp(firstId, 'u'));
         assert.doesNotMatch(customerPage.body, new RegExp(variantOrder, 'u'));
         assert.match(customerPage.body, /Copper &lt;Kettle&gt;/u);
+        assert.match(customerPage.body, /Refunded .*1\.25/u);
+        assert.match(customerPage.body, /Net paid .*43\.75/u);
+        const buyerOrders = await buyers.orders(shopId, 'buyer@example.test');
+        const buyerCursor = buyerOrders.find((order) => order.id === firstId);
+        assert.ok(buyerCursor);
+        assert.equal(
+          (
+            await buyers.orders(shopId, 'buyer@example.test', {
+              id: buyerCursor.id,
+              createdAt: new Date('2000-01-01T00:00:00.000Z').toISOString(),
+            })
+          ).length,
+          0,
+        );
+        assert.ok(cart);
+        assert.equal(
+          (
+            await buyers.orders(shopId, 'buyer@example.test', {
+              id: cart.id,
+              createdAt: cart.createdAt,
+            })
+          ).length,
+          0,
+        );
 
         const signup = await buyers.challenge(shopId, 'new-buyer@example.test');
         const wrongCode = signup.code === '111111' ? '222222' : '111111';
@@ -1388,7 +1804,32 @@ test(
           assert.equal(await buyers.verify(shopId, signup.id, wrongCode), null);
         assert.equal(await buyers.verify(shopId, signup.id, signup.code), null);
         const fresh = await buyers.challenge(shopId, 'new-buyer@example.test');
-        assert.ok(await buyers.verify(shopId, fresh.id, fresh.code));
+        const freshToken = await buyers.verify(shopId, fresh.id, fresh.code);
+        assert.ok(freshToken);
+        await client`update generated_store_buyer_sessions
+          set expires_at = now() - interval '1 second'
+          where site_id = ${shopId} and email = 'new-buyer@example.test'`;
+        assert.equal(await buyers.buyer(shopId, freshToken), null);
+        const expiredChallenge = await buyers.challenge(
+          shopId,
+          'expired@example.test',
+        );
+        await client`update generated_store_signins
+          set expires_at = now() - interval '1 second'
+          where site_id = ${shopId} and id = ${expiredChallenge.id}`;
+        const cleanupChallenge = await buyers.challenge(
+          shopId,
+          'cleanup@example.test',
+        );
+        const [expiredSignins] = await client`
+          select count(*)::int as count from generated_store_signins
+          where site_id = ${shopId} and id = ${expiredChallenge.id}`;
+        const [expiredSessions] = await client`
+          select count(*)::int as count from generated_store_buyer_sessions
+          where site_id = ${shopId} and email = 'new-buyer@example.test'`;
+        assert.equal(expiredSignins?.count, 0);
+        assert.equal(expiredSessions?.count, 0);
+        await buyers.discard(shopId, cleanupChallenge.id);
         const merchants = await agent.generatedStore.read(business.id, shopId);
         const freshCustomer = merchants?.customers.find(
           (customer) => customer.email === 'new-buyer@example.test',
@@ -1405,6 +1846,8 @@ test(
           state: 'approved',
         });
         await client`insert into generated_stores(site_id, first_revision, currency) values (${sibling.id}, 1, 'AUD')`;
+        await client`update website_versions set runtime_mode = 'store'
+          where artifact_id = ${sibling.id} and revision = 1`;
         assert.ok(await agent.publish(otherBusiness.id, sibling.id, 1, true));
         const siblingPage = await history(
           buyerCookie,
@@ -1444,12 +1887,39 @@ test(
           (await history(buyerCookie)).body,
           new RegExp(withSession, 'u'),
         );
+        const otherBuyerLogin = await buyers.challenge(
+          shopId,
+          'buyer@example.test',
+        );
+        const otherBuyerToken = await buyers.verify(
+          shopId,
+          otherBuyerLogin.id,
+          otherBuyerLogin.code,
+        );
+        assert.ok(otherBuyerToken);
+        const otherBuyerCookie = '__Host-bw-buyer=' + otherBuyerToken;
+        assert.match(
+          (await history(otherBuyerCookie)).body,
+          new RegExp(withSession, 'u'),
+        );
         assert.equal(
           (await postAccount('/sign-out', {}, buyerCookie)).statusCode,
           303,
         );
         assert.doesNotMatch(
           (await history(buyerCookie)).body,
+          new RegExp(withSession, 'u'),
+        );
+        assert.match(
+          (await history(otherBuyerCookie)).body,
+          new RegExp(withSession, 'u'),
+        );
+        assert.equal(
+          (await postAccount('/sign-out-all', {}, otherBuyerCookie)).statusCode,
+          303,
+        );
+        assert.doesNotMatch(
+          (await history(otherBuyerCookie)).body,
           new RegExp(withSession, 'u'),
         );
 
@@ -1718,6 +2188,94 @@ test(
             reportRange,
           ),
           null,
+        );
+
+        const converted = await websiteTurn(
+          business.id,
+          {
+            targetId: shopId,
+            title: 'Fieldwork tasks',
+            design: 'Keep the Fieldwork brand in the task app.',
+            runtimeMode: 'app',
+            appCollections: [
+              {
+                name: 'tasks',
+                readAccess: 'authenticated',
+                writeAccess: 'authenticated',
+                ownerScoped: true,
+                fields: [{ name: 'title', type: 'text', required: true }],
+                actions: [],
+              },
+            ],
+            changes: [writePage('', 'Tasks')],
+          },
+          [fixturePage('Fieldwork tasks')],
+          false,
+          'Convert this store into an app for managing tasks.',
+        );
+        assert.equal(converted.turn?.state, 'completed');
+        const pendingConversion = await agent.workItem(business.id, shopId);
+        assert.equal(
+          pendingConversion?.runtimeMode,
+          'app',
+          JSON.stringify(
+            converted.turn?.parts
+              .filter((part) => part.type === 'tool')
+              .map(({ name, status, output }) => ({ name, status, output })),
+          ),
+        );
+        assert.equal(pendingConversion?.isStore, true);
+        assert.equal(
+          (await shopApp.inject({ url: catalogPath, headers: { host } }))
+            .statusCode,
+          200,
+        );
+        assert.ok(
+          await agent.decide(
+            business.id,
+            shopId,
+            pendingConversion!.revision,
+            true,
+            account.id,
+          ),
+        );
+        const [storeDataBeforeConversion] = await client`
+          select
+            (select count(*)::int from generated_store_products where site_id = ${shopId}) as products,
+            (select count(*)::int from generated_store_orders where site_id = ${shopId}) as orders`;
+        assert.ok(storeDataBeforeConversion.products > 0);
+        assert.ok(storeDataBeforeConversion.orders > 0);
+        assert.ok(
+          await agent.publish(
+            business.id,
+            shopId,
+            pendingConversion!.revision,
+            true,
+          ),
+        );
+        const [storeDataAfterConversion] = await client`
+          select
+            (select count(*)::int from generated_store_products where site_id = ${shopId}) as products,
+            (select count(*)::int from generated_store_orders where site_id = ${shopId}) as orders`;
+        assert.deepEqual(storeDataAfterConversion, storeDataBeforeConversion);
+        assert.equal((await agent.published(shopId))?.runtimeMode, 'app');
+        assert.equal(
+          (await agent.workItem(business.id, shopId))?.isStore,
+          false,
+        );
+        assert.equal(
+          await agent.generatedStore.read(business.id, shopId),
+          null,
+        );
+        assert.equal(
+          (await shopApp.inject({ url: catalogPath, headers: { host } }))
+            .statusCode,
+          404,
+        );
+        assert.equal(
+          (await shopApp.inject({ url: accountPath, headers: { host } }))
+            .statusCode,
+          404,
         );
       } finally {
         await shopApp.close();

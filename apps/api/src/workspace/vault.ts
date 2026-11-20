@@ -73,6 +73,14 @@ export function vaultStore(db: Database, hexKey: string) {
         associatedData(businessId, credential.name),
       );
     },
+    async revealByName(businessId: string, name: string) {
+      const [credential] = await db
+        .select({ sealed: rows.sealed })
+        .from(rows)
+        .where(and(eq(rows.businessId, businessId), eq(rows.name, name)));
+      if (!credential) return null;
+      return cipher.open(credential.sealed, associatedData(businessId, name));
+    },
     async remove(businessId: string, id: string) {
       const [record] = await db
         .delete(rows)

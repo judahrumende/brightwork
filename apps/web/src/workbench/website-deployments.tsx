@@ -66,10 +66,15 @@ export function WebsiteDeployments({
     setError('');
     setSynced(null);
     try {
-      await write(endpoint + '/' + item.id + '/rollback', { expectedLive });
+      const restored = await write<{
+        deploymentId: string;
+        github?: { url: string; changed: boolean };
+      }>(endpoint + '/' + item.id + '/rollback', { expectedLive });
       setConfirm(null);
+      if (restored.github) setSynced(restored.github);
       await cache.invalidateQueries({ queryKey });
     } catch (failure) {
+      await cache.invalidateQueries({ queryKey });
       setError(errorMessage(failure));
     } finally {
       setBusy(false);

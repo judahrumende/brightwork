@@ -15,6 +15,7 @@ const creditLabels = {
   starter: 'Starter credits',
   model: 'Pip model call',
   tool: 'Pip tool call',
+  storage: 'Generated app storage upload',
   subscription: 'Subscription credits',
   refund: 'Refund credit adjustment',
 };

@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import type { Database } from '../db/database';
-import { members } from '../db/schema';
+import { artifacts, members, websiteVersions } from '../db/schema';
 import { creditDecimal, creditUnits } from './credit-amount';
 import type { creditLedger } from './credits';
 
@@ -27,6 +27,7 @@ const mediaState = [
 ] as const;
 export const mediaInput = z.strictObject({
   id: z.uuid(),
+  siteId: z.uuid().optional(),
   kind: mediaKind,
   prompt: z.string().trim().min(1).max(4000),
   quotedCredits: z.string().regex(/^\d{1,14}(?:\.\d{1,10})?$/u),
@@ -36,6 +37,9 @@ const jobs = pgTable('media_jobs', {
   id: uuid().primaryKey(),
   businessId: uuid('business_id').notNull(),
   accountId: uuid('account_id').notNull(),
+  siteId: uuid('site_id').references(() => artifacts.id, {
+    onDelete: 'set null',
+  }),
   kind: text({ enum: kinds }).notNull(),
   prompt: text().notNull(),
   credits: numeric({ precision: 24, scale: 10 }).notNull(),
@@ -78,10 +82,33 @@ export function mediaStore(
     ) {
       const rate = creditDecimal(creditUnits(configuredRate));
       return db.transaction(async (tx) => {
+        if (input.siteId) {
+          const [project] = await tx
+            .select({ id: artifacts.id })
+            .from(artifacts)
+            .innerJoin(
+              websiteVersions,
+              and(
+                eq(websiteVersions.artifactId, artifacts.id),
+                eq(websiteVersions.revision, artifacts.revision),
+                inArray(websiteVersions.runtimeMode, ['store', 'app']),
+              ),
+            )
+            .where(
+              and(
+                eq(artifacts.id, input.siteId),
+                eq(artifacts.businessId, businessId),
+                eq(artifacts.kind, 'website'),
+              ),
+            )
+            .limit(1);
+          if (!project) return 'invalid_project';
+        }
         const find = () =>
           tx
             .select({
               account: jobs.accountId,
+              siteId: jobs.siteId,
               kind: jobs.kind,
               prompt: jobs.prompt,
               rate: jobs.credits,
@@ -92,6 +119,7 @@ export function mediaStore(
           row: Awaited<ReturnType<typeof find>>[number] | undefined,
         ) =>
           row?.account === accountId &&
+          row.siteId === (input.siteId ?? null) &&
           row.kind === input.kind &&
           row.prompt === input.prompt &&
           row.rate === creditDecimal(creditUnits(input.quotedCredits));
@@ -105,6 +133,7 @@ export function mediaStore(
             id: input.id,
             businessId,
             accountId,
+            siteId: input.siteId ?? null,
             kind: input.kind,
             prompt: input.prompt,
             credits: rate,
@@ -128,10 +157,11 @@ export function mediaStore(
         return 'accepted';
       });
     },
-    async list(businessId: string, kind?: MediaKind) {
+    async list(businessId: string, accountId: string, kind?: MediaKind) {
       return db
         .select({
           id: jobs.id,
+          siteId: jobs.siteId,
           kind: jobs.kind,
           state: jobs.state,
           prompt: jobs.prompt,
@@ -140,16 +170,26 @@ export function mediaStore(
         })
         .from(jobs)
         .where(
-          and(eq(jobs.businessId, businessId), kind && eq(jobs.kind, kind)),
+          and(
+            eq(jobs.businessId, businessId),
+            eq(jobs.accountId, accountId),
+            kind && eq(jobs.kind, kind),
+          ),
         )
         .orderBy(desc(jobs.createdAt), desc(jobs.id))
         .limit(50);
     },
-    async asset(businessId: string, id: string) {
+    async asset(businessId: string, accountId: string, id: string) {
       const [record] = await db
         .select({ bytes: jobs.asset, mime: jobs.mime, kind: jobs.kind })
         .from(jobs)
-        .where(and(scope(businessId, id), eq(jobs.state, 'completed')));
+        .where(
+          and(
+            scope(businessId, id),
+            eq(jobs.accountId, accountId),
+            eq(jobs.state, 'completed'),
+          ),
+        );
       return record ?? null;
     },
     async claim(kinds: MediaKind[], now = new Date()) {

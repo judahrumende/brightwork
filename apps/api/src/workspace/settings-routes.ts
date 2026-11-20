@@ -11,6 +11,7 @@ import type { teamStore } from './team';
 import type { vaultStore } from './vault';
 import { domainName } from './domains';
 import type { domainStore } from './domains';
+import type { githubSiteSettings } from './github-site-settings';
 
 type Authorize = (
   request: FastifyRequest,
@@ -26,12 +27,14 @@ export function registerWorkspaceSettings(
     sellerPayments: StripeConnectModes | undefined;
     sms: ReturnType<typeof workspaceSms> | undefined;
     vault: ReturnType<typeof vaultStore> | undefined;
+    githubSite?: ReturnType<typeof githubSiteSettings>;
     domains: ReturnType<typeof domainStore>;
     authorize: Authorize;
     reportError: (failure: unknown, reply: FastifyReply) => unknown;
   },
 ) {
-  const { team, vault, domains, commerce, sms, sellerPayments } = context;
+  const { team, vault, domains, commerce, sms, sellerPayments, githubSite } =
+    context;
   const base = '/api/companies/:id/settings';
   const target = z.object({ resource: z.uuid() });
   const stripeMode = z.object({
@@ -87,6 +90,42 @@ export function registerWorkspaceSettings(
       if (!sms) return reply.code(503).send({ message: 'SMS is unavailable.' });
       await sms.disconnect(access.id);
       return { disconnected: true };
+    }),
+  );
+  app.get(
+    base + '/github',
+    handle(false, async (_request, _reply, access) =>
+      githubSite
+        ? githubSite.get(access.id)
+        : { configured: false, available: false, repo: '', branch: 'main' },
+    ),
+  );
+  app.post(
+    base + '/github',
+    handle(true, async (request, reply, access) => {
+      if (!githubSite)
+        return reply.code(503).send({
+          message: 'GitHub setup requires the encrypted workspace vault.',
+        });
+      const input = z
+        .object({
+          token: z.string().min(1).max(512),
+          repo: z.string(),
+          branch: z.string(),
+        })
+        .parse(request.body);
+      if (!(await githubSite.connect(access.id, input)))
+        return reply.code(422).send({
+          message: 'GitHub could not verify write access to that repository.',
+        });
+      return { configured: true };
+    }),
+  );
+  app.delete(
+    base + '/github',
+    handle(true, async (_request, _reply, access) => {
+      await githubSite?.disconnect(access.id);
+      return { removed: true };
     }),
   );
   app.get(

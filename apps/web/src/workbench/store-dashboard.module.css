@@ -21,6 +21,11 @@
 }
 .toolbar {
   justify-content: space-between;
+  min-width: 0;
+}
+.sectionTabs {
+  min-width: 0;
+  max-width: 100%;
 }
 .metrics {
   display: grid;
@@ -96,6 +101,24 @@
   font-size: var(--text-caption);
   font-weight: normal;
 }
+.sourceFile {
+  margin-block: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sourceFile summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.sourceFile pre {
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-caption);
+}
 .listFilters {
   display: flex;
   flex-wrap: wrap;
@@ -105,4 +128,14 @@
 .listFilters label {
   display: grid;
   gap: 4px;
+}
+
+@media (max-width: 600px) {
+  .sectionTabs {
+    width: 100%;
+  }
+  .sectionTabs > * {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

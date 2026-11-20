@@ -337,6 +337,216 @@
       "when": 1794834000047,
       "tag": "0047_commerce_insights_payment_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794834000048,
+      "tag": "0048_generated_app_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794834000049,
+      "tag": "0049_website_runtime_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794834000050,
+      "tag": "0050_generated_app_collections",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794834000051,
+      "tag": "0051_generated_app_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794834000052,
+      "tag": "0052_generated_app_collection_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794834000053,
+      "tag": "0053_generated_app_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794834000054,
+      "tag": "0054_generated_app_collection_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794834000055,
+      "tag": "0055_generated_app_workflow_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1794834000056,
+      "tag": "0056_generated_app_workflow_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1794834000057,
+      "tag": "0057_generated_app_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794834000058,
+      "tag": "0058_generated_app_collection_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1794834000059,
+      "tag": "0059_generated_app_preview_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1794834000060,
+      "tag": "0060_generated_app_source_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1794834000061,
+      "tag": "0061_generated_app_source_build_lease",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1794834000062,
+      "tag": "0062_generated_app_preview_document",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1794834000063,
+      "tag": "0063_generated_app_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1794834000064,
+      "tag": "0064_generated_app_file_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1794834000065,
+      "tag": "0065_generated_app_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1794834000066,
+      "tag": "0066_stripe_store_refunds",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794834000067,
+      "tag": "0067_generated_app_schema_migration_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1794834000068,
+      "tag": "0068_website_version_turn",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1794834000069,
+      "tag": "0069_media_job_site",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1794834000070,
+      "tag": "0070_app_storage_credits",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1794834000071,
+      "tag": "0071_generated_store_fulfillment_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1794834000072,
+      "tag": "0072_generated_store_discounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1794834000073,
+      "tag": "0073_generated_store_email_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1794834000074,
+      "tag": "0074_generated_app_function_mutations",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1794834000075,
+      "tag": "0075_generated_store_email_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1794834000076,
+      "tag": "0076_generated_store_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1794834000077,
+      "tag": "0077_generated_store_activity_sources",
+      "breakpoints": true
     }
   ]
 }

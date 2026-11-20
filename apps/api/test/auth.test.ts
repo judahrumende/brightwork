@@ -7,6 +7,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { authEnv } from '../src/auth/config';
+import { authProviders } from '../src/auth/providers';
 import { registerAuth } from '../src/auth/routes';
 import { pkceChallenge } from '../src/auth/tokens';
 import { connectDatabase } from '../src/db/database';
@@ -16,9 +17,11 @@ import {
   businessRuns,
   calendarEvents,
   creditEntries,
+  generatedAppSourceRevisions,
   inboundEmails,
   members,
   workspaceCredentials,
+  websiteVersions,
 } from '../src/db/schema';
 import { agentStore } from '../src/workspace/agent-store';
 import { creditConfig, creditLedger } from '../src/workspace/credits';
@@ -27,9 +30,63 @@ import { observedContracts } from '../../../packages/shared/src/api-contracts.ge
 import { runStore } from '../src/workspace/run-store';
 import { domainStore } from '../src/workspace/domains';
 import { stripeBilling } from '../src/workspace/stripe-billing';
+import { generatedAppSourceHash } from '../src/workspace/generated-app-source';
 
 const { TEST_DATABASE_URL, TEST_MAILPIT_URL, REDIS_URL } = process.env;
 const origin = 'http://127.0.0.1:5173';
+
+test('HTTPS mail sends sign-in codes for the workspace, buyers and app users', async () => {
+  const from = 'Brightwork <hello@brightwork.test>';
+  const email = 'recipient@example.test';
+  const sendRequests: { from: string; to: string[]; text: string }[] = [];
+  let rejectDelivery = false;
+  const auth = authProviders(
+    authEnv.parse({
+      APP_ORIGIN: 'https://staging.example.test',
+      AUTH_RESEND_API_KEY: 'fixture-auth-key',
+      MAIL_FROM: from,
+      TURNSTILE_SITE_KEY: 'fixture-site-key',
+      TURNSTILE_SECRET_KEY: 'fixture-turnstile-secret',
+    }),
+    async (input, init) => {
+      assert.equal(input, 'https://api.resend.com/emails');
+      assert.equal(init?.method, 'POST');
+      assert.equal(init.redirect, 'error');
+      assert.equal(
+        new Headers(init.headers).get('authorization'),
+        'Bearer fixture-auth-key',
+      );
+      assert.equal(typeof init.body, 'string');
+      sendRequests.push(JSON.parse(init.body as string));
+      return rejectDelivery
+        ? new Response('Provider refused the email', { status: 403 })
+        : Response.json({ id: 'fixture-message' });
+    },
+  );
+  assert.equal(auth.emailEnabled, true);
+  assert.equal(auth.buyerEmailEnabled, true);
+  await auth.sendCode(email, '123456', 'workspace-link');
+  await auth.sendBuyerCode(email, '234567', 'test store');
+  await auth.sendAppUserCode(email, '345678', 'test app');
+  assert.equal(sendRequests.length, 3);
+  for (const message of sendRequests) {
+    assert.equal(message.from, from);
+    assert.deepEqual(message.to, [email]);
+  }
+  assert.match(sendRequests[0]!.text, /sign-in code is 123456/u);
+  assert.match(
+    sendRequests[0]!.text,
+    /https:\/\/staging\.example\.test\/sign-in\/link#token=workspace-link/u,
+  );
+  assert.match(sendRequests[1]!.text, /test store is 234567/u);
+  assert.match(sendRequests[2]!.text, /test app is 345678/u);
+
+  rejectDelivery = true;
+  await assert.rejects(
+    auth.sendCode(email, '456789', 'rejected-link'),
+    /provider rejected the request/u,
+  );
+});
 
 test(
   'email and OAuth sign-in establish sessions and isolate workspace records',
@@ -133,6 +190,7 @@ test(
 
     const exchanges = new Map<string, string>();
     let verifiedChallenges = 0;
+    let githubTreeCreates = 0;
     try {
       await admin`create schema ${admin(schema)}`;
       await migrate(database.db, {
@@ -220,6 +278,40 @@ test(
               action: 'email-code',
             });
           }
+          if (target === 'https://api.github.com/repos/example/private-apps')
+            return Response.json({ permissions: { push: true } });
+          if (
+            target ===
+            'https://api.github.com/repos/example/private-apps/git/ref/heads/main'
+          )
+            return Response.json({ object: { sha: 'a'.repeat(40) } });
+          if (
+            target ===
+            'https://api.github.com/repos/example/private-apps/git/commits/' +
+              'a'.repeat(40)
+          )
+            return Response.json({ tree: { sha: 'b'.repeat(40) } });
+          if (
+            target ===
+            'https://api.github.com/repos/example/private-apps/git/trees'
+          ) {
+            githubTreeCreates += 1;
+            return Response.json({
+              sha: (githubTreeCreates === 1 ? 'c' : 'd').repeat(40),
+            });
+          }
+          if (
+            target ===
+              'https://api.github.com/repos/example/private-apps/git/commits' &&
+            init?.method === 'POST'
+          )
+            return Response.json({ sha: 'e'.repeat(40) });
+          if (
+            target ===
+              'https://api.github.com/repos/example/private-apps/git/refs/heads/main' &&
+            init?.method === 'PATCH'
+          )
+            return Response.json({ object: { sha: 'e'.repeat(40) } });
           assert.equal(
             target,
             'https://api.workos.com/user_management/authenticate',
@@ -351,7 +443,25 @@ test(
       const separateCookie = socialCookies.get('AppleOAuth');
       const collaboratorCookie = socialCookies.get('GoogleOAuth');
       assert.ok(separateCookie && collaboratorCookie);
+      const outsiderEmail = `outsider-${fixture}@example.test`;
+      const outsiderCode = await deliverCode(outsiderEmail);
+      const outsiderLogin = await post('/api/auth/email/verify', {
+        email: outsiderEmail,
+        code: outsiderCode.code,
+        attempt: outsiderCode.attempt,
+      });
+      assert.equal(outsiderLogin.statusCode, 200);
+      const outsiderCookie = cookieFrom(
+        outsiderLogin.headers['set-cookie'],
+        'bw-session',
+      );
       const other = await company(separateCookie, 'Separate Fixture');
+      const viewerSession = await session(separateCookie);
+      await database.db.insert(members).values({
+        businessId: studio,
+        accountId: viewerSession.companyList.userId,
+        role: 'viewer',
+      });
       const media = mediaStore(
         database.db,
         creditLedger(
@@ -489,7 +599,7 @@ test(
           (
             await server.inject({
               url: `/api/companies/${studio}` + path,
-              headers: { cookie: separateCookie },
+              headers: { cookie: collaboratorCookie },
             })
           ).statusCode,
           404,
@@ -499,7 +609,7 @@ test(
         (
           await server.inject({
             url: `/api/companies/${studio}/pip/turns/${turn.id}/events`,
-            headers: { cookie: separateCookie },
+            headers: { cookie: collaboratorCookie },
           })
         ).statusCode,
         404,
@@ -527,7 +637,7 @@ test(
         new Set([draft.id, file.id, shopWork.id]),
       );
       assert.equal(results.at(-1)?.id, shopWork.id);
-      assert.deepEqual(await readSearch(separateCookie), []);
+      assert.deepEqual(await readSearch(collaboratorCookie), []);
 
       const withFiles = await agentStore(database.db).addTurn(
         studio,
@@ -565,7 +675,7 @@ test(
         (
           await server.inject({
             url: downloadPath,
-            headers: { cookie: separateCookie },
+            headers: { cookie: collaboratorCookie },
           })
         ).statusCode,
         404,
@@ -584,7 +694,7 @@ test(
         (
           await server.inject({
             url: fileSearch,
-            headers: { cookie: separateCookie },
+            headers: { cookie: collaboratorCookie },
           })
         ).statusCode,
         404,
@@ -626,7 +736,7 @@ test(
         (
           await server.inject({
             url: notifications,
-            headers: { cookie: separateCookie },
+            headers: { cookie: collaboratorCookie },
           })
         ).statusCode,
         404,
@@ -661,11 +771,33 @@ test(
         businessId: studio,
         kind: 'website',
         state: 'pending',
+        runtimeMode: 'app',
         title: 'Publish fixture',
         body: '<h1>First published home</h1>',
         pages: [
           { slug: 'about', title: 'About', html: '<h1>First about</h1>' },
         ],
+      });
+      await database.db
+        .update(websiteVersions)
+        .set({ runtimeMode: 'app' })
+        .where(eq(websiteVersions.artifactId, site.id));
+      const sourceFiles = [
+        {
+          path: 'src/App.tsx',
+          content: 'export default function App(){return <main>Fixture</main>}',
+        },
+      ];
+      await database.db.insert(generatedAppSourceRevisions).values({
+        siteId: site.id,
+        revision: site.revision,
+        sourceFiles,
+        sourceHash: generatedAppSourceHash(sourceFiles),
+        buildState: 'passed',
+        buildLog: 'Integration fixture for an already verified app build.',
+        previewDocument:
+          '<!doctype html><html><body><h1>First about</h1></body></html>',
+        builtAt: new Date(),
       });
       const work = `/api/companies/${studio}/work/${site.id}`;
       const host = site.id + '.sites.example.test';
@@ -697,6 +829,146 @@ test(
         ).statusCode,
         200,
       );
+      const appDashboard = work.replace(
+        '/work/' + site.id,
+        '/work/apps/' + site.id,
+      );
+      const appCollections = await server.inject({
+        url: appDashboard + '/collections',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(appCollections.statusCode, 200);
+      assert.ok(
+        appCollections
+          .json()
+          .collections.some((row: { name: string }) => row.name === 'records'),
+      );
+      const appRecord = await server.inject({
+        method: 'PUT',
+        url: appDashboard + '/records?collection=records',
+        headers: { ...headers, cookie: freshCookie },
+        payload: { title: 'Dashboard route check' },
+      });
+      assert.equal(appRecord.statusCode, 200);
+      const recordId = appRecord.json().record.id as string;
+      const listedAppRecords = await server.inject({
+        url: appDashboard + '/records?collection=records',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(listedAppRecords.statusCode, 200);
+      assert.ok(
+        listedAppRecords
+          .json()
+          .records.some((row: { id: string }) => row.id === recordId),
+      );
+      const removedAppRecord = await server.inject({
+        method: 'DELETE',
+        url: appDashboard + '/records/' + recordId + '?collection=records',
+        headers: { ...headers, cookie: freshCookie },
+      });
+      assert.equal(removedAppRecord.statusCode, 200);
+      const appUsers = await server.inject({
+        url: appDashboard + '/users',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(appUsers.statusCode, 200);
+      assert.deepEqual(appUsers.json().invitations, []);
+      const invitedEmail = `app-invite-${fixture}@example.test`;
+      const inviteResponse = await server.inject({
+        method: 'POST',
+        url: appDashboard + '/users/invitations',
+        headers: { ...headers, cookie: freshCookie },
+        payload: { email: invitedEmail, role: 'admin' },
+      });
+      assert.equal(inviteResponse.statusCode, 201, inviteResponse.body);
+      const viewerInviteResponse = await server.inject({
+        method: 'POST',
+        url: appDashboard + '/users/invitations',
+        headers: { ...headers, cookie: separateCookie },
+        payload: {
+          email: `viewer-invite-${fixture}@example.test`,
+          role: 'user',
+        },
+      });
+      assert.equal(viewerInviteResponse.statusCode, 403);
+      const inviteSearch = new URL('/api/v1/search', TEST_MAILPIT_URL);
+      inviteSearch.searchParams.set('query', 'to:' + invitedEmail);
+      const inviteSearchResponse = await fetch(inviteSearch);
+      assert.equal(inviteSearchResponse.status, 200);
+      const { messages: inviteMessages } =
+        (await inviteSearchResponse.json()) as {
+          messages: { ID: string }[];
+        };
+      assert.ok(inviteMessages[0]);
+      const inviteMessageResponse = await fetch(
+        new URL('/api/v1/message/' + inviteMessages[0].ID, TEST_MAILPIT_URL),
+      );
+      assert.equal(inviteMessageResponse.status, 200);
+      const { Text: inviteText } = (await inviteMessageResponse.json()) as {
+        Text: string;
+      };
+      const invitedCode = inviteText.match(
+        /sign-in code for .+ is (\d{6})/iu,
+      )?.[1];
+      const inviteChallenge = inviteText.match(
+        /[?&]challenge=([\da-f-]{36})/iu,
+      )?.[1];
+      assert.ok(
+        invitedCode && inviteChallenge,
+        'invitation email includes a usable code and challenge link',
+      );
+      const invitedLogin = await server.inject({
+        method: 'POST',
+        url: '/__foundable/auth/verify',
+        headers: { host, origin: `http://${host}` },
+        payload: { challenge: inviteChallenge, code: invitedCode },
+      });
+      assert.equal(invitedLogin.statusCode, 200, invitedLogin.body);
+      assert.equal(invitedLogin.json().user.email, invitedEmail);
+      assert.equal(invitedLogin.json().user.role, 'admin');
+      const appUsersAfterInvite = await server.inject({
+        url: appDashboard + '/users',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(appUsersAfterInvite.statusCode, 200);
+      assert.equal(appUsersAfterInvite.json().invitations.length, 0);
+      const appActivity = await server.inject({
+        url: appDashboard + '/activity',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(appActivity.statusCode, 200);
+      assert.ok(
+        appActivity
+          .json()
+          .activity.some(
+            (event: { action: string }) => event.action === 'record.created',
+          ),
+      );
+      assert.ok(
+        appActivity
+          .json()
+          .activity.some(
+            (event: { action: string }) => event.action === 'record.deleted',
+          ),
+      );
+      const appAnalytics = await server.inject({
+        url: appDashboard + '/analytics',
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(appAnalytics.statusCode, 200);
+      assert.equal(typeof appAnalytics.json().analytics.recordCount, 'number');
+      const staticSite = await agentStore(database.db).saveArtifact({
+        businessId: studio,
+        kind: 'website',
+        state: 'pending',
+        title: 'Static fixture',
+        body: '<h1>Static</h1>',
+      });
+      const staticAppAPI = await server.inject({
+        url: `/api/companies/${studio}/work/apps/${staticSite.id}/collections`,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(staticAppAPI.statusCode, 404);
       const live = await visit('/about');
       assert.equal(live.statusCode, 200);
       assert.match(live.body, /First about/);
@@ -759,10 +1031,10 @@ test(
         (
           await server.inject({
             url: reportUrl,
-            headers: { cookie: separateCookie },
+            headers: { cookie: collaboratorCookie },
           })
         ).statusCode,
-        404,
+        200,
       );
 
       const deployments = async () => {
@@ -822,7 +1094,7 @@ test(
         assert.deepEqual(detail.json().change, change);
         assert.ok(!detail.body.includes('First about'));
         assert.equal((await get(work + '/review?revision=1')).statusCode, 404);
-        assert.equal((await get(previewPath, separateCookie)).statusCode, 404);
+        assert.equal((await get(previewPath, separateCookie)).statusCode, 200);
         assert.equal(
           (
             await get(
@@ -830,7 +1102,7 @@ test(
               separateCookie,
             )
           ).statusCode,
-          404,
+          200,
         );
       }
 
@@ -863,6 +1135,27 @@ test(
             freshCookie,
           )
         ).statusCode,
+        409,
+      );
+      await database.db.insert(generatedAppSourceRevisions).values({
+        siteId: site.id,
+        revision: 2,
+        sourceFiles,
+        sourceHash: generatedAppSourceHash(sourceFiles),
+        buildState: 'passed',
+        buildLog: 'Integration fixture for the rebuilt app revision.',
+        previewDocument:
+          '<!doctype html><html><body><h1>Second about</h1></body></html>',
+        builtAt: new Date(),
+      });
+      assert.equal(
+        (
+          await post(
+            work + '/publish',
+            { publish: true, revision: 2 },
+            freshCookie,
+          )
+        ).statusCode,
         200,
       );
       assert.match((await visit('/about')).body, /Second about/);
@@ -880,6 +1173,16 @@ test(
         ).statusCode,
         403,
       );
+      const githubReconnect = await post(
+        `/api/companies/${studio}/settings/github`,
+        {
+          token: 'fixture-github-token',
+          repo: 'example/private-apps',
+          branch: 'main',
+        },
+        freshCookie,
+      );
+      assert.equal(githubReconnect.statusCode, 200, githubReconnect.body);
       const attempts = await Promise.all([
         post(rollbackPath, { expectedLive: current.id }, freshCookie),
         post(rollbackPath, { expectedLive: current.id }, freshCookie),
@@ -887,6 +1190,24 @@ test(
       assert.deepEqual(
         attempts.map((result) => result.statusCode).sort(),
         [200, 409],
+      );
+      const restoredResponse = attempts.find(
+        (result) => result.statusCode === 200,
+      );
+      assert.deepEqual(restoredResponse?.json().github, {
+        url: 'https://github.com/example/private-apps/commit/' + 'e'.repeat(40),
+        changed: true,
+      });
+      assert.equal(githubTreeCreates, 2);
+      assert.equal(
+        (
+          await server.inject({
+            method: 'DELETE',
+            url: `/api/companies/${studio}/settings/github`,
+            headers: { ...headers, cookie: freshCookie },
+          })
+        ).statusCode,
+        200,
       );
       assert.match((await visit('/about')).body, /First about/);
       const [restored] = await deployments();
@@ -1015,7 +1336,7 @@ test(
           titles.find(({ id }) => id === withFiles.id),
         );
         assert.equal(
-          (await browse('/' + withFiles.id + '/title', separateCookie))
+          (await browse('/' + withFiles.id + '/title', outsiderCookie))
             .statusCode,
           404,
         );
@@ -1041,7 +1362,7 @@ test(
           304,
         );
         assert.equal(
-          (await readQueue(run.id, separateCookie, queueTag)).statusCode,
+          (await readQueue(run.id, outsiderCookie, queueTag)).statusCode,
           404,
         );
         const missing = await readQueue(randomUUID(), freshCookie);
@@ -1081,7 +1402,7 @@ test(
       assert.equal(typeof tag, 'string');
       if (typeof tag !== 'string') throw new Error('Expected an ETag.');
       assert.equal((await readHistory(freshCookie, tag)).statusCode, 304);
-      assert.equal((await readHistory(separateCookie, tag)).statusCode, 404);
+      assert.equal((await readHistory(outsiderCookie, tag)).statusCode, 404);
       await database.db
         .update(agentTurns)
         .set({ answer: 'Updated fixture history' })
@@ -1106,7 +1427,7 @@ test(
         for (const [url, cookie] of [
           [streamPath(previousRun.id, runTurn.turnId), freshCookie],
           [streamPath(run.id, withFiles.id), freshCookie],
-          [streamPath(run.id, runTurn.turnId), separateCookie],
+          [streamPath(run.id, runTurn.turnId), outsiderCookie],
         ]) {
           assert.equal(
             (await server.inject({ url, headers: { cookie } })).statusCode,
@@ -1171,7 +1492,7 @@ test(
         'tasks',
         'session',
       ] as const)
-        assert.equal((await readRun(view, separateCookie)).statusCode, 404);
+        assert.equal((await readRun(view, outsiderCookie)).statusCode, 404);
 
       {
         const get = (route: string, cookie = freshCookie) =>
@@ -1259,11 +1580,11 @@ test(
         assert.equal(historyRows[1].parentVersionId, firstId);
         assert.equal(historyRows[2].parentVersionId, null);
         assert.equal(
-          (await get('/creations/' + website.id, separateCookie)).statusCode,
+          (await get('/creations/' + website.id, outsiderCookie)).statusCode,
           404,
         );
         assert.equal(
-          (await get('/creations/' + website.id + '/versions', separateCookie))
+          (await get('/creations/' + website.id + '/versions', outsiderCookie))
             .statusCode,
           404,
         );
@@ -1316,7 +1637,7 @@ test(
           (await get(detail)).json().run.result.versionId,
           completedBuild.result.versionId,
         );
-        assert.equal((await get(detail, separateCookie)).statusCode, 404);
+        assert.equal((await get(detail, outsiderCookie)).statusCode, 404);
         const historyTag = buildHistory.headers.etag;
         assert.ok(typeof historyTag === 'string');
         const conditional = await server.inject({
@@ -1367,16 +1688,16 @@ test(
           '/social/posts',
           '/build/website-waits',
         ])
-          assert.equal((await get(route, separateCookie)).statusCode, 404);
+          assert.equal((await get(route, outsiderCookie)).statusCode, 404);
       }
 
       const settings = `/api/companies/${studio}/settings`;
-      const outsider = await session(separateCookie);
+      const inviteeSession = await session(outsiderCookie);
       assert.equal(
         (
           await post(
             settings + '/team/invitations',
-            { email: outsider.session.email, role: 'member' },
+            { email: inviteeSession.session.email, role: 'member' },
             collaboratorCookie,
           )
         ).statusCode,
@@ -1384,7 +1705,7 @@ test(
       );
       const invitation = await post(
         settings + '/team/invitations',
-        { email: outsider.session.email, role: 'member' },
+        { email: inviteeSession.session.email, role: 'member' },
         freshCookie,
       );
       assert.equal(invitation.statusCode, 201);
@@ -1395,15 +1716,15 @@ test(
         404,
       );
       const accepted = await Promise.all([
-        post(accept, {}, separateCookie),
-        post(accept, {}, separateCookie),
+        post(accept, {}, outsiderCookie),
+        post(accept, {}, outsiderCookie),
       ]);
       assert.deepEqual(
         accepted.map((answer) => answer.statusCode).sort(),
         [200, 404],
       );
       assert.equal(
-        (await session(separateCookie)).companyList.lastOpened,
+        (await session(outsiderCookie)).companyList.lastOpened,
         studio,
       );
       const changeRole = (actor: string, id: string, role: string) =>
@@ -1414,8 +1735,13 @@ test(
           payload: { role },
         });
       assert.equal(
-        (await changeRole(freshCookie, outsider.companyList.userId, 'admin'))
-          .statusCode,
+        (
+          await changeRole(
+            freshCookie,
+            inviteeSession.companyList.userId,
+            'admin',
+          )
+        ).statusCode,
         200,
       );
       assert.equal(
@@ -1431,7 +1757,7 @@ test(
             separateCookie,
           )
         ).statusCode,
-        409,
+        403,
       );
 
       const value = 'synthetic-vault-' + fixture;
@@ -1482,6 +1808,76 @@ test(
       assert.equal(
         (await post(reveal, {}, freshCookie)).json<{ value: string }>().value,
         value,
+      );
+      const githubSettings = settings + '/github';
+      assert.deepEqual(
+        (
+          await server.inject({
+            url: githubSettings,
+            headers: { cookie: freshCookie },
+          })
+        ).json(),
+        {
+          available: true,
+          configured: false,
+          repo: '',
+          branch: 'main',
+        },
+      );
+      assert.equal(
+        (
+          await post(
+            githubSettings,
+            {
+              token: 'fixture-github-token',
+              repo: 'example/private-apps',
+              branch: 'main',
+            },
+            collaboratorCookie,
+          )
+        ).statusCode,
+        403,
+      );
+      const githubConnect = await post(
+        githubSettings,
+        {
+          token: 'fixture-github-token',
+          repo: 'example/private-apps',
+          branch: 'main',
+        },
+        freshCookie,
+      );
+      assert.equal(githubConnect.statusCode, 200, githubConnect.body);
+      const githubConnection = await server.inject({
+        url: githubSettings,
+        headers: { cookie: freshCookie },
+      });
+      assert.equal(githubConnection.statusCode, 200);
+      assert.deepEqual(githubConnection.json(), {
+        available: true,
+        configured: true,
+        repo: 'example/private-apps',
+        branch: 'main',
+      });
+      assert.ok(!githubConnection.body.includes('fixture-github-token'));
+      assert.equal(
+        (
+          await server.inject({
+            method: 'DELETE',
+            url: githubSettings,
+            headers: { ...headers, cookie: freshCookie },
+          })
+        ).statusCode,
+        200,
+      );
+      assert.equal(
+        (
+          await server.inject({
+            url: githubSettings,
+            headers: { cookie: freshCookie },
+          })
+        ).json<{ configured: boolean }>().configured,
+        false,
       );
       const smsSettings = settings + '/sms';
       const smsInbox = `/api/companies/${studio}/work/sms`;

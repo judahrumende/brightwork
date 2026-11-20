@@ -7,150 +7,178 @@ const optionalValue = z.preprocess(
   z.string().optional(),
 );
 
-export const authEnv = z.object({
-  APP_ORIGIN: z.url({ protocol: /^https?$/u }).default('http://127.0.0.1:5173'),
-  SITE_BASE_DOMAIN: optionalValue,
-  STRIPE_TEST_KEY: optionalValue.pipe(
-    z
-      .string()
-      .regex(/^(?:sk|rk)_test_[A-Za-z0-9_]+$/u)
-      .optional(),
-  ),
-  STRIPE_LIVE_KEY: optionalValue.pipe(
-    z
-      .string()
-      .regex(/^(?:sk|rk)_live_[A-Za-z0-9_]+$/u)
-      .optional(),
-  ),
-  STRIPE_CONNECT_WEBHOOK_SECRET: optionalValue.pipe(
-    z.string().startsWith('whsec_').optional(),
-  ),
-  STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: optionalValue.pipe(
-    z.string().startsWith('whsec_').optional(),
-  ),
-  STRIPE_WEBHOOK_SECRET: optionalValue.pipe(
-    z.string().startsWith('whsec_').optional(),
-  ),
-  STRIPE_TEST_PRICE: optionalValue.pipe(
-    z
-      .string()
-      .regex(/^price_[A-Za-z0-9_]+$/u)
-      .optional(),
-  ),
-  STRIPE_RENEWAL_CREDITS: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z
-      .string()
-      .regex(/^\d{1,14}(?:\.\d{1,10})?$/u)
-      .default('0'),
-  ),
-  STRIPE_REFERRAL_CREDITS: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z
-      .string()
-      .regex(/^\d{1,14}(?:\.\d{1,10})?$/u)
-      .default('0'),
-  ),
-  GITHUB_SITE_WORKSPACE_ID: optionalValue.pipe(z.uuid().optional()),
-  GITHUB_SITE_REPO: optionalValue.pipe(
-    z
-      .string()
-      .regex(/^[a-z0-9][a-z0-9-]*\/(?!\.{1,2}$)[a-z0-9_.-]{1,100}$/iu)
-      .optional(),
-  ),
-  GITHUB_SITE_BRANCH: optionalValue.pipe(
-    z
-      .string()
-      .regex(/^[a-z0-9_][a-z0-9_.-]*(?:\/[a-z0-9_][a-z0-9_.-]*)*$/iu)
-      .max(160)
-      .optional(),
-  ),
-  GITHUB_SITE_TOKEN: optionalValue,
-  AUTH_SECRET: optionalValue.pipe(z.string().min(32).optional()),
-  SMS_ENABLED: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
-  SHOPIFY_ENABLED: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
-  VAULT_KEY: optionalValue.pipe(
-    z
-      .string()
-      .regex(/^[a-f0-9]{64}$/iu)
-      .optional(),
-  ),
-  DATABASE_URL: optionalValue,
-  REDIS_URL: optionalValue,
-  SEARXNG_BASE_URL: optionalValue.pipe(
-    z
-      .string()
-      .refine((value) => {
-        try {
-          searxngEndpoint(value);
-          return true;
-        } catch {
-          return false;
-        }
-      }, 'Invalid SearXNG base URL')
-      .optional(),
-  ),
-  LLM_API_KEY: optionalValue,
-  LLM_MODEL: optionalValue,
-  LLM_BASE_URL: optionalValue.pipe(z.url().optional()),
-  RESEARCH_MODEL_TIMEOUT_SECONDS: z.coerce
-    .number()
-    .int()
-    .min(10)
-    .max(45)
-    .default(10),
-  GROWTH_WORKSPACE_ID: optionalValue.pipe(z.uuid().optional()),
-  GROWTH_META_PAGE_ID: optionalValue.pipe(
-    z.string().regex(/^\d+$/u).optional(),
-  ),
-  GROWTH_META_PAGE_TOKEN: optionalValue,
-  GROWTH_META_APP_SECRET: optionalValue.pipe(
-    z.string().min(16).max(4096).optional(),
-  ),
-  GROWTH_META_VERIFY_TOKEN: optionalValue.pipe(
-    z.string().min(16).max(4096).optional(),
-  ),
-  GROWTH_META_AD_ACCOUNT_ID: optionalValue.pipe(
-    z.string().regex(/^\d+$/u).optional(),
-  ),
-  GROWTH_META_AD_TOKEN: optionalValue,
-  GROWTH_GOOGLE_LOCATION_ID: optionalValue.pipe(
-    z.string().regex(/^\d+$/u).optional(),
-  ),
-  GROWTH_GOOGLE_ACCESS_TOKEN: optionalValue,
-  TURNSTILE_SITE_KEY: optionalValue,
-  TURNSTILE_SECRET_KEY: optionalValue,
-  WORKOS_CLIENT_ID: optionalValue,
-  WORKOS_API_KEY: optionalValue,
-  GOOGLE_CLIENT_ID: optionalValue,
-  SMTP_HOST: optionalValue,
-  SMTP_PORT: z.coerce.number().int().positive().default(1025),
-  SMTP_USER: optionalValue,
-  SMTP_PASSWORD: optionalValue,
-  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
-  MAIL_FROM: optionalValue,
-  OUTREACH_RESEND_WEBHOOK_SECRET: optionalValue.pipe(
-    z.string().regex(inboundSecret).optional(),
-  ),
-  OUTREACH_RESEND_API_KEY: optionalValue,
-  OUTREACH_FROM_EMAIL: optionalValue.pipe(z.email().optional()),
-  INBOUND_EMAIL_DOMAIN: optionalValue.pipe(
-    z
-      .string()
-      .toLowerCase()
-      .max(253)
-      .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u)
-      .optional(),
-  ),
-  INBOUND_RESEND_API_KEY: optionalValue,
-  INBOUND_RESEND_WEBHOOK_SECRET: optionalValue.pipe(
-    z.string().min(28).regex(inboundSecret).optional(),
-  ),
-});
+export const authEnv = z
+  .object({
+    APP_ORIGIN: z
+      .url({ protocol: /^https?$/u })
+      .default('http://127.0.0.1:5173'),
+    SITE_BASE_DOMAIN: optionalValue,
+    STRIPE_TEST_KEY: optionalValue.pipe(
+      z
+        .string()
+        .regex(/^(?:sk|rk)_test_[A-Za-z0-9_]+$/u)
+        .optional(),
+    ),
+    STRIPE_LIVE_KEY: optionalValue.pipe(
+      z
+        .string()
+        .regex(/^(?:sk|rk)_live_[A-Za-z0-9_]+$/u)
+        .optional(),
+    ),
+    // Keep production seller charges disabled until live payment separation has
+    // passed an end-to-end release check. Credentials alone must not activate it.
+    STRIPE_LIVE_CHECKOUT_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    STRIPE_CONNECT_WEBHOOK_SECRET: optionalValue.pipe(
+      z.string().startsWith('whsec_').optional(),
+    ),
+    STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: optionalValue.pipe(
+      z.string().startsWith('whsec_').optional(),
+    ),
+    STRIPE_WEBHOOK_SECRET: optionalValue.pipe(
+      z.string().startsWith('whsec_').optional(),
+    ),
+    STRIPE_TEST_PRICE: optionalValue.pipe(
+      z
+        .string()
+        .regex(/^price_[A-Za-z0-9_]+$/u)
+        .optional(),
+    ),
+    STRIPE_RENEWAL_CREDITS: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z
+        .string()
+        .regex(/^\d{1,14}(?:\.\d{1,10})?$/u)
+        .default('0'),
+    ),
+    STRIPE_REFERRAL_CREDITS: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z
+        .string()
+        .regex(/^\d{1,14}(?:\.\d{1,10})?$/u)
+        .default('0'),
+    ),
+    GITHUB_SITE_WORKSPACE_ID: optionalValue.pipe(z.uuid().optional()),
+    GITHUB_SITE_REPO: optionalValue.pipe(
+      z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*\/(?!\.{1,2}$)[a-z0-9_.-]{1,100}$/iu)
+        .optional(),
+    ),
+    GITHUB_SITE_BRANCH: optionalValue.pipe(
+      z
+        .string()
+        .regex(/^[a-z0-9_][a-z0-9_.-]*(?:\/[a-z0-9_][a-z0-9_.-]*)*$/iu)
+        .max(160)
+        .optional(),
+    ),
+    GITHUB_SITE_TOKEN: optionalValue,
+    AUTH_SECRET: optionalValue.pipe(z.string().min(32).optional()),
+    SMS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    SHOPIFY_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    VAULT_KEY: optionalValue.pipe(
+      z
+        .string()
+        .regex(/^[a-f0-9]{64}$/iu)
+        .optional(),
+    ),
+    DATABASE_URL: optionalValue,
+    REDIS_URL: optionalValue,
+    SEARXNG_BASE_URL: optionalValue.pipe(
+      z
+        .string()
+        .refine((value) => {
+          try {
+            searxngEndpoint(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'Invalid SearXNG base URL')
+        .optional(),
+    ),
+    LLM_API_KEY: optionalValue,
+    LLM_MODEL: optionalValue,
+    LLM_BASE_URL: optionalValue.pipe(z.url().optional()),
+    LLM_API_STYLE: z.enum(['openai', 'ollama']).default('openai'),
+    RESEARCH_MODEL_TIMEOUT_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(10)
+      .max(45)
+      .default(10),
+    GROWTH_WORKSPACE_ID: optionalValue.pipe(z.uuid().optional()),
+    GROWTH_META_PAGE_ID: optionalValue.pipe(
+      z.string().regex(/^\d+$/u).optional(),
+    ),
+    GROWTH_META_PAGE_TOKEN: optionalValue,
+    GROWTH_META_APP_SECRET: optionalValue.pipe(
+      z.string().min(16).max(4096).optional(),
+    ),
+    GROWTH_META_VERIFY_TOKEN: optionalValue.pipe(
+      z.string().min(16).max(4096).optional(),
+    ),
+    GROWTH_META_AD_ACCOUNT_ID: optionalValue.pipe(
+      z.string().regex(/^\d+$/u).optional(),
+    ),
+    GROWTH_META_AD_TOKEN: optionalValue,
+    GROWTH_GOOGLE_LOCATION_ID: optionalValue.pipe(
+      z.string().regex(/^\d+$/u).optional(),
+    ),
+    GROWTH_GOOGLE_ACCESS_TOKEN: optionalValue,
+    TURNSTILE_SITE_KEY: optionalValue,
+    TURNSTILE_SECRET_KEY: optionalValue,
+    WORKOS_CLIENT_ID: optionalValue,
+    WORKOS_API_KEY: optionalValue,
+    GOOGLE_CLIENT_ID: optionalValue,
+    SMTP_HOST: optionalValue,
+    SMTP_PORT: z.coerce.number().int().positive().default(1025),
+    SMTP_USER: optionalValue,
+    SMTP_PASSWORD: optionalValue,
+    SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+    AUTH_RESEND_API_KEY: optionalValue,
+    MAIL_FROM: optionalValue,
+    OUTREACH_RESEND_WEBHOOK_SECRET: optionalValue.pipe(
+      z.string().regex(inboundSecret).optional(),
+    ),
+    OUTREACH_RESEND_API_KEY: optionalValue,
+    OUTREACH_FROM_EMAIL: optionalValue.pipe(z.email().optional()),
+    INBOUND_EMAIL_DOMAIN: optionalValue.pipe(
+      z
+        .string()
+        .toLowerCase()
+        .max(253)
+        .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u)
+        .optional(),
+    ),
+    INBOUND_RESEND_API_KEY: optionalValue,
+    INBOUND_RESEND_WEBHOOK_SECRET: optionalValue.pipe(
+      z.string().min(28).regex(inboundSecret).optional(),
+    ),
+  })
+  .superRefine((env, context) => {
+    if (
+      env.STRIPE_LIVE_CHECKOUT_ENABLED &&
+      (!env.STRIPE_TEST_KEY ||
+        !env.STRIPE_CONNECT_WEBHOOK_SECRET ||
+        !env.STRIPE_LIVE_KEY ||
+        !env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET ||
+        env.STRIPE_CONNECT_WEBHOOK_SECRET ===
+          env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['STRIPE_LIVE_CHECKOUT_ENABLED'],
+        message:
+          'Live seller checkout requires distinct test and live Stripe keys and Connect webhook secrets.',
+      });
+  });
 export type AuthEnv = z.infer<typeof authEnv>;

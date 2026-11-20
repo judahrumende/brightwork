@@ -4,6 +4,7 @@ import type { WebsitePage } from '@brightwork/shared';
 import {
   boolean,
   check,
+  customType,
   date as pgDate,
   index,
   uniqueIndex,
@@ -20,6 +21,7 @@ import {
 
 const date = (name: string) =>
   timestamp(name, { withTimezone: true, mode: 'date' });
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 
 export const accounts = pgTable('accounts', {
   id: uuid().primaryKey().defaultRandom(),
@@ -342,6 +344,12 @@ export const websiteVersions = pgTable(
     title: text().notNull(),
     document: text().notNull(),
     pages: jsonb().$type<WebsitePage[]>().notNull().default([]),
+    turnId: uuid('turn_id').references(() => agentTurns.id, {
+      onDelete: 'set null',
+    }),
+    runtimeMode: text('runtime_mode', { enum: ['static', 'store', 'app'] })
+      .notNull()
+      .default('static'),
     savedAt: date('saved_at').defaultNow().notNull(),
     bookmarked: boolean().default(false).notNull(),
     revertedFromId: uuid('reverted_from_id').references(
@@ -351,6 +359,116 @@ export const websiteVersions = pgTable(
   },
   (t) => [
     uniqueIndex('website_artifact_revision').on(t.artifactId, t.revision),
+  ],
+);
+
+export const generatedAppSourceRevisions = pgTable(
+  'generated_app_source_revisions',
+  {
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => artifacts.id, { onDelete: 'cascade' }),
+    revision: integer().notNull(),
+    baseRevision: integer('base_revision'),
+    sourceFiles: jsonb('source_files')
+      .$type<{ path: string; content: string }[]>()
+      .notNull(),
+    sourceHash: text('source_hash').notNull(),
+    buildState: text('build_state', {
+      enum: ['unverified', 'queued', 'building', 'passed', 'failed'],
+    })
+      .notNull()
+      .default('unverified'),
+    buildAttempts: integer('build_attempts').notNull().default(0),
+    buildLog: text('build_log').notNull().default(''),
+    buildLeaseUntil: date('build_lease_until'),
+    previewDocument: text('preview_document'),
+    previewUrl: text('preview_url'),
+    createdAt: date('created_at').defaultNow().notNull(),
+    builtAt: date('built_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.siteId, t.revision] }),
+    check('generated_app_source_revision_positive', sql`${t.revision} > 0`),
+    check(
+      'generated_app_source_base_revision_valid',
+      sql`${t.baseRevision} is null or ${t.baseRevision} > 0`,
+    ),
+    index('generated_app_source_build_queue').on(t.buildState, t.createdAt),
+  ],
+);
+
+export const generatedAppFiles = pgTable(
+  'generated_app_files',
+  {
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => artifacts.id, { onDelete: 'cascade' }),
+    environment: text({ enum: ['live', 'preview'] }).notNull(),
+    dataRevision: integer('data_revision').notNull(),
+    id: uuid().defaultRandom().notNull(),
+    ownerEmail: text('owner_email').notNull(),
+    name: text().notNull(),
+    mime: text().notNull(),
+    bytes: bytea().notNull(),
+    createdAt: date('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.siteId, t.environment, t.dataRevision, t.id] }),
+    index('generated_app_files_owner_created').on(
+      t.siteId,
+      t.environment,
+      t.dataRevision,
+      t.ownerEmail,
+      t.createdAt,
+    ),
+    check(
+      'generated_app_files_environment_revision_check',
+      sql`(${t.environment} = 'live' and ${t.dataRevision} = 0) or (${t.environment} = 'preview' and ${t.dataRevision} > 0)`,
+    ),
+    check(
+      'generated_app_files_bytes_check',
+      sql`octet_length(${t.bytes}) <= 1048576`,
+    ),
+  ],
+);
+
+export const generatedAppJobs = pgTable(
+  'generated_app_jobs',
+  {
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => artifacts.id, { onDelete: 'cascade' }),
+    environment: text({ enum: ['live', 'preview'] }).notNull(),
+    dataRevision: integer('data_revision').notNull(),
+    schemaRevision: integer('schema_revision').notNull(),
+    id: uuid().notNull(),
+    actorId: uuid('actor_id').notNull(),
+    actorEmail: text('actor_email').notNull(),
+    collection: text().notNull(),
+    recordId: uuid('record_id').notNull(),
+    action: text().notNull(),
+    runAt: date('run_at').notNull(),
+    state: text({
+      enum: ['queued', 'running', 'succeeded', 'failed', 'cancelled'],
+    })
+      .notNull()
+      .default('queued'),
+    attempts: integer().notNull().default(0),
+    lease: uuid(),
+    leaseUntil: date('lease_until'),
+    lastError: text('last_error').notNull().default(''),
+    createdAt: date('created_at').defaultNow().notNull(),
+    completedAt: date('completed_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.siteId, t.environment, t.dataRevision, t.id] }),
+    index('generated_app_jobs_due').on(t.state, t.runAt),
+    index('generated_app_jobs_lease').on(t.leaseUntil),
+    check(
+      'generated_app_jobs_environment_revision_check',
+      sql`(${t.environment} = 'live' and ${t.dataRevision} = 0) or (${t.environment} = 'preview' and ${t.dataRevision} > 0)`,
+    ),
   ],
 );
 
@@ -549,6 +667,9 @@ export const publications = pgTable(
       .references(() => artifacts.id, { onDelete: 'cascade' }),
     document: text().notNull(),
     pages: jsonb().$type<WebsitePage[]>().notNull().default([]),
+    runtimeMode: text('runtime_mode', { enum: ['static', 'store', 'app'] })
+      .notNull()
+      .default('static'),
     draftRevision: integer('draft_revision').notNull().default(1),
     rollbackSourceId: uuid('rollback_source_id'),
     publishedAt: date('published_at').defaultNow().notNull(),
@@ -611,6 +732,7 @@ export const creditEntries = pgTable(
         'image',
         'video',
         'voice',
+        'storage',
       ],
     }).notNull(),
     amount: numeric({ precision: 24, scale: 10 }).notNull(),

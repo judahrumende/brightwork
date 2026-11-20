@@ -30,7 +30,7 @@ function PublicSale() {
         <>
           <h1>{sale.data.title}</h1>
           <p>{salePrice(sale.data.amount, sale.data.currency)}</p>
-          <p>Stripe test payment</p>
+          <p>Stripe {sale.data.mode} payment</p>
           {sale.data.paidAt ? (
             <p>Payment received</p>
           ) : (

@@ -1,8 +1,15 @@
 import { storeBuyers } from '../workspace/store-buyers';
-import { creditConfig, creditLedger } from '../workspace/credits';
+import { creditLedger, parseCreditConfig } from '../workspace/credits';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Redis from 'ioredis';
 import { agentStore } from '../workspace/agent-store';
+import {
+  GeneratedAppRecordQuotaExceeded,
+  generatedAppRecords,
+} from '../workspace/generated-app-records';
+import { generatedAppUsers } from '../workspace/generated-app-users';
+import { generatedAppStorage } from '../workspace/generated-app-storage';
+import { generatedAppJobs } from '../workspace/generated-app-jobs';
 import { mediaEnv, mediaRates } from '../workspace/media-providers';
 import { mediaStore } from '../workspace/media-store';
 import { commerceInsights } from '../workspace/commerce-insights';
@@ -24,6 +31,7 @@ import { ResearchFailure, researchAnswer } from '../research/answer';
 import { pageReader, publicPageUrl } from '../research/page';
 import { siteHosting } from '../workspace/publication';
 import { githubSiteSync } from '../workspace/github-site-sync';
+import { githubSiteSettings } from '../workspace/github-site-settings';
 import { teamStore } from '../workspace/team';
 import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
@@ -147,7 +155,7 @@ export function registerAuth(
   env: AuthEnv,
   providerRequest?: typeof fetch,
 ) {
-  const creditSettings = creditConfig.parse(process.env);
+  const creditSettings = parseCreditConfig(process.env);
   app.get('/api/landing-test', async () => ({ arm: 'control' }));
   registerPublicPlans(
     app,
@@ -195,17 +203,21 @@ export function registerAuth(
   };
   const authError = (failure: unknown, reply: FastifyReply) => {
     const status =
-      failure instanceof AuthFailure
-        ? failure.statusCode
-        : failure instanceof z.ZodError
-          ? 400
-          : 503;
+      failure instanceof GeneratedAppRecordQuotaExceeded
+        ? 429
+        : failure instanceof AuthFailure
+          ? failure.statusCode
+          : failure instanceof z.ZodError
+            ? 400
+            : 503;
     const message =
-      failure instanceof AuthFailure
+      failure instanceof GeneratedAppRecordQuotaExceeded
         ? failure.message
-        : status === 400
-          ? 'Check the information you entered.'
-          : 'This service is temporarily unavailable. Try again shortly.';
+        : failure instanceof AuthFailure
+          ? failure.message
+          : status === 400
+            ? 'Check the information you entered.'
+            : 'This service is temporarily unavailable. Try again shortly.';
     return reply.code(status).send({ message });
   };
 
@@ -283,6 +295,17 @@ export function registerAuth(
   });
 
   const workspace = agentStore(database.db);
+  const appRecords = generatedAppRecords(
+    database.db,
+    creditSettings.APP_STORAGE_CREDITS_PER_MIB,
+  );
+  const appUsers = generatedAppUsers(database.db, secret);
+  const appStorage = generatedAppStorage(
+    database.db,
+    credits,
+    creditSettings.APP_STORAGE_CREDITS_PER_MIB,
+  );
+  const appJobs = generatedAppJobs(database.db);
   const team = teamStore(database.db);
   const commerce =
     env.VAULT_KEY && env.SHOPIFY_ENABLED
@@ -313,7 +336,9 @@ export function registerAuth(
                   },
                 }
               : {}),
-            ...(env.STRIPE_LIVE_KEY && env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET
+            ...(env.STRIPE_LIVE_CHECKOUT_ENABLED &&
+            env.STRIPE_LIVE_KEY &&
+            env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET
               ? {
                   live: {
                     key: env.STRIPE_LIVE_KEY,
@@ -347,6 +372,13 @@ export function registerAuth(
         }
       : undefined,
     sellerPayments,
+    appRecords,
+    appUsers,
+    auth.sendAppUserCode,
+    appStorage,
+    appJobs,
+    undefined,
+    secret,
   );
   billing?.register(app);
   sellerPayments?.register(app);
@@ -407,6 +439,7 @@ export function registerAuth(
               key: env.LLM_API_KEY,
               model: env.LLM_MODEL,
               baseUrl: llmBase,
+              apiStyle: env.LLM_API_STYLE,
             }),
           }),
         }
@@ -460,8 +493,22 @@ export function registerAuth(
   sms?.register(app);
   if (env.OUTREACH_RESEND_WEBHOOK_SECRET)
     registerEmailDelivery(app, database.db, env.OUTREACH_RESEND_WEBHOOK_SECRET);
+  const credentialVault = env.VAULT_KEY
+    ? vaultStore(database.db, env.VAULT_KEY)
+    : undefined;
+  const githubSite = githubSiteSettings(credentialVault, providerRequest);
   registerWorkspace(app, {
     store: workspace,
+    appRecords,
+    appUsers,
+    appStorage,
+    appJobs,
+    appFunctionSecret: secret,
+    appFunctionCapabilityUrl:
+      new URL(origin).protocol === 'https:'
+        ? new URL('/__foundable/function-capabilities', origin).toString()
+        : '',
+    sendAppUserCode: auth.sendAppUserCode,
     team,
     commerce,
     sellerPayments,
@@ -469,7 +516,8 @@ export function registerAuth(
     media: mediaStore(database.db, credits),
     mediaRates: mediaRates(mediaEnv.parse(process.env)),
     domains: domainStore(database.db),
-    vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
+    vault: credentialVault,
+    githubSite,
     runs: runStore(database.db),
     mail: mailStore(database.db),
     inbound,
@@ -495,6 +543,21 @@ export function registerAuth(
             }),
           }
         : undefined,
+    siteSyncForWorkspace: async (workspaceId) =>
+      (await githubSite.resolve(workspaceId)) ??
+      (env.GITHUB_SITE_WORKSPACE_ID === workspaceId &&
+      env.GITHUB_SITE_TOKEN &&
+      env.GITHUB_SITE_REPO
+        ? {
+            repo: env.GITHUB_SITE_REPO,
+            branch: env.GITHUB_SITE_BRANCH ?? 'main',
+            sync: githubSiteSync({
+              token: env.GITHUB_SITE_TOKEN,
+              repo: env.GITHUB_SITE_REPO,
+              branch: env.GITHUB_SITE_BRANCH ?? 'main',
+            }),
+          }
+        : null),
     readPage,
     limit: allow,
     agentEnabled,

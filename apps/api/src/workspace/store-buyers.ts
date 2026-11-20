@@ -15,6 +15,7 @@ import {
 import type { StoreOrder } from '@brightwork/shared';
 
 const tokenInput = z.string().regex(/^[a-zA-Z0-9_-]{43}$/u);
+const orderCursor = z.object({ id: z.uuid(), createdAt: z.iso.datetime() });
 
 export function storeBuyers(db: Database, secret: string) {
   const codeDigest = (siteId: string, challenge: string, code: string) =>
@@ -99,16 +100,34 @@ export function storeBuyers(db: Database, secret: string) {
           sql`delete from generated_store_buyer_sessions where site_id = ${siteId} and token_digest = ${sessionDigest(siteId, token)}`,
         );
     },
+    async signOutAll(siteId: string, email: string) {
+      await db.execute(sql`
+        delete from generated_store_buyer_sessions
+        where site_id = ${siteId} and email = ${email}
+      `);
+    },
     async orders(
       siteId: string,
       email: string,
       before?: { id: string; createdAt: string },
     ) {
+      const cursor = before ? orderCursor.safeParse(before) : undefined;
+      if (before && !cursor?.success) return [];
       return db.execute<StoreOrder>(
         storeOrderRows(
           sql`
         orders.site_id = ${siteId} and orders.email = ${email}
-        ${before ? sql`and (orders.created_at, orders.id) < (${before.createdAt}::timestamptz, ${before.id}::uuid)` : sql.empty()}
+        ${
+          cursor?.success
+            ? sql`and exists (
+          select 1 from generated_store_orders cursor_order
+          where cursor_order.site_id = orders.site_id and cursor_order.email = orders.email
+            and cursor_order.id = ${cursor.data.id}::uuid
+            and cursor_order.created_at = ${cursor.data.createdAt}::timestamptz
+            and (orders.created_at, orders.id) < (cursor_order.created_at, cursor_order.id)
+        )`
+            : sql.empty()
+        }
       `,
           21,
         ),

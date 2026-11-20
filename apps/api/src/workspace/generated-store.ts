@@ -6,6 +6,8 @@ import {
 } from './store-merchant-reads';
 import type {
   merchantCustomersQuery,
+  merchantActivityQuery,
+  merchantEmailsQuery,
   merchantOrdersQuery,
   merchantReportQuery,
 } from './store-merchant-reads';
@@ -14,6 +16,7 @@ import { productPhoto } from './store-product-photo';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import {
+  storeDiscountInput,
   storeCurrency,
   storeDeliveryZones,
   storeOrderTotal,
@@ -21,12 +24,16 @@ import {
 } from '@brightwork/shared';
 import type {
   StoreCustomer,
+  StoreActivity,
   StoreDelivery,
   StoreDeliveryAddress,
   StoreDeliveryZone,
+  StoreDiscount,
+  StoreEmailLog,
   StoreOrder,
   StoreOrderLine,
   StoreProduct,
+  StoreReport,
   StoreReportDay,
 } from '@brightwork/shared';
 import { z } from 'zod';
@@ -45,7 +52,20 @@ export const productEdit = storeProductInput
     ({ id, revision, parentId }) =>
       Boolean(id) === Boolean(revision) && !(id && parentId),
   );
+export const discountEdit = storeDiscountInput;
 export const orderAction = z.enum(['confirmed', 'fulfilled', 'cancelled']);
+export const fulfillmentTracking = z.strictObject({
+  carrier: z.string().trim().min(1).max(80),
+  number: z.string().trim().min(1).max(120),
+  url: z
+    .url({ protocol: /^https$/u })
+    .transform((value) => new URL(value).href)
+    .pipe(z.string().max(2048))
+    .refine((value) => {
+      const url = new URL(value);
+      return !url.username && !url.password;
+    }),
+});
 const orderLine = z.object({
   productId: z.uuid(),
   revision: z.coerce.number().int().positive(),
@@ -58,6 +78,12 @@ const orderDetails = z.object({
     .trim()
     .max(254)
     .transform((value) => value.toLowerCase()),
+  discountCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9](?:[A-Z0-9-]{1,30}[A-Z0-9])$/u)
+    .optional(),
 });
 export const orderRequest = z
   .union([
@@ -77,6 +103,7 @@ export const orderRequest = z
   .transform((input) => ({
     id: input.id.toLowerCase(),
     email: input.email,
+    discountCode: input.discountCode ?? null,
     items: ('items' in input ? input.items : [input]).map((item) => ({
       ...item,
       productId: item.productId.toLowerCase(),
@@ -86,12 +113,26 @@ export const orderRequest = z
 const storeScope = (businessId: string) => sql`exists (
   select 1 from workspace_artifacts where id = generated_stores.site_id
   and business_id = ${businessId} and kind = 'website'
+  and (
+    exists (select 1 from website_versions draft
+      where draft.artifact_id = generated_stores.site_id
+        and draft.revision = workspace_artifacts.revision and draft.runtime_mode = 'store')
+    or exists (select 1 from website_publications publication
+      join website_versions live on live.artifact_id = publication.artifact_id
+        and live.revision = publication.draft_revision and live.runtime_mode = 'store'
+      where publication.artifact_id = generated_stores.site_id
+        and publication.unpublished_at is null
+        and publication.draft_revision >= generated_stores.first_revision)
+  )
 )`;
 const readyStripeSeller = (mode: 'test' | 'live') =>
   sql`mode = ${mode} and details_submitted and charges_enabled and payouts_enabled`;
 const liveScope = sql`exists (
-  select 1 from website_publications where artifact_id = generated_stores.site_id and unpublished_at is null
-  and draft_revision >= generated_stores.first_revision
+  select 1 from website_publications publication
+  join website_versions live on live.artifact_id = publication.artifact_id
+    and live.revision = publication.draft_revision and live.runtime_mode = 'store'
+  where publication.artifact_id = generated_stores.site_id and publication.unpublished_at is null
+    and publication.draft_revision >= generated_stores.first_revision
 )`;
 
 const visible = sql`products.active and (products.parent_id is null or parent.active)`;
@@ -108,10 +149,15 @@ type CheckoutStore = {
   paymentMode: 'test' | 'live';
   businessId: string;
 };
+type StoreDiscountSnapshot = { code: string; amount: number } | null;
 type CheckoutQuote = {
   id: string;
   input: OrderInput;
-  snapshot: { items: StoreOrderLine[]; delivery: StoreDelivery };
+  snapshot: {
+    items: StoreOrderLine[];
+    delivery: StoreDelivery;
+    discount: StoreDiscountSnapshot;
+  };
   buyer_email: string | null;
   delivery_revision: number;
   currency: string;
@@ -127,6 +173,20 @@ export function generatedStores(db: Database) {
     return store;
   }
   type Reader = Pick<Database, 'execute'>;
+  async function logActivity(
+    tx: Reader,
+    siteId: string,
+    actorId: string | undefined,
+    kind: string,
+    summary: string,
+    sourceKey?: string,
+  ) {
+    await tx.execute(sql`
+      insert into generated_store_activity(site_id, actor_id, kind, summary, source_key)
+      values (${siteId}::uuid, ${actorId ?? null}::uuid, ${kind}, ${summary}, ${sourceKey ?? null})
+      on conflict do nothing
+    `);
+  }
   async function checkoutStore(tx: Reader, siteId: string) {
     const [store] = await tx.execute<CheckoutStore>(sql`
       select currency, delivery_zones as zones, delivery_revision as "deliveryRevision",
@@ -169,6 +229,63 @@ export function generatedStores(db: Database) {
     return items;
   }
 
+  async function checkoutDiscount(
+    tx: Reader,
+    siteId: string,
+    code: string | null,
+    subtotal: number,
+    lock = false,
+  ): Promise<StoreDiscountSnapshot | false> {
+    if (!code) return null;
+    const [discount] = await tx.execute<{
+      percentOff: number;
+      maxUses: number | null;
+      usedCount: number;
+    }>(sql`
+      select percent_off as "percentOff", max_uses as "maxUses", used_count as "usedCount"
+      from generated_store_discounts
+      where site_id = ${siteId} and code = ${code} and active
+        and (expires_at is null or expires_at > now())
+        and (max_uses is null or used_count < max_uses)
+      ${lock ? sql`for update` : sql.empty()}
+    `);
+    if (!discount) return false;
+    const amount = Math.floor((subtotal * discount.percentOff) / 100);
+    return amount > 0 ? { code, amount } : false;
+  }
+
+  async function consumeDiscount(
+    tx: Reader,
+    siteId: string,
+    discount: StoreDiscountSnapshot,
+  ) {
+    if (!discount) return true;
+    const updated = await tx.execute(sql`
+      update generated_store_discounts set used_count = used_count + 1, revision = revision + 1
+      where site_id = ${siteId} and code = ${discount.code} and active
+        and (expires_at is null or expires_at > now())
+        and (max_uses is null or used_count < max_uses)
+      returning code
+    `);
+    return updated.length === 1;
+  }
+
+  async function queueStoreEmail(
+    tx: Reader,
+    siteId: string,
+    orderId: string,
+    eventKey: string,
+    recipient: string,
+    subject: string,
+    body: string,
+  ) {
+    await tx.execute(sql`
+      insert into generated_store_email_outbox(site_id, order_id, event_key, recipient, subject, body)
+      values (${siteId}, ${orderId}, ${eventKey}, ${recipient}, ${subject}, ${body})
+      on conflict (site_id, order_id, event_key) do nothing
+    `);
+  }
+
   async function savedOrder(
     tx: Reader,
     siteId: string,
@@ -180,8 +297,10 @@ export function generatedStores(db: Database) {
       email: string;
       reviewed: boolean;
       direct: boolean;
+      discountCode: string | null;
     }>(sql`
-      select orders.email, orders.delivery is not null as reviewed, coalesce(sale.direct_checkout, false) as direct
+      select orders.email, orders.delivery is not null as reviewed,
+        coalesce(sale.direct_checkout, false) as direct, orders.discount_code as "discountCode"
       from generated_store_orders orders left join stripe_sales sale on sale.id = orders.sale_id
       where orders.site_id = ${siteId} and orders.id = ${input.id}
     `);
@@ -189,7 +308,8 @@ export function generatedStores(db: Database) {
     if (
       existing.email !== input.email ||
       existing.reviewed !== quoted ||
-      existing.direct !== direct
+      existing.direct !== direct ||
+      existing.discountCode !== input.discountCode
     )
       return false;
     const lines = await tx.execute<{
@@ -217,10 +337,11 @@ export function generatedStores(db: Database) {
     currency: string,
     items: StoreOrderLine[],
     delivery: StoreDelivery | null,
+    discount: StoreDiscountSnapshot,
     direct: boolean,
     paymentMode: 'test' | 'live' = 'test',
   ) {
-    const amount = storeOrderTotal(items, delivery);
+    const amount = storeOrderTotal(items, delivery, discount?.amount ?? 0);
     const first = items[0];
     const minimum = direct ? (currency === 'GBP' ? 30 : 50) : 1;
     if (!first || amount < minimum || amount > 99_999_999) return null;
@@ -248,6 +369,7 @@ export function generatedStores(db: Database) {
     input: OrderInput,
     items: StoreOrderLine[],
     delivery: StoreDelivery | null,
+    discount: StoreDiscountSnapshot,
     direct: boolean,
   ) {
     const first = items[0];
@@ -259,15 +381,16 @@ export function generatedStores(db: Database) {
           store.currency,
           items,
           delivery,
+          discount,
           true,
           store.paymentMode,
         )
       : null;
     if (direct && !saleId) return false;
     await tx.execute(sql`
-      insert into generated_store_orders(site_id, id, product_id, product_name, unit_price, currency, quantity, email, delivery, status, sale_id)
+      insert into generated_store_orders(site_id, id, product_id, product_name, unit_price, currency, quantity, email, delivery, discount_code, discount_amount, status, sale_id)
       values (${siteId}, ${input.id}, ${first.productId}, ${first.productName}, ${first.unitPrice}, ${store.currency}, ${first.quantity}, ${input.email},
-        ${delivery ? JSON.stringify(delivery) : null}::jsonb, ${direct ? 'confirmed' : 'requested'}, ${saleId})
+        ${delivery ? JSON.stringify(delivery) : null}::jsonb, ${discount?.code ?? null}, ${discount?.amount ?? 0}, ${direct ? 'confirmed' : 'requested'}, ${saleId})
     `);
     const rows = sql.join(
       items.map(
@@ -279,6 +402,30 @@ export function generatedStores(db: Database) {
     await tx.execute(sql`
       insert into generated_store_order_lines(site_id, order_id, product_id, product_name, unit_price, quantity) values ${rows}
     `);
+    await logActivity(
+      tx,
+      siteId,
+      undefined,
+      'order.requested',
+      'Received a new customer order.',
+      `store-order:${input.id}`,
+    );
+    const total = storeOrderTotal(items, delivery, discount?.amount ?? 0);
+    const summary = items
+      .map(
+        ({ productName, quantity, unitPrice }) =>
+          `${quantity} × ${productName} — ${store.currency} ${((quantity * unitPrice) / 100).toFixed(2)}`,
+      )
+      .join('\n');
+    await queueStoreEmail(
+      tx,
+      siteId,
+      input.id,
+      'order_received',
+      input.email,
+      `Order received · ${input.id.slice(0, 8)}`,
+      `We received your order.\n\nReference: ${input.id}\n${summary}${discount ? `\nDiscount ${discount.code}: -${store.currency} ${(discount.amount / 100).toFixed(2)}` : ''}\nTotal: ${store.currency} ${(total / 100).toFixed(2)}\n\nYour payment status will be confirmed separately.`,
+    );
     if (direct)
       await tx.execute(sql`
         update generated_store_products products set stock = products.stock - lines.quantity, revision = products.revision + 1
@@ -286,6 +433,8 @@ export function generatedStores(db: Database) {
         where lines.site_id = ${siteId} and lines.order_id = ${input.id}
           and products.site_id = lines.site_id and products.id = lines.product_id
       `);
+    if (!(await consumeDiscount(tx, siteId, discount)))
+      throw new Error('Discount redemption changed during order creation.');
     return true;
   }
 
@@ -294,8 +443,9 @@ export function generatedStores(db: Database) {
     async read(businessId: string, siteId: string) {
       const store = await scopedStore(businessId, siteId);
       if (!store) return null;
-      const [products, orders, customers, counts] = await Promise.all([
-        db.execute<StoreProduct>(sql`
+      const [products, orders, customers, counts, discounts] =
+        await Promise.all([
+          db.execute<StoreProduct>(sql`
           select products.id, products.name, products.description, products.price, products.stock,
             products.active, products.revision, products.parent_id as "parentId", products.sku, photos.alt as "photoAlt"
           from generated_store_products products
@@ -305,11 +455,11 @@ export function generatedStores(db: Database) {
           order by coalesce(parent.name, products.name), coalesce(products.parent_id, products.id),
             products.parent_id is not null, products.name, products.id
         `),
-        db.execute<StoreOrder>(
-          storeOrderRows(sql`orders.site_id = ${siteId}`, 200),
-        ),
-        db.execute<StoreCustomer>(customerRows(siteId, {}, 200, 'recent')),
-        db.execute<{ openRequests: number; awaitingFulfillment: number }>(sql`
+          db.execute<StoreOrder>(
+            storeOrderRows(sql`orders.site_id = ${siteId}`, 200),
+          ),
+          db.execute<StoreCustomer>(customerRows(siteId, {}, 200, 'recent')),
+          db.execute<{ openRequests: number; awaitingFulfillment: number }>(sql`
           select count(*) filter (where status = 'requested')::int as "openRequests",
             count(*) filter (where orders.status = 'confirmed' and
               (orders.sale_id is null or
@@ -317,8 +467,22 @@ export function generatedStores(db: Database) {
           from generated_store_orders orders left join stripe_sales sale on sale.id = orders.sale_id
           where orders.site_id = ${siteId}
         `),
-      ]);
-      return { ...store, products, orders, customers, counts: counts[0] };
+          db.execute<StoreDiscount>(sql`
+          select code, percent_off as "percentOff", active,
+            max_uses as "maxUses", used_count as "usedCount",
+            expires_at as "expiresAt", revision
+          from generated_store_discounts where site_id = ${siteId}
+          order by created_at desc, code limit 100
+        `),
+        ]);
+      return {
+        ...store,
+        products,
+        orders,
+        customers,
+        counts: counts[0],
+        discounts,
+      };
     },
     async merchantOrders(
       businessId: string,
@@ -333,6 +497,50 @@ export function generatedStores(db: Database) {
       const last = rows.length > merchantPageSize ? orders.at(-1) : undefined;
       return {
         orders,
+        next: last ? { before: last.createdAt, id: last.id } : null,
+      };
+    },
+    async merchantEmails(
+      businessId: string,
+      siteId: string,
+      options: z.infer<typeof merchantEmailsQuery>,
+    ) {
+      if (!(await scopedStore(businessId, siteId))) return null;
+      const rows = await db.execute<StoreEmailLog>(sql`
+        select id, order_id as "orderId", event_key as event, recipient, state as status,
+          attempts, provider_id as "providerId", note, created_at as "createdAt"
+        from generated_store_email_outbox where site_id = ${siteId}
+          ${options.before && options.id ? sql`and (created_at, id) < (${options.before}::timestamptz, ${options.id}::uuid)` : sql.empty()}
+        order by created_at desc, id desc limit ${merchantPageSize + 1}
+      `);
+      const emails = rows.slice(0, merchantPageSize);
+      const last = rows.length > merchantPageSize ? emails.at(-1) : undefined;
+      return {
+        emails,
+        next: last ? { before: last.createdAt, id: last.id } : null,
+      };
+    },
+    async merchantActivity(
+      businessId: string,
+      siteId: string,
+      options: z.infer<typeof merchantActivityQuery>,
+    ) {
+      if (!(await scopedStore(businessId, siteId))) return null;
+      const rows = await db.execute<StoreActivity>(sql`
+        select activity.id, activity.kind, activity.summary,
+          coalesce(accounts.name, accounts.email) as actor,
+          activity.created_at as "createdAt"
+        from generated_store_activity activity
+        left join accounts on accounts.id = activity.actor_id
+        where activity.site_id = ${siteId}
+          ${options.before && options.id ? sql`and (activity.created_at, activity.id) < (${options.before}::timestamptz, ${options.id}::uuid)` : sql.empty()}
+        order by activity.created_at desc, activity.id desc
+        limit ${merchantPageSize + 1}
+      `);
+      const activity = rows.slice(0, merchantPageSize);
+      const last = rows.length > merchantPageSize ? activity.at(-1) : undefined;
+      return {
+        activity,
         next: last ? { before: last.createdAt, id: last.id } : null,
       };
     },
@@ -360,16 +568,47 @@ export function generatedStores(db: Database) {
       const days = await db.execute<StoreReportDay>(
         reportRows(businessId, siteId, range),
       );
+      const [usage] = await db.execute<StoreReport['usage']>(sql`
+        with build_turns as (
+          select distinct turn_id from website_versions
+          where artifact_id = ${siteId}::uuid and runtime_mode = 'store' and turn_id is not null
+        ), credit_usage as (
+          select coalesce(sum(-amount) filter (where kind = 'model'), 0)::text as "modelCredits",
+            coalesce(sum(-amount) filter (where kind = 'tool'), 0)::text as "toolCredits",
+            coalesce(sum(-amount), 0)::text as "totalCredits"
+          from credit_entries where kind in ('model', 'tool')
+            and turn_id in (select turn_id from build_turns)
+        ) select
+          (select count(*)::int from generated_store_products where site_id = ${siteId}::uuid and parent_id is null) as products,
+          (select count(*)::int from generated_store_products where site_id = ${siteId}::uuid and parent_id is not null) as variants,
+          (select count(*)::int from generated_store_product_photos where site_id = ${siteId}::uuid) as "photoCount",
+          coalesce((select sum(octet_length(content)) from generated_store_product_photos where site_id = ${siteId}::uuid), 0)::text as "photoBytes",
+          (select count(*)::int from media_jobs where site_id = ${siteId}::uuid and state <> 'failed') as "mediaJobs",
+          coalesce((select sum(credits) from media_jobs where site_id = ${siteId}::uuid and state <> 'failed'), 0)::text as "mediaCredits",
+          credit_usage."modelCredits", credit_usage."toolCredits", credit_usage."totalCredits"
+        from credit_usage`);
       return {
         currency: store.currency,
         mode: range.mode ?? 'test',
         days: Array.from(days),
+        usage: usage ?? {
+          products: 0,
+          variants: 0,
+          photoCount: 0,
+          photoBytes: '0',
+          mediaJobs: 0,
+          mediaCredits: '0',
+          modelCredits: '0',
+          toolCredits: '0',
+          totalCredits: '0',
+        },
       };
     },
     async saveProduct(
       businessId: string,
       siteId: string,
       input: z.infer<typeof productEdit>,
+      actorId?: string,
     ) {
       const {
         id,
@@ -436,6 +675,52 @@ export function generatedStores(db: Database) {
           await tx.execute(sql`update generated_store_product_photos set alt = ${input.photoAlt}
             where site_id = ${siteId} and product_id = ${item.id}`);
         }
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          id ? 'product.updated' : 'product.created',
+          `${id ? 'Updated' : 'Added'} product “${name}”.`,
+        );
+        return true;
+      });
+    },
+    async saveDiscount(
+      businessId: string,
+      siteId: string,
+      raw: z.input<typeof discountEdit>,
+      actorId?: string,
+    ) {
+      const input = discountEdit.parse(raw);
+      return db.transaction(async (tx) => {
+        const [store] = await tx.execute(sql`
+          select site_id from generated_stores
+          where site_id = ${siteId} and ${storeScope(businessId)} for update
+        `);
+        if (!store) return false;
+        const saved = input.revision
+          ? await tx.execute(sql`
+              update generated_store_discounts set percent_off = ${input.percentOff},
+                active = ${input.active}, max_uses = ${input.maxUses},
+                expires_at = ${input.expiresAt},
+                revision = revision + 1
+              where site_id = ${siteId} and code = ${input.code} and revision = ${input.revision}
+              returning code
+            `)
+          : await tx.execute(sql`
+              insert into generated_store_discounts(site_id, code, percent_off, active, max_uses, expires_at)
+              values (${siteId}, ${input.code}, ${input.percentOff}, ${input.active}, ${input.maxUses},
+                ${input.expiresAt})
+              on conflict do nothing returning code
+            `);
+        if (!saved.length) return false;
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          input.revision ? 'discount.updated' : 'discount.created',
+          `${input.revision ? 'Updated' : 'Added'} discount code ${input.code}.`,
+        );
         return true;
       });
     },
@@ -454,6 +739,7 @@ export function generatedStores(db: Database) {
       businessId: string,
       siteId: string,
       currency: z.infer<typeof storeCurrency>,
+      actorId?: string,
     ) {
       return db.transaction(async (tx) => {
         const [locked] = await tx.execute(sql`
@@ -466,7 +752,15 @@ export function generatedStores(db: Database) {
             and not exists(select 1 from generated_store_products where site_id = ${siteId})
           returning site_id
         `);
-        return result.length === 1;
+        if (!result.length) return false;
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          'store.currency',
+          `Changed store currency to ${currency}.`,
+        );
+        return true;
       });
     },
     async setDelivery(
@@ -474,14 +768,25 @@ export function generatedStores(db: Database) {
       siteId: string,
       revision: number,
       zones: StoreDeliveryZone[],
+      actorId?: string,
     ) {
-      const updated = await db.execute(sql`
-        update generated_stores set delivery_zones = ${JSON.stringify(storeDeliveryZones.parse(zones))}::jsonb,
-          delivery_revision = delivery_revision + 1
-        where site_id = ${siteId} and delivery_revision = ${revision} and ${storeScope(businessId)}
-        returning site_id
-      `);
-      return updated.length === 1;
+      return db.transaction(async (tx) => {
+        const updated = await tx.execute(sql`
+          update generated_stores set delivery_zones = ${JSON.stringify(storeDeliveryZones.parse(zones))}::jsonb,
+            delivery_revision = delivery_revision + 1
+          where site_id = ${siteId} and delivery_revision = ${revision} and ${storeScope(businessId)}
+          returning site_id
+        `);
+        if (!updated.length) return false;
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          'store.delivery',
+          'Updated shipping and tax rules.',
+        );
+        return true;
+      });
     },
     async isPublished(siteId: string) {
       const [store] = await db.execute(
@@ -511,6 +816,7 @@ export function generatedStores(db: Database) {
         left join website_versions on website_versions.artifact_id = generated_stores.site_id
           and website_versions.revision = website_publications.draft_revision
         where generated_stores.site_id = ${siteId}
+          and website_versions.runtime_mode = 'store'
       `);
       if (!store) return null;
       const products = await db.execute<
@@ -535,23 +841,49 @@ export function generatedStores(db: Database) {
       `);
       return { ...store, products };
     },
-    async setCheckout(businessId: string, siteId: string, enabled: boolean) {
-      const [store] = await db.execute(sql`
-        update generated_stores set direct_checkout = ${enabled}
-        where site_id = ${siteId} and ${storeScope(businessId)} returning site_id
-      `);
-      return Boolean(store);
+    async setCheckout(
+      businessId: string,
+      siteId: string,
+      enabled: boolean,
+      actorId?: string,
+    ) {
+      return db.transaction(async (tx) => {
+        const [store] = await tx.execute(sql`
+          update generated_stores set direct_checkout = ${enabled}
+          where site_id = ${siteId} and ${storeScope(businessId)} returning site_id
+        `);
+        if (!store) return false;
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          'store.checkout',
+          `${enabled ? 'Enabled' : 'Disabled'} direct checkout.`,
+        );
+        return true;
+      });
     },
     async setPaymentMode(
       businessId: string,
       siteId: string,
       mode: 'test' | 'live',
+      actorId?: string,
     ) {
-      const [store] = await db.execute(sql`
-        update generated_stores set payment_mode = ${mode}
-        where site_id = ${siteId} and ${storeScope(businessId)} returning site_id
-      `);
-      return Boolean(store);
+      return db.transaction(async (tx) => {
+        const [store] = await tx.execute(sql`
+          update generated_stores set payment_mode = ${mode}
+          where site_id = ${siteId} and ${storeScope(businessId)} returning site_id
+        `);
+        if (!store) return false;
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          'store.payment_mode',
+          `Changed checkout mode to ${mode}.`,
+        );
+        return true;
+      });
     },
     async buyerSale(siteId: string, orderId: string) {
       const [order] = await db.execute<{ id: string; paid: boolean }>(sql`
@@ -566,18 +898,41 @@ export function generatedStores(db: Database) {
       siteId: string,
       raw: z.input<typeof orderRequest>,
       direct = false,
+      expectedPaymentMode?: 'test' | 'live',
     ) {
       const input = orderRequest.parse(raw);
       return db.transaction(async (tx) => {
         const store = await checkoutStore(tx, siteId);
-        if (!store) return false;
+        if (
+          !store ||
+          (direct &&
+            expectedPaymentMode &&
+            store.paymentMode !== expectedPaymentMode)
+        )
+          return false;
         const previous = await savedOrder(tx, siteId, input, false, direct);
         if (previous !== undefined) return previous;
         if (store.zones.length) return false;
         const items = await checkoutItems(tx, siteId, input);
-        return items
-          ? insertOrder(tx, siteId, store, input, items, null, direct)
-          : false;
+        if (!items) return false;
+        const discount = await checkoutDiscount(
+          tx,
+          siteId,
+          input.discountCode,
+          storeOrderTotal(items),
+          true,
+        );
+        if (discount === false) return false;
+        return insertOrder(
+          tx,
+          siteId,
+          store,
+          input,
+          items,
+          null,
+          discount,
+          direct,
+        );
       });
     },
     async prepareDelivery(
@@ -597,14 +952,23 @@ export function generatedStores(db: Database) {
         const items = await checkoutItems(tx, siteId, input);
         if (!items) return null;
         const subtotal = storeOrderTotal(items);
+        const discount = await checkoutDiscount(
+          tx,
+          siteId,
+          input.discountCode,
+          subtotal,
+        );
+        if (discount === false) return null;
+        const discountAmount = discount?.amount ?? 0;
+        const discountedSubtotal = subtotal - discountAmount;
         const shipping =
-          zone.freeAbove !== null && subtotal >= zone.freeAbove
+          zone.freeAbove !== null && discountedSubtotal >= zone.freeAbove
             ? 0
             : zone.shipping;
-        const taxable = subtotal + (zone.taxShipping ? shipping : 0);
+        const taxable = discountedSubtotal + (zone.taxShipping ? shipping : 0);
         const tax = Math.floor((taxable * zone.taxRate + 5000) / 10000);
         const delivery = { address, shipping, tax };
-        const snapshot = { items, delivery };
+        const snapshot = { items, delivery, discount };
         const id = input.id;
         await tx.execute(sql`
           delete from generated_store_delivery_quotes where (site_id, id) in (
@@ -629,10 +993,17 @@ export function generatedStores(db: Database) {
       quoteId: string,
       buyer: string | null,
       direct = false,
+      expectedPaymentMode?: 'test' | 'live',
     ) {
       return db.transaction(async (tx) => {
         const store = await checkoutStore(tx, siteId);
-        if (!store) return null;
+        if (
+          !store ||
+          (direct &&
+            expectedPaymentMode &&
+            store.paymentMode !== expectedPaymentMode)
+        )
+          return null;
         const [quote] = await tx.execute<CheckoutQuote>(sql`
           select id, input, snapshot, buyer_email, delivery_revision, currency
           from generated_store_delivery_quotes where id = ${quoteId} and site_id = ${siteId} and expires_at > now()
@@ -661,6 +1032,18 @@ export function generatedStores(db: Database) {
           )
         )
           return null;
+        const discount = await checkoutDiscount(
+          tx,
+          siteId,
+          input.discountCode,
+          storeOrderTotal(items),
+          true,
+        );
+        if (
+          discount === false ||
+          JSON.stringify(discount) !== JSON.stringify(snapshot.discount)
+        )
+          return null;
         const saved = await insertOrder(
           tx,
           siteId,
@@ -668,12 +1051,18 @@ export function generatedStores(db: Database) {
           input,
           items,
           snapshot.delivery,
+          discount,
           direct,
         );
         return saved ? input.id : null;
       });
     },
-    async createPayment(businessId: string, siteId: string, id: string) {
+    async createPayment(
+      businessId: string,
+      siteId: string,
+      id: string,
+      actorId?: string,
+    ) {
       return db.transaction(async (tx) => {
         const [store] = await tx.execute<{ paymentMode: 'test' | 'live' }>(sql`
           select payment_mode as "paymentMode" from generated_stores
@@ -684,8 +1073,11 @@ export function generatedStores(db: Database) {
           sale_id: string | null;
           currency: string;
           delivery: StoreDelivery | null;
+          discount_code: string | null;
+          discount_amount: number;
         }>(sql`
-          select sale_id, currency, delivery from generated_store_orders
+          select sale_id, currency, delivery, discount_code, discount_amount
+          from generated_store_orders
           where site_id = ${siteId} and id = ${id} and status = 'confirmed'
         `);
         if (!order) return null;
@@ -701,6 +1093,9 @@ export function generatedStores(db: Database) {
           order.currency,
           lines,
           order.delivery,
+          order.discount_code
+            ? { code: order.discount_code, amount: order.discount_amount }
+            : null,
           false,
           store.paymentMode,
         );
@@ -708,6 +1103,13 @@ export function generatedStores(db: Database) {
         await tx.execute(sql`
           update generated_store_orders set sale_id = ${saleId} where site_id = ${siteId} and id = ${id}
         `);
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          'order.payment_link',
+          `Created a payment link for order ${id.slice(0, 8)}.`,
+        );
         return saleId;
       });
     },
@@ -716,7 +1118,10 @@ export function generatedStores(db: Database) {
       siteId: string,
       id: string,
       status: z.infer<typeof orderAction>,
+      tracking?: z.infer<typeof fulfillmentTracking>,
+      actorId?: string,
     ) {
+      if (tracking && status !== 'fulfilled') return false;
       return db.transaction(async (tx) => {
         const [store] = await tx.execute(sql`
           select site_id from generated_stores where site_id = ${siteId} and ${storeScope(businessId)} for update
@@ -724,13 +1129,48 @@ export function generatedStores(db: Database) {
         if (!store) return false;
         const [order] = await tx.execute<{
           status: StoreOrder['status'];
+          email: string;
           sale_id: string | null;
+          tracking_carrier: string | null;
+          tracking_number: string | null;
+          tracking_url: string | null;
         }>(sql`
-          select status, sale_id from generated_store_orders
+          select status, email, sale_id, tracking_carrier, tracking_number, tracking_url
+          from generated_store_orders
           where site_id = ${siteId} and id = ${id}
         `);
         if (!order) return false;
-        if (order.status === status) return true;
+        if (order.status === status) {
+          if (!tracking || status !== 'fulfilled') return true;
+          if (
+            order.tracking_carrier === tracking.carrier &&
+            order.tracking_number === tracking.number &&
+            order.tracking_url === tracking.url
+          )
+            return true;
+          await tx.execute(sql`
+            update generated_store_orders set tracking_carrier = ${tracking.carrier},
+              tracking_number = ${tracking.number}, tracking_url = ${tracking.url}
+            where site_id = ${siteId} and id = ${id} and status = 'fulfilled'
+          `);
+          await queueStoreEmail(
+            tx,
+            siteId,
+            id,
+            `tracking:${tracking.carrier}:${tracking.number}:${tracking.url}`,
+            order.email,
+            `Order fulfilled · ${id.slice(0, 8)}`,
+            `Your order ${id} has been marked fulfilled.\n\nCarrier: ${tracking.carrier}\nTracking number: ${tracking.number}\nTrack your order: ${tracking.url}`,
+          );
+          await logActivity(
+            tx,
+            siteId,
+            actorId,
+            'order.tracking',
+            `Updated tracking for order ${id.slice(0, 8)}.`,
+          );
+          return true;
+        }
         if (order.sale_id) {
           const [sale] = await tx.execute<{
             paid: boolean;
@@ -785,9 +1225,41 @@ export function generatedStores(db: Database) {
           `);
           if (!changed.length) return false;
         }
-        await tx.execute(
-          sql`update generated_store_orders set status = ${status} where site_id = ${siteId} and id = ${id}`,
+        await tx.execute(sql`
+          update generated_store_orders set status = ${status},
+            tracking_carrier = ${tracking?.carrier ?? null},
+            tracking_number = ${tracking?.number ?? null},
+            tracking_url = ${tracking?.url ?? null}
+          where site_id = ${siteId} and id = ${id}
+        `);
+        await logActivity(
+          tx,
+          siteId,
+          actorId,
+          `order.${status}`,
+          `${status === 'confirmed' ? 'Confirmed' : status === 'fulfilled' ? 'Fulfilled' : 'Cancelled'} order ${id.slice(0, 8)}.`,
         );
+        if (status === 'fulfilled' || status === 'cancelled') {
+          const eventKey =
+            status === 'cancelled'
+              ? 'cancelled'
+              : tracking
+                ? `tracking:${tracking.carrier}:${tracking.number}:${tracking.url}`
+                : 'fulfilled';
+          await queueStoreEmail(
+            tx,
+            siteId,
+            id,
+            eventKey,
+            order.email,
+            status === 'cancelled'
+              ? `Order cancelled · ${id.slice(0, 8)}`
+              : `Order fulfilled · ${id.slice(0, 8)}`,
+            status === 'cancelled'
+              ? `Your order ${id} has been cancelled. Contact the store if you need help.`
+              : `Your order ${id} has been marked fulfilled.${tracking ? `\n\nCarrier: ${tracking.carrier}\nTracking number: ${tracking.number}\nTrack your order: ${tracking.url}` : ''}`,
+          );
+        }
         return true;
       });
     },

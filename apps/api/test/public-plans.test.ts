@@ -7,6 +7,7 @@ import { registerAuth } from '../src/auth/routes';
 import { registerPublicPlans } from '../src/auth/public-plans';
 
 test('public marketing contracts work without account or Stripe configuration', async (t) => {
+  assert.equal(authEnv.parse({}).STRIPE_LIVE_CHECKOUT_ENABLED, false);
   const app = Fastify();
   t.after(() => app.close());
   registerAuth(app, authEnv.parse({}));
@@ -23,6 +24,43 @@ test('public marketing contracts work without account or Stripe configuration', 
   ].response.parse(plans.json());
   assert.ok(Number(free.welcomeCredits) >= 0);
   assert.deepEqual(offers, []);
+});
+
+test('live seller checkout requires an explicit release enablement flag', () => {
+  assert.equal(
+    authEnv.parse({
+      STRIPE_LIVE_KEY: 'sk_live_fixture',
+      STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: 'whsec_fixture',
+    }).STRIPE_LIVE_CHECKOUT_ENABLED,
+    false,
+  );
+  assert.throws(() => authEnv.parse({ STRIPE_LIVE_CHECKOUT_ENABLED: 'true' }));
+  assert.throws(() =>
+    authEnv.parse({
+      STRIPE_LIVE_KEY: 'sk_live_fixture',
+      STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: 'whsec_live_fixture',
+      STRIPE_LIVE_CHECKOUT_ENABLED: 'true',
+    }),
+  );
+  assert.throws(() =>
+    authEnv.parse({
+      STRIPE_TEST_KEY: 'sk_test_fixture',
+      STRIPE_CONNECT_WEBHOOK_SECRET: 'whsec_shared_fixture',
+      STRIPE_LIVE_KEY: 'sk_live_fixture',
+      STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: 'whsec_shared_fixture',
+      STRIPE_LIVE_CHECKOUT_ENABLED: 'true',
+    }),
+  );
+  assert.equal(
+    authEnv.parse({
+      STRIPE_TEST_KEY: 'sk_test_fixture',
+      STRIPE_CONNECT_WEBHOOK_SECRET: 'whsec_test_fixture',
+      STRIPE_LIVE_KEY: 'sk_live_fixture',
+      STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: 'whsec_live_fixture',
+      STRIPE_LIVE_CHECKOUT_ENABLED: 'true',
+    }).STRIPE_LIVE_CHECKOUT_ENABLED,
+    true,
+  );
 });
 
 test('the catalogue publishes the configured recurring test price and shares provider reads', async (t) => {

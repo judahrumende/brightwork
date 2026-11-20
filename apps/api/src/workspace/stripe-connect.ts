@@ -74,6 +74,14 @@ const sales = pgTable('stripe_sales', {
     .defaultNow()
     .notNull(),
 });
+const refundRequests = pgTable('stripe_store_refund_requests', {
+  id: uuid().primaryKey(),
+  saleId: uuid('sale_id').notNull(),
+  amount: integer().notNull(),
+  status: text({ enum: ['pending', 'succeeded', 'failed'] })
+    .notNull()
+    .default('pending'),
+});
 const events = pgTable(
   'stripe_connect_events',
   {
@@ -141,6 +149,8 @@ export function stripeConnect(
       ? createHmac('sha256', options.identityKey ?? options.secret)
           .update(
             'stripe-customer\0' +
+              mode +
+              '\0' +
               businessId +
               '\0' +
               account +
@@ -202,13 +212,19 @@ export function stripeConnect(
       with cancelled as (
         update generated_store_orders set status = 'cancelled'
         where site_id = ${order.site_id} and id = ${order.id} and status = 'confirmed'
-        returning site_id, id
-      )
-      update generated_store_products products
+        returning site_id, id, email
+      ), restored as (
+        update generated_store_products products
       set stock = products.stock + lines.quantity, revision = products.revision + 1
       from generated_store_order_lines lines
       join cancelled on cancelled.site_id = lines.site_id and cancelled.id = lines.order_id
       where products.site_id = lines.site_id and products.id = lines.product_id
+        returning products.id
+      )
+      insert into generated_store_email_outbox(site_id, order_id, event_key, recipient, subject, body)
+      select site_id, id, 'cancelled', email, 'Order cancelled · ' || left(id::text, 8),
+        'Your order ' || id::text || ' could not be confirmed and has been cancelled. Any held stock has been released.'
+      from cancelled on conflict (site_id, order_id, event_key) do nothing
     `);
     return true;
   }
@@ -485,6 +501,146 @@ export function stripeConnect(
         .where(sellerScope(businessId));
       return Boolean(seller && ready(seller));
     },
+    async refundSale(
+      businessId: string,
+      saleId: string,
+      amount: number,
+      requestId: string,
+      actorId?: string,
+    ) {
+      return db.transaction(async (tx) => {
+        const [sale] = await tx
+          .select()
+          .from(sales)
+          .where(
+            and(
+              eq(sales.id, saleId),
+              eq(sales.businessId, businessId),
+              eq(sales.mode, mode),
+              sql`exists (select 1 from ${sellers} where ${sellers.businessId} = ${businessId}::uuid
+                and ${sellers.mode} = ${mode} and ${sellers.accountId} = ${sales.accountId})`,
+            ),
+          )
+          .for('update');
+        if (!sale || !sale.paidAt || !sale.paymentId || sale.closedAt)
+          return false;
+        const [priorRequest] = await tx
+          .select()
+          .from(refundRequests)
+          .where(eq(refundRequests.id, requestId));
+        if (priorRequest)
+          return (
+            priorRequest.saleId === sale.id &&
+            priorRequest.amount === amount &&
+            priorRequest.status === 'succeeded'
+          );
+        if (
+          !Number.isSafeInteger(amount) ||
+          amount < 1 ||
+          amount > sale.amount - sale.amountRefunded
+        )
+          return false;
+        await tx.insert(refundRequests).values({
+          id: requestId,
+          saleId: sale.id,
+          amount,
+        });
+        const payment = await stripe.capturedPayment(
+          sale.accountId,
+          sale.paymentId,
+        );
+        if (
+          payment.id !== sale.paymentId ||
+          payment.metadata.brightwork_order !== sale.id ||
+          payment.amount_received !== sale.amount ||
+          payment.currency !== sale.currency ||
+          payment.latest_charge.payment_intent !== sale.paymentId ||
+          payment.latest_charge.amount_captured !== sale.amount ||
+          payment.latest_charge.currency !== sale.currency ||
+          payment.latest_charge.amount_refunded > sale.amount
+        )
+          throw new Error('Store payment details do not match Stripe.');
+        if (payment.latest_charge.amount_refunded !== sale.amountRefunded) {
+          const matchingRefund =
+            payment.latest_charge.amount_refunded > sale.amountRefunded
+              ? await stripe.findRefundRequest(
+                  sale.accountId,
+                  sale.paymentId,
+                  requestId,
+                )
+              : undefined;
+          if (
+            matchingRefund?.status === 'succeeded' &&
+            matchingRefund.amount === amount &&
+            matchingRefund.currency === sale.currency &&
+            payment.latest_charge.amount_refunded ===
+              sale.amountRefunded + amount
+          ) {
+            await tx
+              .update(sales)
+              .set({ amountRefunded: payment.latest_charge.amount_refunded })
+              .where(eq(sales.id, sale.id));
+            await tx
+              .update(refundRequests)
+              .set({ status: 'succeeded' })
+              .where(eq(refundRequests.id, requestId));
+            await tx.execute(sql`
+              insert into generated_store_activity(site_id, actor_id, kind, summary, source_key)
+              select orders.site_id, ${actorId ?? null}::uuid, 'payment.refund',
+                'Refund recorded for order ' || left(orders.id::text, 8),
+                ${`store-refund:${sale.id}:${payment.latest_charge.amount_refunded}`}
+              from generated_store_orders orders where orders.sale_id = ${sale.id}
+              on conflict do nothing
+            `);
+            return true;
+          }
+          if (payment.latest_charge.amount_refunded > sale.amountRefunded)
+            await tx
+              .update(sales)
+              .set({ amountRefunded: payment.latest_charge.amount_refunded })
+              .where(eq(sales.id, sale.id));
+          await tx
+            .update(refundRequests)
+            .set({ status: 'failed' })
+            .where(eq(refundRequests.id, requestId));
+          return false;
+        }
+        const refund = await stripe.refundPayment(
+          sale.accountId,
+          sale.paymentId,
+          amount,
+          requestId,
+        );
+        if (
+          refund.status !== 'succeeded' ||
+          refund.amount !== amount ||
+          refund.currency !== sale.currency
+        ) {
+          await tx
+            .update(refundRequests)
+            .set({ status: 'failed' })
+            .where(eq(refundRequests.id, requestId));
+          return false;
+        }
+        await tx
+          .update(sales)
+          .set({ amountRefunded: sale.amountRefunded + amount })
+          .where(eq(sales.id, sale.id));
+        await tx
+          .update(refundRequests)
+          .set({ status: 'succeeded' })
+          .where(eq(refundRequests.id, requestId));
+        await tx.execute(sql`
+          insert into generated_store_activity(site_id, actor_id, kind, summary, source_key)
+          select orders.site_id, ${actorId ?? null}::uuid, 'payment.refund',
+            'Refund recorded for order ' || left(orders.id::text, 8),
+            ${`store-refund:${sale.id}:${sale.amountRefunded + amount}`}
+          from generated_store_orders orders where orders.sale_id = ${sale.id}
+          on conflict do nothing
+        `);
+        return true;
+      });
+    },
     async closeStoreCheckout(
       businessId: string,
       siteId: string,
@@ -538,6 +694,7 @@ export function stripeConnect(
       const [result] = await db
         .select({
           id: sales.id,
+          mode: sales.mode,
           title: sales.title,
           currency: sales.currency,
           amount: sales.amount,
@@ -766,7 +923,7 @@ export function stripeConnect(
                   event.account,
                   session.customer_details?.email,
                 );
-                await tx
+                const payment = await tx
                   .update(sales)
                   .set({
                     checkoutId: session.id,
@@ -789,7 +946,17 @@ export function stripeConnect(
                         eq(sales.paymentId, session.payment_intent),
                       ),
                     ),
-                  );
+                  )
+                  .returning({ id: sales.id });
+                for (const { id } of payment)
+                  await tx.execute(sql`
+                    insert into generated_store_activity(site_id, kind, summary, source_key)
+                    select orders.site_id, 'payment.received',
+                      'Payment received for order ' || left(orders.id::text, 8),
+                      ${'store-payment:' + id}
+                    from generated_store_orders orders where orders.sale_id = ${id}
+                    on conflict do nothing
+                  `);
               }
               if (
                 event.type === 'checkout.session.expired' &&
@@ -828,7 +995,7 @@ export function stripeConnect(
                   charge.amount_refunded > charge.amount
                 )
                   return;
-                await tx
+                const refunds = await tx
                   .update(sales)
                   .set({
                     paymentId: charge.payment_intent,
@@ -845,7 +1012,20 @@ export function stripeConnect(
                         eq(sales.paymentId, charge.payment_intent),
                       ),
                     ),
-                  );
+                  )
+                  .returning({
+                    id: sales.id,
+                    amountRefunded: sales.amountRefunded,
+                  });
+                for (const sale of refunds)
+                  await tx.execute(sql`
+                    insert into generated_store_activity(site_id, kind, summary, source_key)
+                    select orders.site_id, 'payment.refund',
+                      'Refund recorded for order ' || left(orders.id::text, 8),
+                      ${`store-refund:${sale.id}:${sale.amountRefunded}`}
+                    from generated_store_orders orders where orders.sale_id = ${sale.id}
+                    on conflict do nothing
+                  `);
               }
             });
             return res.code(204).send();
@@ -919,11 +1099,36 @@ export function stripeConnectModes(
         select sale.mode from generated_store_orders orders
         join stripe_sales sale on sale.id = orders.sale_id
         where orders.site_id = ${siteId}::uuid and orders.id = ${orderId}::uuid
+          and orders.status in ('confirmed', 'fulfilled')
           and sale.business_id = ${businessId}::uuid
       `);
       return order
         ? (modes[order.mode]?.closeStoreCheckout(businessId, siteId, orderId) ??
             false)
+        : false;
+    },
+    async refundStoreOrder(
+      businessId: string,
+      siteId: string,
+      orderId: string,
+      amount: number,
+      requestId: string,
+      actorId?: string,
+    ) {
+      const [order] = await db.execute<{ id: string; mode: StripeMode }>(sql`
+        select sale.id, sale.mode from generated_store_orders orders
+        join stripe_sales sale on sale.id = orders.sale_id
+        where orders.site_id = ${siteId}::uuid and orders.id = ${orderId}::uuid
+          and sale.business_id = ${businessId}::uuid
+      `);
+      return order
+        ? (modes[order.mode]?.refundSale(
+            businessId,
+            order.id,
+            amount,
+            requestId,
+            actorId,
+          ) ?? false)
         : false;
     },
   };

@@ -36,7 +36,7 @@ export function WorkspaceSettings({
   accountId: string;
 }) {
   const [tab, setTab] = useState<
-    'team' | 'vault' | 'domains' | 'commerce' | 'sms'
+    'team' | 'vault' | 'github' | 'domains' | 'commerce' | 'sms'
   >('team');
   const endpoint = `/api/companies/${company.id}/settings`;
   if (!['owner', 'admin'].includes(company.role))
@@ -63,6 +63,13 @@ export function WorkspaceSettings({
           onClick={() => setTab('vault')}
         >
           Vault
+        </Button>
+        <Button
+          variant="secondary"
+          aria-pressed={tab === 'github'}
+          onClick={() => setTab('github')}
+        >
+          GitHub
         </Button>
         <Button
           variant="secondary"
@@ -94,6 +101,7 @@ export function WorkspaceSettings({
         />
       )}
       {tab === 'vault' && <VaultSettings endpoint={endpoint + '/vault'} />}
+      {tab === 'github' && <GitHubSettings endpoint={endpoint + '/github'} />}
       {tab === 'domains' && <DomainSettings endpoint={endpoint + '/domains'} />}
       {tab === 'sms' && <SmsSettings endpoint={endpoint + '/sms'} />}
       {tab === 'commerce' && (
@@ -102,6 +110,119 @@ export function WorkspaceSettings({
           <StripeSeller endpoint={endpoint + '/stripe-connect'} />
         </>
       )}
+    </section>
+  );
+}
+
+function GitHubSettings({ endpoint }: { endpoint: string }) {
+  const cache = useQueryClient();
+  const key = ['workspace-settings', endpoint];
+  const github = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      api<{
+        configured: boolean;
+        available?: boolean;
+        repo: string;
+        branch: string;
+      }>(endpoint, { signal }),
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const form = event.currentTarget;
+    setBusy(true);
+    setError('');
+    try {
+      await write(endpoint, Object.fromEntries(new FormData(form)));
+      form.reset();
+      await cache.invalidateQueries({ queryKey: key });
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function disconnect() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await write(endpoint, {}, 'DELETE');
+      await cache.invalidateQueries({ queryKey: key });
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section aria-label="GitHub source sync">
+      <h2>GitHub source sync</h2>
+      {github.isPending && <p role="status">Loading GitHub connection…</p>}
+      {github.isError && <p role="alert">{errorMessage(github.error)}</p>}
+      {github.data?.available === false && (
+        <p>Configure the encrypted workspace vault before connecting GitHub.</p>
+      )}
+      {github.data?.configured && (
+        <p>
+          Connected to {github.data.repo} · {github.data.branch}. The access
+          token is encrypted in the workspace vault.
+        </p>
+      )}
+      {github.data?.available && (
+        <form
+          className={styles.taskForm}
+          onSubmit={(event) => void save(event)}
+        >
+          <label>
+            Repository (owner/name){' '}
+            <input
+              name="repo"
+              required
+              maxLength={120}
+              defaultValue={github.data?.repo ?? ''}
+              placeholder="owner/repository"
+            />
+          </label>
+          <label>
+            Branch{' '}
+            <input
+              name="branch"
+              required
+              maxLength={160}
+              defaultValue={github.data?.branch ?? 'main'}
+            />
+          </label>
+          <label>
+            Fine-grained personal access token with repository Contents write
+            access{' '}
+            <input
+              name="token"
+              type="password"
+              autoComplete="new-password"
+              required
+              maxLength={512}
+            />
+          </label>
+          <Button type="submit" disabled={busy || github.isPending}>
+            {busy ? 'Checking access…' : 'Connect repository'}
+          </Button>
+          {github.data?.configured && (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void disconnect()}
+            >
+              Disconnect GitHub
+            </Button>
+          )}
+        </form>
+      )}
+      {error && <p role="alert">{error}</p>}
     </section>
   );
 }

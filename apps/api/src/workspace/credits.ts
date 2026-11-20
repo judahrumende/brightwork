@@ -14,7 +14,21 @@ export const creditConfig = z.object({
   STARTER_CREDITS: rate.default('10.0000000000'),
   MODEL_CREDITS_PER_CALL: rate.default('0.1000000000'),
   TOOL_CREDITS_PER_CALL: rate.default('0.0100000000'),
+  APP_STORAGE_CREDITS_PER_MIB: rate.default('0.0000000000'),
 });
+
+export function parseCreditConfig(env: NodeJS.ProcessEnv) {
+  const config = creditConfig.parse(env);
+  if (
+    env.NODE_ENV === 'production' &&
+    env.APP_STORAGE_CREDITS_PER_MIB === undefined
+  ) {
+    throw new Error(
+      'APP_STORAGE_CREDITS_PER_MIB must be explicitly set in production (use 0 to disable storage charges).',
+    );
+  }
+  return config;
+}
 
 type CreditConfig = z.infer<typeof creditConfig>;
 type CreditReader = Pick<Database, 'select' | 'insert'>;
@@ -172,6 +186,61 @@ export function creditLedger(db: Database, config: CreditConfig) {
         });
         return true;
       });
+    },
+    async chargeStorage(
+      tx: Transaction,
+      accountId: string,
+      fileId: string,
+      amount: string,
+    ) {
+      const charge = creditUnits(amount);
+      if (charge <= 0n) return true;
+      if (!(await lockAccount(tx, accountId))) return false;
+      await grantStarter(tx, accountId);
+      const operationKey = 'storage:' + fileId;
+      const [existing] = await tx
+        .select({ id: creditEntries.id })
+        .from(creditEntries)
+        .where(
+          and(
+            eq(creditEntries.accountId, accountId),
+            eq(creditEntries.operationKey, operationKey),
+          ),
+        );
+      if (existing) return true;
+      if (creditUnits(await balance(tx, accountId)) < charge) return false;
+      await tx.insert(creditEntries).values({
+        accountId,
+        operationKey,
+        kind: 'storage',
+        amount: creditDecimal(-charge),
+      });
+      return true;
+    },
+    async refundStorage(tx: Transaction, fileId: string) {
+      const operationKey = 'storage:' + fileId;
+      const [charge] = await tx
+        .select({
+          accountId: creditEntries.accountId,
+          amount: creditEntries.amount,
+        })
+        .from(creditEntries)
+        .where(
+          and(
+            eq(creditEntries.operationKey, operationKey),
+            eq(creditEntries.kind, 'storage'),
+          ),
+        );
+      if (!charge || !(await lockAccount(tx, charge.accountId))) return;
+      await tx
+        .insert(creditEntries)
+        .values({
+          accountId: charge.accountId,
+          operationKey: 'refund:' + operationKey,
+          kind: 'refund',
+          amount: creditDecimal(-creditUnits(charge.amount)),
+        })
+        .onConflictDoNothing();
     },
   };
 }

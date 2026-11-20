@@ -10,11 +10,18 @@ import { connectDatabase } from '@brightwork/api/database';
 import { runStore } from '@brightwork/api/runs';
 import { taskAutomationStore } from '@brightwork/api/schedule';
 import { mailStore } from '@brightwork/api/mail';
+import { storeEmailOutbox } from '@brightwork/api/store-email-outbox';
 import { agentRunner } from './agent';
 import { llmClient } from '@brightwork/api/llm';
 import { pageReader, publicPageUrl } from '@brightwork/api/public-page';
 import { webSearch } from './web-search';
 import { resendMail } from './resend-mail';
+import { generatedAppSourceStore } from '@brightwork/api/generated-app-source-store';
+import { generatedAppJobs } from '@brightwork/api/generated-app-jobs';
+import { generatedAppRecords } from '@brightwork/api/generated-app-records';
+import { generatedAppUserDirectory } from '@brightwork/api/generated-app-users';
+import { buildGeneratedAppSource } from './app-source-build';
+import { processGeneratedAppJob } from './app-jobs';
 
 const env = z
   .object({
@@ -23,6 +30,11 @@ const env = z
     LLM_API_KEY: z.string().min(1),
     LLM_MODEL: z.string().min(1),
     LLM_BASE_URL: z.url().default('https://api.openai.com/v1'),
+    LLM_API_STYLE: z.enum(['openai', 'ollama']).default('openai'),
+    LLM_TIMEOUT_MS: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.coerce.number().int().min(10_000).max(300_000).optional(),
+    ),
     APP_ORIGIN: z
       .url({ protocol: /^https?$/u })
       .default('http://127.0.0.1:5173'),
@@ -40,6 +52,10 @@ const runs = runStore(database.db);
 const schedules = taskAutomationStore(database.db);
 const credits = creditLedger(database.db, creditConfig.parse(process.env));
 const media = mediaStore(database.db, credits);
+const sourceBuilds = generatedAppSourceStore(database.db);
+const appJobs = generatedAppJobs(database.db);
+const appRecords = generatedAppRecords(database.db);
+const appUserDirectory = generatedAppUserDirectory(database.db);
 const providers = mediaProviders(mediaEnv.parse(process.env));
 const run = agentRunner(
   store,
@@ -48,11 +64,21 @@ const run = agentRunner(
     key: env.LLM_API_KEY,
     model: env.LLM_MODEL,
     baseUrl: env.LLM_BASE_URL,
+    apiStyle: env.LLM_API_STYLE,
+    ...(env.LLM_TIMEOUT_MS === undefined
+      ? {}
+      : { timeoutMs: env.LLM_TIMEOUT_MS }),
   }),
   env.WEB_SEARCH_API_KEY && env.WEB_SEARCH_MODEL
     ? webSearch({ key: env.WEB_SEARCH_API_KEY, model: env.WEB_SEARCH_MODEL })
     : undefined,
   pageReader(publicPageUrl(env.APP_ORIGIN, env.SITE_BASE_DOMAIN)),
+  process.env.VERCEL_OIDC_TOKEN ||
+    (process.env.VERCEL_TOKEN &&
+      process.env.VERCEL_TEAM_ID &&
+      process.env.VERCEL_PROJECT_ID)
+    ? buildGeneratedAppSource
+    : undefined,
 );
 const worker = new Worker<{ turnId: string }>(
   agentQueueName,
@@ -131,10 +157,16 @@ const sending = (async () => {
   if (!env.OUTREACH_RESEND_API_KEY || !env.OUTREACH_FROM_EMAIL) return;
   const send = resendMail(env.OUTREACH_RESEND_API_KEY);
   const mail = mailStore(database.db);
+  const storeEmails = storeEmailOutbox(database.db);
   while (!stop.signal.aborted) {
     try {
       const attempt = await mail.claim();
       if (attempt) await mail.record(attempt, await send(attempt));
+      else {
+        const storeAttempt = await storeEmails.claim(env.OUTREACH_FROM_EMAIL);
+        if (storeAttempt)
+          await storeEmails.record(storeAttempt, await send(storeAttempt));
+      }
     } catch {
       if (!stop.signal.aborted)
         console.error(
@@ -159,11 +191,67 @@ const generating = (async () => {
   }
 })();
 
+const buildingApps = (async () => {
+  const accessTokenReady = Boolean(
+    process.env.VERCEL_TOKEN &&
+    process.env.VERCEL_TEAM_ID &&
+    process.env.VERCEL_PROJECT_ID,
+  );
+  if (!process.env.VERCEL_OIDC_TOKEN && !accessTokenReady) return;
+  while (!stop.signal.aborted) {
+    try {
+      const job = await sourceBuilds.claim();
+      if (job) {
+        try {
+          const result = await buildGeneratedAppSource(job.sourceFiles);
+          await sourceBuilds.finish(job.siteId, job.revision, result);
+        } catch (error) {
+          await sourceBuilds.finish(job.siteId, job.revision, {
+            passed: false,
+            log:
+              error instanceof Error ? error.message : 'Isolated build failed.',
+          });
+        }
+      }
+    } catch {
+      if (!stop.signal.aborted)
+        console.error('Isolated app build failed before completion.');
+    }
+    await delay(2_000, undefined, { signal: stop.signal }).catch(() => {});
+  }
+})();
+
+const runningAppJobs = (async () => {
+  while (!stop.signal.aborted) {
+    try {
+      const claim = await appJobs.claim();
+      if (claim)
+        await processGeneratedAppJob(claim, {
+          jobs: appJobs,
+          records: appRecords,
+          users: appUserDirectory,
+        });
+    } catch {
+      if (!stop.signal.aborted)
+        console.error('Generated app job processing failed.');
+    }
+    await delay(1_500, undefined, { signal: stop.signal }).catch(() => {});
+  }
+})();
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     stop.abort();
     void Promise.all([worker.close(), queue.close()])
-      .then(() => Promise.all([scheduling, sending, generating]))
+      .then(() =>
+        Promise.all([
+          scheduling,
+          sending,
+          generating,
+          buildingApps,
+          runningAppJobs,
+        ]),
+      )
       .then(async () => {
         cache.disconnect();
         producer.disconnect();

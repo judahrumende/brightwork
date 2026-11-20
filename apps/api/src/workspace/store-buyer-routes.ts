@@ -9,11 +9,13 @@ export const buyerPath = '/store/account';
 const codePath = buyerPath + '/code';
 const verifyPath = buyerPath + '/verify';
 const logoutPath = buyerPath + '/sign-out';
+const logoutAllPath = buyerPath + '/sign-out-all';
 const storefrontCatalog = '/store/catalog';
 
 export const isBuyerRoute = (method: string, route: string) =>
   (['GET', 'HEAD'].includes(method) && route === buyerPath) ||
-  (method === 'POST' && [codePath, verifyPath, logoutPath].includes(route));
+  (method === 'POST' &&
+    [codePath, verifyPath, logoutPath, logoutAllPath].includes(route));
 
 export type BuyerAccess = {
   buyers: ReturnType<typeof storeBuyers>;
@@ -158,17 +160,31 @@ export function registerBuyerRoutes(
       const next = orders.length > 20 ? page.at(-1) : undefined;
       const cards = page
         .map((order) => {
-          const amount = storeOrderTotal(order.items, order.delivery);
+          const amount = storeOrderTotal(
+            order.items,
+            order.delivery,
+            order.discount?.amount ?? 0,
+          );
           const currency = new Intl.NumberFormat('en', {
             style: 'currency',
             currency: order.currency,
           });
+          const refund =
+            order.amountRefunded > 0
+              ? `<p>Refunded ${currency.format(order.amountRefunded / 100)} · Net paid ${currency.format(Math.max(0, amount - order.amountRefunded) / 100)}</p>`
+              : '';
           const pay =
             order.status === 'confirmed' &&
             order.payment === 'awaiting_payment' &&
             order.saleId
-              ? `<p><a href="${escape(new URL('/sale/' + order.saleId, access.paymentOrigin).href)}">Open test payment link</a></p>`
+              ? `<p><a href="${escape(new URL('/sale/' + order.saleId, access.paymentOrigin).href)}">Open payment link</a></p>`
               : '';
+          const tracking = order.tracking
+            ? `<p>Shipment · ${escape(order.tracking.carrier)} · ${escape(order.tracking.number)} · <a href="${escape(order.tracking.url)}" target="_blank" rel="noreferrer">Track package</a></p>`
+            : '';
+          const discount = order.discount
+            ? `<p>Discount ${escape(order.discount.code)} · −${currency.format(order.discount.amount / 100)}</p>`
+            : '';
           const payment = {
             awaiting_payment: 'Awaiting payment',
             paid: 'Paid',
@@ -177,6 +193,7 @@ export function registerBuyerRoutes(
             closed: 'Checkout closed',
           };
           return `<article><h2>${currency.format(amount / 100)} · ${escape(order.status)}</h2>
+          ${discount}${refund}
           <time datetime="${escape(order.createdAt)}">${formatter.format(new Date(order.createdAt))}</time>
           <ul>${order.items.map((line) => `<li>${escape(line.productName)} × ${line.quantity}</li>`).join('')}</ul>
           ${
@@ -186,7 +203,7 @@ export function registerBuyerRoutes(
               : ''
           }
           ${order.payment ? `<p>${payment[order.payment]}</p>` : ''}
-          <p>Reference: ${order.id}</p>${pay}</article>`;
+          <p>Reference: ${order.id}</p>${pay}${tracking}</article>`;
         })
         .join('');
       const query = next
@@ -197,6 +214,7 @@ export function registerBuyerRoutes(
         'My orders',
         `<p>Signed in as ${escape(email)}</p>
         <form method="post" action="${logoutPath}"><button>Sign out</button></form>
+        <form method="post" action="${logoutAllPath}"><button>Sign out on all devices</button></form>
         ${cards || '<p>No orders to show.</p>'}
         ${query ? `<a href="${buyerPath}?${escape(query.toString())}">Older orders</a>` : ''}`,
       );
@@ -267,6 +285,16 @@ export function registerBuyerRoutes(
     account.post(logoutPath, { bodyLimit: 2048 }, async (request, reply) => {
       const { site, base, name, token } = context(request);
       await access.buyers.signOut(site, token);
+      reply.header(
+        'Set-Cookie',
+        cookie(name, '', base.startsWith('https:'), 0),
+      );
+      return redirect(reply);
+    });
+    account.post(logoutAllPath, { bodyLimit: 2048 }, async (request, reply) => {
+      const { site, base, name, token } = context(request);
+      const email = await access.buyers.buyer(site, token);
+      if (email) await access.buyers.signOutAll(site, email);
       reply.header(
         'Set-Cookie',
         cookie(name, '', base.startsWith('https:'), 0),

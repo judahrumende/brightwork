@@ -212,6 +212,95 @@ export function stripeConnectProvider(
           ),
         );
     },
+    async refundPayment(
+      connected: string,
+      paymentIntent: string,
+      amount: number,
+      requestId: string,
+    ) {
+      const intentId = paymentId.parse(paymentIntent);
+      const request = z.uuid().parse(requestId);
+      return z
+        .object({
+          id: z.string().regex(/^re_[a-z0-9]+$/iu),
+          amount: moneyAmount,
+          currency,
+          payment_intent: z.literal(intentId),
+          status: z.enum([
+            'pending',
+            'requires_action',
+            'succeeded',
+            'failed',
+            'canceled',
+          ]),
+          livemode: z.literal(mode === 'live'),
+        })
+        .parse(
+          await stripe(
+            'refunds',
+            {
+              payment_intent: intentId,
+              amount: String(moneyAmount.min(1).parse(amount)),
+              'metadata[brightwork_refund_request]': request,
+            },
+            idempotencyKey('brightwork-store-refund-' + request),
+            accountId.parse(connected),
+          ),
+        );
+    },
+    async findRefundRequest(
+      connected: string,
+      paymentIntent: string,
+      requestId: string,
+    ) {
+      const intentId = paymentId.parse(paymentIntent);
+      const request = z.uuid().parse(requestId);
+      let startingAfter: string | undefined;
+      for (let page = 0; page < 100; page++) {
+        const query = new URLSearchParams({
+          payment_intent: intentId,
+          limit: '100',
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        });
+        const result = z
+          .object({
+            data: z.array(
+              z.object({
+                id: z.string().regex(/^re_[a-z0-9]+$/iu),
+                amount: moneyAmount,
+                currency,
+                payment_intent: z.literal(intentId),
+                status: z.enum([
+                  'pending',
+                  'requires_action',
+                  'succeeded',
+                  'failed',
+                  'canceled',
+                ]),
+                livemode: z.literal(mode === 'live'),
+                metadata: z.record(z.string(), z.string()),
+              }),
+            ),
+            has_more: z.boolean(),
+          })
+          .parse(
+            await stripe(
+              'refunds?' + query,
+              undefined,
+              undefined,
+              accountId.parse(connected),
+            ),
+          );
+        const found = result.data.find(
+          (refund) => refund.metadata.brightwork_refund_request === request,
+        );
+        if (found) return found;
+        const last = result.data.at(-1);
+        if (!result.has_more || !last) return undefined;
+        startingAfter = last.id;
+      }
+      return undefined;
+    },
     async charge(connected: string, id: string) {
       const chargeId = z
         .string()

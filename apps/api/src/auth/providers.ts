@@ -19,13 +19,16 @@ const socialUser = z.object({
     last_name: z.string().nullish(),
   }),
 });
+const acceptedEmail = z.object({ id: z.string().min(1) });
 export type OAuthProvider = 'GoogleOAuth' | 'AppleOAuth';
 
 export function authProviders(env: AuthEnv, request: typeof fetch = fetch) {
   const origin = new URL(env.APP_ORIGIN);
   const callback = new URL('/auth/callback', origin).href;
-  const mail =
-    env.SMTP_HOST && env.MAIL_FROM
+  const from = env.MAIL_FROM;
+  const resendKey = env.AUTH_RESEND_API_KEY;
+  const smtp =
+    env.SMTP_HOST && from && !resendKey
       ? nodemailer.createTransport({
           host: env.SMTP_HOST,
           port: env.SMTP_PORT,
@@ -37,12 +40,40 @@ export function authProviders(env: AuthEnv, request: typeof fetch = fetch) {
           socketTimeout: 10_000,
         })
       : null;
+  const mailEnabled = Boolean(from && (resendKey || smtp));
+
+  async function sendMail(to: string, subject: string, text: string) {
+    if (!from) throw new Error('Sign-in email is unavailable');
+    if (resendKey) {
+      const response = await request('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + resendKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from, to: [to], subject, text }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error('The sign-in email provider rejected the request');
+      }
+      if (!acceptedEmail.safeParse(await response.json()).success)
+        throw new Error(
+          'The sign-in email provider did not confirm acceptance',
+        );
+      return;
+    }
+    if (!smtp) throw new Error('Sign-in email is unavailable');
+    await smtp.sendMail({ from, to, subject, text });
+  }
 
   return {
     emailEnabled: Boolean(
-      mail && env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY,
+      mailEnabled && env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY,
     ),
-    buyerEmailEnabled: Boolean(mail),
+    buyerEmailEnabled: mailEnabled,
     oauthEnabled: Boolean(env.WORKOS_CLIENT_ID && env.WORKOS_API_KEY),
 
     async verifyHuman(token: string, ip: string) {
@@ -80,25 +111,34 @@ export function authProviders(env: AuthEnv, request: typeof fetch = fetch) {
     },
 
     async sendCode(email: string, code: string, token: string) {
-      if (!mail || !env.MAIL_FROM) throw new Error('SMTP is unavailable');
       const link = new URL('/sign-in/link', origin);
       link.hash = new URLSearchParams({ token }).toString();
-      await mail.sendMail({
-        from: env.MAIL_FROM,
-        to: email,
-        subject: `Your ${brand.product} sign-in code`,
-        text: `Your sign-in code is ${code}. It expires in 10 minutes.\n\nYou can also sign in using this link:\n${link.href}\n\nIf you did not request this email, you can ignore it.`,
-      });
+      await sendMail(
+        email,
+        `Your ${brand.product} sign-in code`,
+        `Your sign-in code is ${code}. It expires in 10 minutes.\n\nYou can also sign in using this link:\n${link.href}\n\nIf you did not request this email, you can ignore it.`,
+      );
     },
 
     async sendBuyerCode(email: string, code: string, storefront: string) {
-      if (!mail || !env.MAIL_FROM) throw new Error('SMTP is unavailable');
-      await mail.sendMail({
-        from: env.MAIL_FROM,
-        to: email,
-        subject: 'Your store sign-in code',
-        text: `Your sign-in code for ${storefront} is ${code}. It expires in 10 minutes. If you did not request the code, you can ignore this email.`,
-      });
+      await sendMail(
+        email,
+        'Your store sign-in code',
+        `Your sign-in code for ${storefront} is ${code}. It expires in 10 minutes. If you did not request the code, you can ignore this email.`,
+      );
+    },
+
+    async sendAppUserCode(
+      email: string,
+      code: string,
+      application: string,
+      signInUrl?: string,
+    ) {
+      await sendMail(
+        email,
+        'Your app sign-in code',
+        `Your sign-in code for ${application} is ${code}. It expires in 10 minutes.${signInUrl ? ` Sign in at ${signInUrl}.` : ''} If you did not request the code, you can ignore this email.`,
+      );
     },
 
     authorizationUrl(provider: OAuthProvider, state: string, verifier: string) {

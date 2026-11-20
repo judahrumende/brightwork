@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import type { WebsitePage } from '@brightwork/shared';
+import { generatedAppProjectFiles } from '@brightwork/shared';
+import {
+  generatedAppSourceFiles,
+  generatedAppSourceHash,
+} from './generated-app-source';
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/u);
 const shaObject = z.object({ sha });
@@ -14,9 +19,22 @@ export function githubSiteSync(
   return async function sync(site: {
     id: string;
     revision: number;
-    html: string;
-    pages: WebsitePage[];
+    html?: string;
+    pages?: WebsitePage[];
+    source?: {
+      sourceHash: string;
+      buildState: string;
+      sourceFiles: { path: string; content: string }[];
+    };
   }) {
+    const sourceFiles = site.source
+      ? generatedAppSourceFiles.parse(site.source.sourceFiles)
+      : null;
+    if (
+      sourceFiles &&
+      generatedAppSourceHash(sourceFiles) !== site.source?.sourceHash
+    )
+      throw new Error('Generated app source hash does not match its manifest.');
     const signal = AbortSignal.timeout(20_000);
     async function call(path: string, method = 'GET', body?: object) {
       return request(base + path, {
@@ -45,13 +63,53 @@ export function githubSiteSync(
     const { tree } = z
       .object({ tree: shaObject })
       .parse(await json(await call('commits/' + parent)));
-    const entries = [
-      { path: 'index.html', content: site.html },
-      ...site.pages.map((page) => ({
-        path: page.slug + '/index.html',
-        content: page.html,
-      })),
-    ];
+    const entries =
+      site.source && sourceFiles
+        ? [
+            ...generatedAppProjectFiles(sourceFiles).map((file) => ({
+              path: 'app/' + file.path,
+              content: file.content,
+            })),
+            {
+              path: 'app/foundable-project.json',
+              content: JSON.stringify(
+                {
+                  format: 'foundable-app-project-v1',
+                  revision: site.revision,
+                  sourceHash: site.source.sourceHash,
+                  runtime: 'node22+',
+                  framework: 'vite-react-typescript',
+                  entrypoint: 'src/main.tsx',
+                  commands: ['npm ci', 'npm run typecheck', 'npm run build'],
+                  output: 'dist/preview.html',
+                  backend: 'Foundable managed app runtime',
+                },
+                null,
+                2,
+              ),
+            },
+            {
+              path: 'app/foundable-source.json',
+              content: JSON.stringify(
+                {
+                  format: 'foundable-app-source-v1',
+                  revision: site.revision,
+                  sourceHash: site.source.sourceHash,
+                  buildState: site.source.buildState,
+                  files: sourceFiles,
+                },
+                null,
+                2,
+              ),
+            },
+          ]
+        : [
+            { path: 'index.html', content: site.html ?? '' },
+            ...(site.pages ?? []).map((page) => ({
+              path: page.slug + '/index.html',
+              content: page.html,
+            })),
+          ];
     const subtree = shaObject.parse(
       await json(
         await call('trees', 'POST', {

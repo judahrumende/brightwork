@@ -18,6 +18,18 @@ export const merchantCustomersQuery = z.object({
   kind: z.enum(['verified', 'guest']).optional(),
   after: z.email().max(254).optional(),
 });
+export const merchantEmailsQuery = z
+  .object({
+    before: z.iso.datetime().optional(),
+    id: z.uuid().optional(),
+  })
+  .refine(({ before, id }) => Boolean(before) === Boolean(id));
+export const merchantActivityQuery = z
+  .object({
+    before: z.iso.datetime().optional(),
+    id: z.uuid().optional(),
+  })
+  .refine(({ before, id }) => Boolean(before) === Boolean(id));
 export const merchantReportQuery = z
   .object({
     from: z.iso.date(),

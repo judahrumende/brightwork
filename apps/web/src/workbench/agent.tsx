@@ -1,4 +1,5 @@
 import { StoreDashboard } from './store-dashboard';
+import { AppDashboard } from './app-dashboard';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -42,6 +43,8 @@ type Artifact = {
   upcoming: string[];
   publicUrl: string | null;
   isStore?: boolean;
+  isApp?: boolean;
+  runtimeMode?: 'static' | 'store' | 'app' | null;
   storeLive?: boolean;
   answer: string | null;
   revision: number;
@@ -883,24 +886,48 @@ export function WorkList({
                   ) : (
                     <>
                       {dashboardSite === selected.id ? (
-                        <StoreDashboard
-                          key={selected.id}
-                          endpoint={
-                            root(id) + '/work/' + selected.id + '/store'
-                          }
-                          publicUrl={
-                            selected.storeLive ? selected.publicUrl : null
-                          }
-                          readOnly={!['owner', 'admin'].includes(role)}
-                        />
+                        selected.isApp || selected.runtimeMode === 'app' ? (
+                          <AppDashboard
+                            key={selected.id}
+                            endpoint={root(id) + '/work/apps/' + selected.id}
+                            title={selected.title}
+                            onReturn={() => setDashboardSite(null)}
+                            readOnly={!['owner', 'admin'].includes(role)}
+                          />
+                        ) : (
+                          <StoreDashboard
+                            key={selected.id}
+                            endpoint={
+                              root(id) + '/work/' + selected.id + '/store'
+                            }
+                            publicUrl={
+                              selected.storeLive ? selected.publicUrl : null
+                            }
+                            readOnly={!['owner', 'admin'].includes(role)}
+                          />
+                        )
                       ) : (
                         <WebsitePreview
                           title="Website draft preview"
                           html={selected.body}
                           pages={selected.pages ?? []}
+                          {...(selected.runtimeMode === 'app'
+                            ? {
+                                appPreview: {
+                                  endpoint:
+                                    root(id) +
+                                    '/work/apps/' +
+                                    selected.id +
+                                    '/preview',
+                                  revision: selected.revision,
+                                },
+                              }
+                            : {})}
                         />
                       )}
-                      {selected.isStore && (
+                      {(selected.isStore ||
+                        selected.isApp ||
+                        selected.runtimeMode === 'app') && (
                         <Button
                           variant="secondary"
                           aria-pressed={dashboardSite === selected.id}

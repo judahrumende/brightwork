@@ -6,6 +6,7 @@ import { Button } from '../ui/primitives';
 
 export type SaleSummary = {
   id: string;
+  mode: 'test' | 'live';
   title: string;
   currency: string;
   amount: number;

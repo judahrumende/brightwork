@@ -13,6 +13,7 @@ const names: Record<Kind, string> = {
 };
 type Job = {
   id: string;
+  siteId?: string | null;
   kind: Kind;
   state: string;
   prompt: string;
@@ -20,6 +21,7 @@ type Job = {
 };
 type Request = {
   id: string;
+  siteId?: string;
   kind: Kind;
   prompt: string;
   quotedCredits: string;
@@ -55,8 +57,20 @@ export function MediaLibrary({
         ? 4000
         : false,
   });
+  const projects = useQuery({
+    queryKey: ['/api/companies/' + companyId + '/work/projects'],
+    queryFn: ({ signal }) =>
+      api<{
+        projects: { id: string; title: string; kind: 'app' | 'store' }[];
+      }>('/api/companies/' + companyId + '/work/projects', { signal }),
+    enabled: Boolean(
+      result.data &&
+      (Object.keys(result.data.rates).length > 0 || result.data.jobs.length),
+    ),
+  });
   const last = useRef<Request | null>(null);
   const [selected, setSelected] = useState<Kind | ''>('');
+  const [projectId, setProjectId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -66,6 +80,9 @@ export function MediaLibrary({
   const kind = enabled.find((item) => item === selected) ?? enabled[0];
   const cost = kind && result.data?.rates?.[kind];
   const jobs = result.data?.jobs ?? [];
+  const projectNames = new Map(
+    projects.data?.projects.map((project) => [project.id, project.title]) ?? [],
+  );
   if (!enabled.length && !jobs.length) return null;
   return (
     <section aria-label="Generated media">
@@ -79,11 +96,13 @@ export function MediaLibrary({
             const body = prompt.trim();
             if (
               last.current?.kind !== kind ||
+              last.current.siteId !== (projectId || undefined) ||
               last.current.prompt !== body ||
               last.current.quotedCredits !== cost
             )
               last.current = {
                 id: crypto.randomUUID(),
+                ...(projectId ? { siteId: projectId } : {}),
                 kind,
                 prompt: body,
                 quotedCredits: cost,
@@ -102,6 +121,23 @@ export function MediaLibrary({
             }
           }}
         >
+          {projects.data?.projects.length ? (
+            <label>
+              Attach media usage to
+              <select
+                value={projectId}
+                disabled={busy}
+                onChange={(event) => setProjectId(event.target.value)}
+              >
+                <option value="">Workspace media</option>
+                {projects.data.projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.title} · {project.kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label>
             Media type
             <select
@@ -145,6 +181,9 @@ export function MediaLibrary({
                 {names[job.kind]} · {states[job.state] ?? job.state} ·{' '}
                 {Number(job.credits)} credits
               </p>
+              {job.siteId && (
+                <p>Project: {projectNames.get(job.siteId) ?? 'Unavailable'}</p>
+              )}
               <p>{job.prompt}</p>
               {job.state === 'completed' && (
                 <a href={endpoint + '/' + job.id + '/asset'}>

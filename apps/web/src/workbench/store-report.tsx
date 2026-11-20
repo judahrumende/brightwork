@@ -98,6 +98,50 @@ export function StoreReport({
       {report.error && <p role="alert">{errorMessage(report.error)}</p>}
       {data && totals && (
         <>
+          <h4>Store usage</h4>
+          <dl className={styles.metrics}>
+            <div>
+              <dt>Products</dt>
+              <dd>{data.usage.products}</dd>
+            </div>
+            <div>
+              <dt>Variants</dt>
+              <dd>{data.usage.variants}</dd>
+            </div>
+            <div>
+              <dt>Product photos</dt>
+              <dd>{data.usage.photoCount}</dd>
+            </div>
+            <div>
+              <dt>Product photo storage</dt>
+              <dd>{BigInt(data.usage.photoBytes).toLocaleString()} bytes</dd>
+            </div>
+            <div>
+              <dt>Model credits</dt>
+              <dd>{Number(data.usage.modelCredits).toFixed(2)}</dd>
+            </div>
+            <div>
+              <dt>Tool credits</dt>
+              <dd>{Number(data.usage.toolCredits).toFixed(2)}</dd>
+            </div>
+            <div>
+              <dt>Total build credits</dt>
+              <dd>{Number(data.usage.totalCredits).toFixed(2)}</dd>
+            </div>
+            <div>
+              <dt>Charged media jobs</dt>
+              <dd>{data.usage.mediaJobs}</dd>
+            </div>
+            <div>
+              <dt>Media credits</dt>
+              <dd>{Number(data.usage.mediaCredits).toFixed(2)}</dd>
+            </div>
+          </dl>
+          <p>
+            Store resources are current totals. Build credits include model and
+            tool charges tied to store revisions. Media credits use the
+            configured Foundable rates and are not provider invoice amounts.
+          </p>
           <dl className={styles.metrics}>
             <div>
               <dt>Order requests</dt>

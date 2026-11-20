@@ -21,6 +21,9 @@ const quotePath = '/store/review';
 const countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
 const photoPath = '/store/photos';
 const orderBodyLimit = 128 * 1024;
+export type StorePayments = Pick<StripeConnectModes, 'checkout'> & {
+  availableModes?: StripeConnectModes['availableModes'];
+};
 export function storePublicRoute(method: string, route: string) {
   return (
     isBuyerRoute(method, route) ||
@@ -46,7 +49,7 @@ export function registerStorefront(
   origin: (id: string) => string,
   limitOrder: (key: string) => Promise<void>,
   buyerAccess?: BuyerAccess,
-  payments?: Pick<StripeConnectModes, 'checkout'>,
+  payments?: StorePayments,
 ) {
   void app.register((scope, _opts, done) => {
     scope.addContentTypeParser(
@@ -82,7 +85,17 @@ export function registerStorefront(
       const site = siteId(request.hostname)!;
       const store = await stores.catalog(site);
       if (!store) return reply.code(404).send('Store not found');
-      const direct = Boolean(payments && store.directCheckout);
+      const direct = Boolean(
+        payments &&
+        store.directCheckout &&
+        (!payments.availableModes ||
+          payments.availableModes().includes(store.paymentMode)),
+      );
+      const checkoutDescription = direct
+        ? store.paymentMode === 'test'
+          ? 'Choose quantities and check out with Stripe in test mode.'
+          : 'Choose quantities and pay securely with Stripe.'
+        : 'Choose quantities and send one order request for the store to confirm.';
       const buyer = await readBuyer(
         buyerAccess,
         site,
@@ -163,10 +176,10 @@ export function registerStorefront(
           h2,h3{margin:0} img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#f8f7f4;border-radius:.5rem;margin-bottom:1rem}.option{display:grid;gap:.5rem;margin-top:1rem}.option img{max-width:12rem;margin-bottom:0} form,label{display:grid;gap:.5rem}form{margin-top:1rem;gap:1rem}
           input,button,select{font:inherit;padding:.5rem .75rem;width:100%;border-radius:.375rem;border:1px solid #88867e}fieldset{display:grid;gap:.5rem;border:1px solid #ddd9d0;border-radius:.5rem}button{background:#254a3e;color:white;cursor:pointer}
         </style>
-        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>${direct ? 'Choose quantities and check out with Stripe in test mode.' : 'Choose quantities and send one order request for the store to confirm.'}</p>
+        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>${checkoutDescription}</p>
         <form method="post" action="${zones.length ? quotePath : orderPath}">
           <input type="hidden" name="id" value="${randomUUID()}">
-          ${direct ? '<input type="hidden" name="pay" value="stripe">' : ''}
+          ${direct ? `<input type="hidden" name="pay" value="stripe"><input type="hidden" name="paymentMode" value="${store.paymentMode}">` : ''}
           <section aria-label="Products">${products || '<p>Products will appear here when they are available.</p>'}</section>
           ${
             available
@@ -175,6 +188,7 @@ export function registerStorefront(
                     ? `<p>Order email · ${escape(buyer)}</p>`
                     : '<label>Email for your order <input type="email" required name="email" maxlength="254" autocomplete="email"></label>'
                 }
+          <label>Discount code (optional)<input name="discountCode" maxlength="32" autocomplete="off"></label>
           ${deliveryFields}<button>${zones.length ? 'Review order' : direct ? 'Continue to Stripe' : 'Request order'}</button></div>`
               : ''
           }
@@ -200,10 +214,9 @@ export function registerStorefront(
         ...(buyer ? { email: buyer } : {}),
       };
       const direct = values.pay === 'stripe';
-      if (direct && !payments)
-        return reply
-          .code(503)
-          .send('Stripe checkout is temporarily unavailable.');
+      const submittedMode = z
+        .enum(['test', 'live'])
+        .safeParse(values.paymentMode);
       const reviewing = request.routeOptions.url === quotePath;
       const quote = z.uuid().safeParse(values.quote);
       const cart = Object.entries(values).filter(([key]) =>
@@ -214,6 +227,7 @@ export function registerStorefront(
           ? {
               id: values.id,
               email: values.email,
+              discountCode: values.discountCode || undefined,
               items: cart
                 .filter(([, quantity]) => quantity !== '0')
                 .map(([key, quantity]) => {
@@ -239,6 +253,31 @@ export function registerStorefront(
           ? reply.code(429).send('Too many requests.')
           : reply.code(503).send('Orders are temporarily unavailable.');
       }
+      const availableModes = payments?.availableModes?.();
+      if (direct && !payments)
+        return reply
+          .code(503)
+          .send('Stripe checkout is temporarily unavailable.');
+      const directStore = direct ? await stores.catalog(id) : null;
+      if (
+        direct &&
+        (!submittedMode.success ||
+          !directStore ||
+          submittedMode.data !== directStore.paymentMode)
+      )
+        return reply
+          .code(409)
+          .send(
+            'The store payment mode changed. Refresh the catalog before checkout.',
+          );
+      if (
+        direct &&
+        (!directStore?.directCheckout ||
+          (availableModes && !availableModes.includes(directStore.paymentMode)))
+      )
+        return reply
+          .code(503)
+          .send('Stripe checkout is temporarily unavailable.');
       const changed = () =>
         reply
           .code(409)
@@ -263,7 +302,10 @@ export function registerStorefront(
             );
         const review = await stores.prepareDelivery(
           id,
-          result.data,
+          {
+            ...result.data,
+            discountCode: result.data.discountCode ?? undefined,
+          },
           parsed.data,
           buyer,
         );
@@ -274,6 +316,7 @@ export function registerStorefront(
         });
         const money = (value: number) => currency.format(value / 100);
         const address = review.delivery.address;
+        const discountAmount = review.discount?.amount ?? 0;
         return reply.type('text/html; charset=utf-8').send(
           checkoutPage(
             'Review your order',
@@ -283,18 +326,35 @@ export function registerStorefront(
           <br>${escape([address.city, address.region, address.postalCode, countryNames.of(address.country)].filter(Boolean).join(', '))}</p>
           <ul>${review.items.map((item) => `<li>${escape(item.productName)} × ${item.quantity} · ${money(item.unitPrice * item.quantity)}</li>`).join('')}</ul>
           <dl><div><dt>Subtotal</dt><dd>${money(storeOrderTotal(review.items))}</dd></div>
+          ${review.discount ? `<div><dt>Discount (${escape(review.discount.code)})</dt><dd>−${money(discountAmount)}</dd></div>` : ''}
           <div><dt>Shipping</dt><dd>${money(review.delivery.shipping)}</dd></div>
           <div><dt>Tax</dt><dd>${money(review.delivery.tax)}</dd></div>
-          <div><dt>Total</dt><dd><strong>${money(storeOrderTotal(review.items, review.delivery))}</strong></dd></div></dl>
+          <div><dt>Total</dt><dd><strong>${money(storeOrderTotal(review.items, review.delivery, discountAmount))}</strong></dd></div></dl>
           <form method="post" action="${orderPath}"><input type="hidden" name="quote" value="${review.id}">
-          ${direct ? '<input type="hidden" name="pay" value="stripe">' : ''}
+          ${review.discount ? `<input type="hidden" name="discountCode" value="${escape(review.discount.code)}">` : ''}
+          ${direct ? `<input type="hidden" name="pay" value="stripe"><input type="hidden" name="paymentMode" value="${directStore?.paymentMode ?? ''}">` : ''}
           <button>${direct ? 'Continue to Stripe' : 'Submit order request'}</button></form>`,
           ),
         );
       }
       const orderId = quote.success
-        ? await stores.placeDelivery(id, quote.data, buyer, direct)
-        : result.success && (await stores.request(id, result.data, direct))
+        ? await stores.placeDelivery(
+            id,
+            quote.data,
+            buyer,
+            direct,
+            direct ? directStore!.paymentMode : undefined,
+          )
+        : result.success &&
+            (await stores.request(
+              id,
+              {
+                ...result.data,
+                discountCode: result.data.discountCode ?? undefined,
+              },
+              direct,
+              direct ? directStore!.paymentMode : undefined,
+            ))
           ? result.data.id
           : null;
       if (!orderId) return changed();
@@ -318,7 +378,11 @@ export function registerStorefront(
         }
         if (url) return reply.redirect(url, 303);
         const retryFields = quote.success
-          ? { quote: quote.data, pay: 'stripe' }
+          ? {
+              quote: quote.data,
+              pay: 'stripe',
+              paymentMode: directStore!.paymentMode,
+            }
           : values;
         return reply
           .code(503)

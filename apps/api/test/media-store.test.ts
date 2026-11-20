@@ -6,7 +6,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import Fastify from 'fastify';
 import postgres from 'postgres';
-import { accounts, businesses, members } from '../src/db/schema';
+import {
+  accounts,
+  artifacts,
+  businesses,
+  members,
+  websiteVersions,
+} from '../src/db/schema';
 import { creditConfig, creditLedger } from '../src/workspace/credits';
 import { mediaStore } from '../src/workspace/media-store';
 
@@ -41,6 +47,40 @@ test(
       .values([{ name: 'Stripe fixture' }, { name: 'Separate business' }])
       .returning();
     assert.ok(owner && other);
+    const [site, otherSite] = await db
+      .insert(artifacts)
+      .values([
+        {
+          businessId: owner.id,
+          kind: 'website',
+          title: 'Owner app',
+          body: '<main></main>',
+        },
+        {
+          businessId: other.id,
+          kind: 'website',
+          title: 'Other store',
+          body: '<main></main>',
+        },
+      ])
+      .returning();
+    assert.ok(site && otherSite);
+    await db.insert(websiteVersions).values([
+      {
+        artifactId: site.id,
+        revision: 1,
+        title: site.title,
+        document: site.body,
+        runtimeMode: 'app',
+      },
+      {
+        artifactId: otherSite.id,
+        revision: 1,
+        title: otherSite.title,
+        document: otherSite.body,
+        runtimeMode: 'store',
+      },
+    ]);
 
     const [user] = await db
       .insert(accounts)
@@ -57,6 +97,7 @@ test(
     const media = mediaStore(db, credits);
     const job = {
       id: randomUUID(),
+      siteId: site.id,
       kind: 'video' as const,
       prompt: 'A sailboat',
       quotedCredits: '4',
@@ -68,6 +109,16 @@ test(
       ]),
       ['accepted', 'accepted'],
     );
+    assert.equal(
+      await media.enqueue(
+        owner.id,
+        user.id,
+        { ...job, id: randomUUID(), siteId: otherSite.id },
+        '4',
+      ),
+      'invalid_project',
+    );
+    assert.equal((await media.list(owner.id, user.id))[0]?.siteId, site.id);
     assert.equal(Number((await credits.open(user.id)).available), 6);
     assert.equal(
       await media.enqueue(
@@ -91,7 +142,7 @@ test(
       await media.enqueue(owner.id, user.id, { ...job, id: randomUUID() }, '5'),
       'price_changed',
     );
-    assert.deepEqual(await media.list(other.id), []);
+    assert.deepEqual(await media.list(other.id, user.id), []);
     const now = new Date();
     const claim = await media.claim(['video'], now);
     assert.ok(claim);
@@ -117,10 +168,10 @@ test(
       true,
     );
     assert.equal(
-      (await media.asset(owner.id, job.id))?.bytes?.toString(),
+      (await media.asset(owner.id, user.id, job.id))?.bytes?.toString(),
       'video fixture',
     );
-    assert.equal(await media.asset(other.id, job.id), null);
+    assert.equal(await media.asset(other.id, user.id, job.id), null);
     const image = {
       ...job,
       id: randomUUID(),
@@ -153,7 +204,8 @@ test(
       null,
     );
     assert.equal(
-      (await media.list(owner.id)).find((row) => row.id === voice.id)?.state,
+      (await media.list(owner.id, user.id)).find((row) => row.id === voice.id)
+        ?.state,
       'needs_review',
     );
     assert.equal(Number((await credits.open(user.id)).available), 4);
@@ -164,6 +216,9 @@ test(
       }),
       true,
     );
-    assert.equal((await media.asset(owner.id, voice.id))?.mime, 'audio/mpeg');
+    assert.equal(
+      (await media.asset(owner.id, user.id, voice.id))?.mime,
+      'audio/mpeg',
+    );
   },
 );

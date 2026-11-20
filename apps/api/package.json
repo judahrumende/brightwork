@@ -8,25 +8,26 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/db/migrate.ts",
-    "test:integration": "tsx --test test/auth.test.ts test/automation.test.ts test/shopify.test.ts test/sms.test.ts test/meta-page-store.test.ts test/stripe-connect.test.ts test/referrals.test.ts test/commerce-insights.test.ts test/media-store.test.ts",
+    "test:integration": "tsx --test test/auth.test.ts test/automation.test.ts test/shopify.test.ts test/sms.test.ts test/meta-page-store.test.ts test/stripe-connect.test.ts test/referrals.test.ts test/commerce-insights.test.ts test/media-store.test.ts test/generated-app-records.test.ts test/store-buyer-routes.test.ts",
     "test:research": "tsx --test test/research.test.ts",
     "test:growth": "node --import tsx --test test/growth.test.ts test/github-site-sync.test.ts test/meta-page-webhook.test.ts test/stripe-connect-provider.test.ts test/media-providers.test.ts test/public-plans.test.ts"
   },
   "dependencies": {
     "@brightwork/shared": "workspace:*",
-    "fastify": "^5.6.1",
-    "zod": "^4.1.12",
-    "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.7",
-    "nodemailer": "^7.0.10",
-    "jose": "^6.1.0",
-    "ioredis": "^5.8.2",
+    "@vercel/sandbox": "^4.0.0",
     "bullmq": "^5.81.3",
-    "cheerio": "1.1.2"
+    "cheerio": "1.1.2",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.6.1",
+    "ioredis": "^5.8.2",
+    "jose": "^6.1.0",
+    "nodemailer": "^7.0.10",
+    "postgres": "^3.4.7",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "tsx": "^4.20.6",
-    "@types/nodemailer": "^7.0.2"
+    "@types/nodemailer": "^7.0.2",
+    "tsx": "^4.20.6"
   },
   "exports": {
     "./agent": "./src/workspace/agent-store.ts",
@@ -36,7 +37,14 @@
     "./run-plan": "./src/workspace/run-plan.ts",
     "./schedule": "./src/workspace/task-automation.ts",
     "./mail": "./src/workspace/mail-store.ts",
+    "./store-email-outbox": "./src/workspace/store-email-outbox.ts",
     "./website-checks": "./src/workspace/website-checks.ts",
+    "./generated-app-records": "./src/workspace/generated-app-records.ts",
+    "./generated-app-users": "./src/workspace/generated-app-users.ts",
+    "./generated-app-jobs": "./src/workspace/generated-app-jobs.ts",
+    "./generated-app-source": "./src/workspace/generated-app-source.ts",
+    "./generated-app-source-store": "./src/workspace/generated-app-source-store.ts",
+    "./generated-app-functions": "./src/workspace/generated-app-functions.ts",
     "./llm": "./src/llm.ts",
     "./public-page": "./src/research/page.ts",
     "./media-store": "./src/workspace/media-store.ts",
