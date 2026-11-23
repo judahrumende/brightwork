@@ -21,6 +21,8 @@ test('Stripe Connect separates seller onboarding and connected checkout', async 
     currency: 'aud',
     payment_intent: null,
     client_reference_id: order,
+    created: Math.floor(Date.now() / 1000),
+    metadata: { brightwork_sale: order },
     url: 'https://checkout.stripe.com/c/pay/fixture',
   };
   let hosted = session.url;
@@ -75,6 +77,7 @@ test('Stripe Connect separates seller onboarding and connected checkout', async 
           body.get('payment_intent_data[metadata][brightwork_order]'),
           order,
         );
+        assert.equal(body.get('metadata[brightwork_sale]'), order);
         assert.equal(
           headers.get('idempotency-key'),
           'brightwork-sale-' + order,
@@ -122,5 +125,70 @@ test('Stripe Connect separates seller onboarding and connected checkout', async 
   assert.equal(requests.length, 7);
   assert.throws(() =>
     stripeConnectProvider('sk_live_fixture', 'https://brightwork.example.test'),
+  );
+});
+
+test('Stripe Connect live provider rejects test credentials and test sessions', async () => {
+  const liveSession = {
+    id: 'cs_live_Example',
+    livemode: true,
+    payment_status: 'unpaid',
+    status: 'open',
+    amount_total: 1999,
+    currency: 'aud',
+    payment_intent: null,
+    client_reference_id: order,
+    created: Math.floor(Date.now() / 1000),
+    metadata: { brightwork_sale: order },
+    url: 'https://checkout.stripe.com/c/pay/live-fixture',
+  };
+  const provider = stripeConnectProvider(
+    'sk_live_fixture',
+    'https://brightwork.example.test',
+    async (_input, request) => {
+      assert.equal(
+        new Headers(request?.headers).get('authorization'),
+        'Bearer sk_live_fixture',
+      );
+      return Response.json(liveSession);
+    },
+    'live',
+  );
+  assert.throws(
+    () =>
+      stripeConnectProvider(
+        'sk_test_fixture',
+        'https://brightwork.example.test',
+        fetch,
+        'live',
+      ),
+    /live-mode key/u,
+  );
+  const created = await provider.createCheckout({
+    orderId: order,
+    accountId: 'acct_Fixture',
+    amount: 1999,
+    currency: 'aud',
+    title: 'Fixture sale',
+  });
+  assert.deepEqual(created, liveSession);
+  await assert.rejects(
+    stripeConnectProvider(
+      'sk_live_fixture',
+      'https://brightwork.example.test',
+      async () =>
+        Response.json({
+          ...liveSession,
+          id: 'cs_test_Example',
+          livemode: false,
+        }),
+      'live',
+    ).createCheckout({
+      orderId: order,
+      accountId: 'acct_Fixture',
+      amount: 1999,
+      currency: 'aud',
+      title: 'Fixture sale',
+    }),
   );
 });

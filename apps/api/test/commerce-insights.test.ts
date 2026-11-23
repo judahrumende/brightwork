@@ -53,6 +53,8 @@ test(
       await connection`insert into stripe_sales (id, business_id, account_id, title, currency, amount, amount_refunded, customer_key, paid_at)
         values (${randomUUID()}, ${business}, 'acct_Fixture', 'Fixture sale', ${currency}, ${gross}, ${refund}, ${customer}, ${time})`;
     }
+    await connection`insert into stripe_sales (id, business_id, account_id, title, currency, amount, amount_refunded, customer_key, paid_at, mode)
+      values (${randomUUID()}, ${owner.id}, 'acct_LiveFixture', 'Live sale', 'aud', 9900, 0, 'live-customer', '2026-11-18T12:00:00Z', 'live')`;
     const range = { from: '2026-11-18', through: '2026-11-18' };
     const result = await commerceInsights(db, owner.id, range);
     assert.deepEqual(
@@ -72,6 +74,19 @@ test(
       identified: 1,
       repeat: 1,
       unattributed: 1,
+    });
+    const live = await commerceInsights(db, owner.id, {
+      ...range,
+      mode: 'live',
+    });
+    assert.deepEqual(
+      live.revenue.map((row) => [row.currency, row.sales, Number(row.gross)]),
+      [['AUD', 1, 99]],
+    );
+    assert.deepEqual(live.customers, {
+      identified: 1,
+      repeat: 0,
+      unattributed: 0,
     });
     const separate = await commerceInsights(db, other.id, range);
     assert.equal(Number(separate.revenue[0]?.gross), 60);

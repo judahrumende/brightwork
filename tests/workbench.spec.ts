@@ -1099,16 +1099,17 @@ test('Stripe Connect creates a shareable sale and waits for payment confirmation
   await page.route('**' + base + '/shopify', (route) =>
     route.fulfill({ json: { enabled: false, shops: [], totals: [] } }),
   );
-  await page.route('**' + endpoint, (route) =>
+  await page.route(new RegExp(endpoint + '(?:\\?|$)', 'u'), (route) =>
     route.fulfill({
       json: {
         enabled: true,
+        availableModes: ['test'],
         seller: { ready: true, detailsSubmitted: true },
         orders: submitted ? [sale()] : [],
       },
     }),
   );
-  await page.route('**' + endpoint + '/sales', (route) => {
+  await page.route(new RegExp(endpoint + '/sales(?:\\?|$)', 'u'), (route) => {
     expect(route.request().postDataJSON()).toMatchObject({
       title: 'Fixture sale',
       amount: 1999,
@@ -1395,4 +1396,334 @@ test('Build opens saved conversations, links authorized attachments and returns 
   await expect(entry).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
+});
+
+test('a generated store opens its dashboard below the preview and saves a product', async ({
+  page,
+}) => {
+  await seedWorkbench(page);
+  const id = 'e4674721-7544-4ce9-b7cb-9dcbd85b356a';
+  const item = {
+    id,
+    title: 'Fieldwork store',
+    kind: 'website',
+    isStore: true,
+    body: '<h1>Fieldwork store</h1>',
+    revision: 1,
+    state: 'approved',
+    publicUrl: null,
+  };
+  const products: object[] = [];
+  let zones: object[] = [];
+  let deliveryRevision = 0;
+  let directCheckout = false;
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAC0AAAAASUVORK5CYII=';
+  await page.route(
+    '**' + api + '/work/' + id + '/store/photos/kettle?revision=1',
+    (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(png, 'base64'),
+      }),
+  );
+  const saleId = 'fa9fbe6c-2b5e-40d1-a607-def73dc6f746';
+  const order = {
+    id: 'order',
+    email: 'buyer@example.test',
+    currency: 'AUD',
+    status: 'confirmed',
+    createdAt: '2026-11-18T08:00:00.000Z',
+    items: [
+      {
+        productId: 'kettle',
+        productName: 'Pour-over kettle',
+        quantity: 1,
+        unitPrice: 4500,
+      },
+      {
+        productId: 'filters',
+        productName: 'Filters',
+        quantity: 2,
+        unitPrice: 700,
+      },
+    ],
+    saleId: null as string | null,
+    payment: null as string | null,
+  };
+  await page.route('**' + api + '/work', (route) =>
+    route.fulfill({ json: { items: [item], hosting: true } }),
+  );
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/orders(?:\\?|$)', 'u'),
+    (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const q = params.get('q');
+      const next = { before: order.createdAt, id: order.id };
+      if (params.has('before')) {
+        expect(params.get('status')).toBe('confirmed');
+        expect(params.get('q')).toBe('kettle');
+        expect(params.get('before')).toBe(order.createdAt);
+        return route.fulfill({
+          json: {
+            orders: [{ ...order, id: 'older', email: 'older@example.test' }],
+            next: null,
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          orders: !q || q === 'kettle' ? [order] : [],
+          next: q === 'kettle' ? next : null,
+        },
+      });
+    },
+  );
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/customers(?:\\?|$)', 'u'),
+    (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const verified = {
+        email: 'buyer@example.test',
+        joinedAt: '2026-11-18T08:00:00.000Z',
+        lastOrderAt: null,
+        orderCount: 0,
+      };
+      return route.fulfill({
+        json: {
+          customers: params.get('kind') === 'guest' ? [] : [verified],
+          next: null,
+        },
+      });
+    },
+  );
+  await page.route(
+    new RegExp(api + '/work/' + id + '/store/report(?:\\?|$)', 'u'),
+    (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const day = params.get('from');
+      return route.fulfill({
+        json: {
+          currency: 'AUD',
+          days: [
+            {
+              day,
+              requests: 4,
+              cancelled: 1,
+              paidOrders: 2,
+              gross: '5900',
+              refunds: '500',
+            },
+          ],
+        },
+      });
+    },
+  );
+  await page.route('**' + api + '/work/' + id + '/store', (route) => {
+    if (route.request().method() === 'POST') {
+      const data = route.request().postDataJSON();
+      if (data.action === 'checkout') {
+        expect(data.enabled).toBe(!directCheckout);
+        directCheckout = data.enabled;
+        return route.fulfill({ json: { saved: true } });
+      }
+      if (data.action === 'delivery') {
+        expect(data).toEqual({
+          action: 'delivery',
+          revision: 0,
+          zones: [
+            {
+              country: 'AU',
+              shipping: 500,
+              freeAbove: 10000,
+              taxRate: 1000,
+              taxShipping: true,
+            },
+          ],
+        });
+        zones = data.zones;
+        deliveryRevision++;
+        return route.fulfill({ json: { saved: true } });
+      }
+      if (data.action === 'payment') {
+        expect(data).toEqual({ action: 'payment', id: order.id });
+        order.saleId = saleId;
+        order.payment = 'awaiting_payment';
+        return route.fulfill({ json: { saved: true } });
+      }
+      if (data.product.parentId) {
+        expect(data.product).toMatchObject({
+          parentId: 'kettle',
+          name: 'Large',
+          price: 6000,
+          stock: 4,
+          sku: 'LARGE',
+        });
+        products.push({ ...data.product, id: 'kettle-large', revision: 1 });
+        return route.fulfill({ json: { saved: true } });
+      }
+      expect(data).toEqual({
+        action: 'product',
+        product: {
+          name: 'Pour-over kettle',
+          description: '',
+          price: 4500,
+          stock: 3,
+          active: true,
+          photo: { data: 'data:image/png;base64,' + png, alt: 'Copper kettle' },
+        },
+      });
+      products.push({
+        ...data.product,
+        photoAlt: data.product.photo.alt,
+        id: 'kettle',
+        revision: 1,
+      });
+      return route.fulfill({ json: { saved: true } });
+    }
+    return route.fulfill({
+      json: {
+        currency: 'AUD',
+        paymentMode: 'test',
+        paymentModes: ['test'],
+        products,
+        orders: [order],
+        paymentReady: true,
+        directCheckout,
+        zones,
+        deliveryRevision,
+        counts: { openRequests: 0, awaitingFulfillment: 1 },
+        customers: [
+          {
+            email: 'buyer@example.test',
+            joinedAt: '2026-11-18T08:00:00.000Z',
+            lastOrderAt: null,
+            orderCount: 0,
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto(workbench + '/build');
+  await page.getByRole('button', { name: /Fieldwork store/u }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(
+    dialog
+      .frameLocator('iframe[title="Website draft preview"]')
+      .getByRole('heading', { name: 'Fieldwork store' }),
+  ).toBeVisible();
+  await dialog.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  const dashboard = dialog.getByRole('region', { name: 'Store dashboard' });
+  await dashboard
+    .getByRole('button', { name: 'Enable direct checkout' })
+    .click();
+  await expect(
+    dashboard.getByText(
+      'Shoppers can pay directly from the catalog in test mode.',
+    ),
+  ).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Turn off direct checkout' })
+    .click();
+  await expect(
+    dashboard.getByRole('button', { name: 'Enable direct checkout' }),
+  ).toBeEnabled();
+  await dashboard.getByRole('radio', { name: 'Products' }).click();
+  await dashboard.getByRole('button', { name: 'Add product' }).click();
+  await dashboard.getByLabel('Name', { exact: true }).fill('Pour-over kettle');
+  await dashboard.getByLabel('Price (AUD)').fill('45');
+  await dashboard.getByLabel('Stock').fill('3');
+  await dashboard.getByLabel('Product photo').setInputFiles({
+    name: 'kettle.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png, 'base64'),
+  });
+  await dashboard.getByLabel('Photo description').fill('Copper kettle');
+  await dashboard.getByRole('button', { name: 'Save product' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: 'Pour-over kettle' }),
+  ).toBeVisible();
+  const photo = dashboard.getByRole('img', { name: 'Copper kettle' });
+  await expect(photo).toBeVisible();
+  await expect
+    .poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(1);
+  await dashboard
+    .getByRole('button', { name: 'Add variant to Pour-over kettle' })
+    .click();
+  await dashboard.getByLabel('Variant name').fill('Large');
+  await dashboard.getByLabel('Price (AUD)').fill('60');
+  await dashboard.getByLabel('Stock').fill('4');
+  await dashboard.getByLabel('SKU', { exact: true }).fill('LARGE');
+  await dashboard.getByRole('button', { name: 'Save product' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: /Large/u }),
+  ).toBeVisible();
+  await expect(dashboard.getByText('By variant').first()).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Orders' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', {
+      name: 'Pour-over kettle × 1, Filters × 2',
+    }),
+  ).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Create test payment link' })
+    .click();
+  await expect(
+    dashboard.getByRole('link', { name: /Open payment link/u }),
+  ).toHaveAttribute('href', '/sale/' + saleId);
+  await expect(
+    dashboard.getByRole('button', { name: 'Fulfill', exact: true }),
+  ).toHaveCount(0);
+  await dashboard.getByLabel('Search orders').fill('kettle');
+  await dashboard
+    .getByRole('combobox', { name: 'Order status' })
+    .selectOption('confirmed');
+  await dashboard.getByRole('button', { name: 'Search', exact: true }).click();
+  await dashboard.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(dashboard.getByText('older@example.test')).toBeVisible();
+  await expect(dashboard.getByText('Page 2')).toBeVisible();
+  await dashboard
+    .getByRole('button', { name: 'Previous', exact: true })
+    .click();
+  await expect(dashboard.getByText('buyer@example.test')).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Customers' }).click();
+  const buyer = dashboard.getByRole('row', { name: /buyer@example.test/u });
+  await expect(buyer.getByRole('cell', { name: 'Verified' })).toBeVisible();
+  await expect(
+    buyer.getByRole('cell', { name: '0', exact: true }),
+  ).toBeVisible();
+  await dashboard
+    .getByRole('combobox', { name: 'Account type' })
+    .selectOption('guest');
+  await dashboard.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(
+    dashboard.getByText('No customers match this search.'),
+  ).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Report' }).click();
+  await dashboard.getByLabel('From (UTC)').fill('2026-11-01');
+  await dashboard.getByLabel('Through (UTC)').fill('2026-11-02');
+  await dashboard.getByRole('button', { name: 'Apply dates' }).click();
+  await expect(
+    dashboard.getByRole('rowheader', { name: '2026-11-01' }),
+  ).toBeVisible();
+  await expect(dashboard.getByText(/54\.00/u)).toBeVisible();
+  await dashboard.getByRole('radio', { name: 'Delivery' }).click();
+  await dashboard.getByRole('button', { name: 'Add destination' }).click();
+  await dashboard.getByLabel('Two-letter country code').fill('au');
+  await dashboard.getByLabel('Flat shipping fee (AUD)').fill('5');
+  await dashboard.getByLabel('Free shipping from (AUD, optional)').fill('100');
+  await dashboard.getByLabel('Tax rate (%)').fill('10');
+  await dashboard.getByLabel('Apply tax to shipping').check();
+  await dashboard
+    .getByRole('button', { name: 'Save shipping and tax' })
+    .click();
+  await expect(dashboard.getByRole('group', { name: 'AU' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Site preview' }).click();
+  await expect(
+    dialog
+      .frameLocator('iframe[title="Website draft preview"]')
+      .getByRole('heading', { name: 'Fieldwork store' }),
+  ).toBeVisible();
 });

@@ -42,6 +42,7 @@ export function authProviders(env: AuthEnv, request: typeof fetch = fetch) {
     emailEnabled: Boolean(
       mail && env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY,
     ),
+    buyerEmailEnabled: Boolean(mail),
     oauthEnabled: Boolean(env.WORKOS_CLIENT_ID && env.WORKOS_API_KEY),
 
     async verifyHuman(token: string, ip: string) {
@@ -87,6 +88,16 @@ export function authProviders(env: AuthEnv, request: typeof fetch = fetch) {
         to: email,
         subject: `Your ${brand.product} sign-in code`,
         text: `Your sign-in code is ${code}. It expires in 10 minutes.\n\nYou can also sign in using this link:\n${link.href}\n\nIf you did not request this email, you can ignore it.`,
+      });
+    },
+
+    async sendBuyerCode(email: string, code: string, storefront: string) {
+      if (!mail || !env.MAIL_FROM) throw new Error('SMTP is unavailable');
+      await mail.sendMail({
+        from: env.MAIL_FROM,
+        to: email,
+        subject: 'Your store sign-in code',
+        text: `Your sign-in code for ${storefront} is ${code}. It expires in 10 minutes. If you did not request the code, you can ignore this email.`,
       });
     },
 
