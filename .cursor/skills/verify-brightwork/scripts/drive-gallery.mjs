@@ -28,11 +28,7 @@ try {
 }
 writeFileSync(
   join(root, 'gallery-health.json'),
-  JSON.stringify(
-    { status: healthResponse.status, json: healthJson },
-    null,
-    2,
-  ),
+  JSON.stringify({ status: healthResponse.status, json: healthJson }, null, 2),
 );
 
 const browser = await chromium.launch({ headless: true });
@@ -58,8 +54,7 @@ try {
   await browser.close();
 }
 
-const healthOk =
-  healthResponse.status === 200 && healthJson?.status === 'ok';
+const healthOk = healthResponse.status === 200 && healthJson?.status === 'ok';
 const report = {
   featureId: 'marketing-gallery',
   entryPoint: `${origin}/dev/ui`,
@@ -76,7 +71,10 @@ const report = {
     healthOk,
 };
 
-writeFileSync(join(root, 'drive-gallery.json'), JSON.stringify(report, null, 2));
+writeFileSync(
+  join(root, 'drive-gallery.json'),
+  JSON.stringify(report, null, 2),
+);
 writeFileSync(
   join(root, 'note-marketing-gallery.md'),
   [

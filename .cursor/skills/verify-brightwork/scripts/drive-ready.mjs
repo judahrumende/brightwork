@@ -65,9 +65,9 @@ writeFileSync(
     ``,
     `- featureId: api-readiness`,
     `- entryPoint: GET ${base}/ready`,
-    `- sha: ${(
-      await import('node:child_process')
-    ).execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()}`,
+    `- sha: ${(await import('node:child_process'))
+      .execSync('git rev-parse HEAD', { encoding: 'utf8' })
+      .trim()}`,
     `- health: HTTP ${health.status}`,
     `- ready: HTTP ${ready.status} status=${ready.json?.status}`,
     `- checks: ${names.join(', ') || '(none)'}`,

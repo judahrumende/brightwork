@@ -87,13 +87,13 @@ set -a && source "$VERIFY_ROOT/launch.env" && set +a
 
 ## Helpers
 
-| Script | Purpose |
-| --- | --- |
-| `scripts/launch.sh` | Disposable DB, migrate, API (optional Vite/worker), PID + `launch.env` |
-| `scripts/doctor.sh` | Read-only ownership and health/ready check |
-| `scripts/cleanup.sh` | Tear down owned PIDs + disposable DB; keep evidence |
-| `scripts/drive-ready.mjs` | Prove `/health` and `/ready` with JSON artifacts |
-| `scripts/drive-gallery.mjs` | Prove `/dev/ui` identity and Vite `/health` proxy |
+| Script                      | Purpose                                                                |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `scripts/launch.sh`         | Disposable DB, migrate, API (optional Vite/worker), PID + `launch.env` |
+| `scripts/doctor.sh`         | Read-only ownership and health/ready check                             |
+| `scripts/cleanup.sh`        | Tear down owned PIDs + disposable DB; keep evidence                    |
+| `scripts/drive-ready.mjs`   | Prove `/health` and `/ready` with JSON artifacts                       |
+| `scripts/drive-gallery.mjs` | Prove `/dev/ui` identity and Vite `/health` proxy                      |
 
 ```sh
 VERIFY_SKIP_WORKER=1 .cursor/skills/verify-brightwork/scripts/launch.sh
