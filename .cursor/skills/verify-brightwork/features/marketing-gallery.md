@@ -12,20 +12,21 @@ The marketing gallery is the local UI surface at `/dev/ui` used to confirm Vite 
 - Open `APP_ORIGIN/dev/ui` in a browser after a full launch that started Vite.
 - Hit `APP_ORIGIN/health` to exercise the proxy.
 
-## Driving it with Playwright
+## Driving it with drive-gallery
 
 Preconditions:
 
-- Launch with `VERIFY_SKIP_WORKER=1` and without `VERIFY_SKIP_VITE` (Vite must start).
+- Launch with `VERIFY_SKIP_WORKER=1 VERIFY_SKIP_VITE=0` (pass `VERIFY_SKIP_VITE=0` explicitly if a prior `launch.env` was sourced).
 - `scripts/doctor.sh` passed and reported vite ownership.
+- Launch binds Vite with `--port` taken from `APP_ORIGIN` (default `http://127.0.0.1:5199`).
 - Playwright Chromium is installed (`pnpm exec playwright install chromium` once).
 
-- **Open gallery.** Navigate to `$APP_ORIGIN/dev/ui`. Run `pnpm exec playwright open "$APP_ORIGIN/dev/ui"` or an equivalent CDP session. The page title or heading shows Brightwork UI gallery content.
-- **Proxy health.** Request `$APP_ORIGIN/health`. Body is `{"status":"ok"}`.
-- **Proof.** Screenshot `$VERIFY_ROOT/marketing-gallery.png` with Brightwork identity visible, plus the health JSON.
+- **Open gallery.** Run `NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-gallery.mjs`. Exit code `0`. `drive-gallery.json` has `passed: true`, title containing `UI preview · Brightwork`, heading `UI preview`, and `brandVisible: true`.
+- **Proxy health.** The same driver requests `$APP_ORIGIN/health` and requires `{"status":"ok"}`.
+- **Proof.** Keep `$VERIFY_ROOT/marketing-gallery.png`, `$VERIFY_ROOT/gallery-health.json`, `$VERIFY_ROOT/drive-gallery.json`, and `$VERIFY_ROOT/note-marketing-gallery.md`.
 
 ## Gotchas
 
-- Vite uses `strictPort: true`. If `APP_ORIGIN`’s port is taken, launch refuses rather than binding another port.
-- `/dev/ui` is enough for gallery identity; do not treat SPA `/home` as the marketing landing on this main-line checkout.
+- Vite uses `strictPort`. Launch passes `--port` from `APP_ORIGIN`; a busy port refuses launch rather than binding elsewhere.
+- Document title is `UI preview · Brightwork` and the heading is `UI preview`, not “UI gallery”.
 - Skip this feature when only the API-only readiness stack was launched; report the unmet Vite precondition.

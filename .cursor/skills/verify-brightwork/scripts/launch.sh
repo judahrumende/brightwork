@@ -4,6 +4,10 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 cd "$ROOT"
 
 RUN_ID="${RUN_ID:-$(date +%Y%m%dT%H%M%S)}"
+# Sourcing a prior launch.env leaves VERIFY_SKIP_VITE=1 in the shell.
+# Pass VERIFY_SKIP_VITE=0 explicitly when this run needs Vite.
+VERIFY_SKIP_VITE="${VERIFY_SKIP_VITE:-0}"
+VERIFY_SKIP_WORKER="${VERIFY_SKIP_WORKER:-1}"
 if [[ -z "${VERIFY_DB_FORCE:-}" ]]; then
   VERIFY_DB="bw_verify_${RUN_ID//[^a-zA-Z0-9_]/_}"
 fi
@@ -127,17 +131,27 @@ if [[ "${VERIFY_SKIP_WORKER:-1}" != "1" ]]; then
 fi
 
 if [[ "${VERIFY_SKIP_VITE:-0}" != "1" ]]; then
+  [[ -n "$ORIGIN_PORT" ]] || {
+    echo "APP_ORIGIN must include an explicit port for Vite" >&2
+    exit 1
+  }
   start_detached "$VERIFY_ROOT/web.pid" "$VERIFY_ROOT/web.log" -- \
     APP_ORIGIN="$APP_ORIGIN" API_PORT="$API_PORT" \
-    pnpm --filter @brightwork/web exec vite --host 127.0.0.1
-  for _ in $(seq 1 60); do
-    if curl -fsS --max-time 2 "$APP_ORIGIN/health" | grep -q '"status":"ok"'; then
+    pnpm --filter @brightwork/web exec vite --host 127.0.0.1 --port "$ORIGIN_PORT" --strictPort
+  vite_ok=0
+  for _ in $(seq 1 80); do
+    if curl -fsS --max-time 2 "$APP_ORIGIN/health" 2>/dev/null | grep -q '"status":"ok"'; then
       WEB_LISTEN_PID="$(lsof -nP -iTCP:"$ORIGIN_PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
       [[ -n "$WEB_LISTEN_PID" ]] && echo "$WEB_LISTEN_PID" >"$VERIFY_ROOT/web.pid"
+      vite_ok=1
       break
     fi
     sleep 0.25
   done
+  if [[ "$vite_ok" != "1" ]]; then
+    echo "Vite health failed on $APP_ORIGIN; see $VERIFY_ROOT/web.log" >&2
+    exit 1
+  fi
 fi
 
 {
@@ -150,8 +164,8 @@ fi
   printf "export REDIS_URL=%q\n" "$REDIS_URL"
   printf "export AUTH_SECRET=%q\n" "$AUTH_SECRET"
   printf "export VERIFY_API_BASE=%q\n" "http://${API_HOST}:${API_PORT}"
-  printf "export VERIFY_SKIP_VITE=%q\n" "${VERIFY_SKIP_VITE:-0}"
-  printf "export VERIFY_SKIP_WORKER=%q\n" "${VERIFY_SKIP_WORKER:-1}"
+  printf "export VERIFY_SKIP_VITE=%q\n" "$VERIFY_SKIP_VITE"
+  printf "export VERIFY_SKIP_WORKER=%q\n" "$VERIFY_SKIP_WORKER"
   printf "export VERIFY_EXPECT_READY=%q\n" "${VERIFY_EXPECT_READY:-1}"
 } >"$VERIFY_ROOT/launch.env"
 

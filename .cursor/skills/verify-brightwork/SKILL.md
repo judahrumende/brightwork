@@ -48,19 +48,20 @@ Refuse to drive if doctor fails.
 
 ## Drive
 
-HTTP features use `scripts/drive-ready.mjs`. UI features use Playwright against the owned `APP_ORIGIN` when Vite was launched.
+HTTP readiness uses `scripts/drive-ready.mjs`. Marketing gallery uses `scripts/drive-gallery.mjs` against the owned `APP_ORIGIN` when Vite was launched.
 
 Feature recipes live under `features/`. Drive from the map. Do not invent alternate entry points and call them verified.
 
 ```sh
 set -a && source "$VERIFY_ROOT/launch.env" && set +a
 NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-ready.mjs
+NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-gallery.mjs
 ```
 
 Invariant gate (no live server required for the unit portion):
 
 ```sh
-pnpm verify:invariants
+pnpm verify:invariants 2>&1 | tee "$VERIFY_ROOT/invariants.log"
 ```
 
 ## Evidence
@@ -92,12 +93,15 @@ set -a && source "$VERIFY_ROOT/launch.env" && set +a
 | `scripts/doctor.sh` | Read-only ownership and health/ready check |
 | `scripts/cleanup.sh` | Tear down owned PIDs + disposable DB; keep evidence |
 | `scripts/drive-ready.mjs` | Prove `/health` and `/ready` with JSON artifacts |
+| `scripts/drive-gallery.mjs` | Prove `/dev/ui` identity and Vite `/health` proxy |
 
 ```sh
-VERIFY_SKIP_VITE=1 VERIFY_SKIP_WORKER=1 .cursor/skills/verify-brightwork/scripts/launch.sh
+VERIFY_SKIP_WORKER=1 .cursor/skills/verify-brightwork/scripts/launch.sh
 set -a && source "$VERIFY_ROOT/launch.env" && set +a
 .cursor/skills/verify-brightwork/scripts/doctor.sh
 NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-ready.mjs
+NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-gallery.mjs
+pnpm verify:invariants 2>&1 | tee "$VERIFY_ROOT/invariants.log"
 .cursor/skills/verify-brightwork/scripts/cleanup.sh
 # Evidence remains at $VERIFY_ROOT
 ```
