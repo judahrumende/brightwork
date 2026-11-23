@@ -10,6 +10,7 @@ import { connectDatabase } from '@brightwork/api/database';
 import { runStore } from '@brightwork/api/runs';
 import { taskAutomationStore } from '@brightwork/api/schedule';
 import { mailStore } from '@brightwork/api/mail';
+import { initSentry } from '@brightwork/api/observability/sentry';
 import { agentRunner } from './agent';
 import { llmClient } from '@brightwork/api/llm';
 import { pageReader, publicPageUrl } from '@brightwork/api/public-page';
@@ -31,8 +32,20 @@ const env = z
     WEB_SEARCH_MODEL: z.string().optional(),
     OUTREACH_RESEND_API_KEY: z.string().optional(),
     OUTREACH_FROM_EMAIL: z.string().optional(),
+    SENTRY_DSN: z.string().optional(),
+    SENTRY_ENVIRONMENT: z.string().optional(),
   })
   .parse(process.env);
+
+const sentry = await initSentry({
+  dsn: env.SENTRY_DSN,
+  environment: env.SENTRY_ENVIRONMENT,
+  service: 'worker',
+});
+if (!sentry.enabled && sentry.reason === 'missing_module')
+  console.warn(
+    'SENTRY_DSN is set but @sentry/node is not installed; continuing without Sentry.',
+  );
 const database = connectDatabase(env.DATABASE_URL);
 const cache = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 const store = agentStore(database.db);
