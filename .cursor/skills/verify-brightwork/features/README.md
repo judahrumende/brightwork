@@ -1,6 +1,6 @@
 # Brightwork verification map
 
-Maintained source for verifying user-facing Brightwork behavior. Read this index, then the matching feature file.
+Maintained source for verifying user-facing Brightwork behavior. Machine-readable index: [`map.json`](./map.json) (`pnpm verify:feature --list`). Read this index, then the matching feature file.
 
 ## Baseline preconditions
 

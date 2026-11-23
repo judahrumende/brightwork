@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "landing-home",
+      "recipe": "features/landing-home.md",
+      "entryRoutes": ["/en"],
+      "preconditions": ["doctor-or-vite-shell"],
+      "proof": ["landing-home.png", "aria-snapshot"]
+    },
+    {
+      "id": "workspace-creation",
+      "recipe": "features/workspace-creation.md",
+      "entryRoutes": ["/new"],
+      "preconditions": ["doctor", "disposable-db", "session-or-personal-mode"],
+      "proof": ["screenshot-before-submit", "screenshot-after-navigation"]
+    },
+    {
+      "id": "workbench-home",
+      "recipe": "features/workbench-home.md",
+      "entryRoutes": ["/f/:businessId"],
+      "preconditions": ["doctor", "workspace-id", "session"],
+      "proof": ["workbench-home.png", "aria-snapshot"]
+    },
+    {
+      "id": "pip-computer",
+      "recipe": "features/pip-computer.md",
+      "entryRoutes": [],
+      "preconditions": [
+        "playwright-core",
+        "chromium-binary",
+        "verify-root",
+        "motion-helper"
+      ],
+      "proof": [
+        "computer-01-navigate.png",
+        "computer-frames.json",
+        "computer-motion.mp4"
+      ]
+    },
+    {
+      "id": "build",
+      "recipe": "features/build.md",
+      "entryRoutes": ["/f/:businessId/build"],
+      "preconditions": ["doctor", "workspace-id", "session"],
+      "proof": ["build-shell.png"]
+    }
+  ],
+  "unmapped": [
+    { "id": "inbox", "note": "No verify recipe yet" },
+    { "id": "schedule", "note": "No verify recipe yet" },
+    { "id": "settings", "note": "No verify recipe yet" },
+    { "id": "library", "note": "No verify recipe yet" },
+    { "id": "commerce", "note": "No verify recipe yet" },
+    { "id": "insights", "note": "No verify recipe yet" },
+    { "id": "channels", "note": "No verify recipe yet" }
+  ]
+}

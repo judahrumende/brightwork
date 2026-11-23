@@ -47,7 +47,7 @@ CLI wrapper: `~/.codex/skills/playwright/scripts/playwright_cli.sh` when availab
 
 Pip computer: use `scripts/verify-computer-motion.mjs` for navigate/move/click/type/key/scroll/screenshot with frame PNGs and a short MP4. Workbench chat will only expose `use_computer` when the worker runs with `COMPUTER_ENABLED=true` and a model that proposes the tool; motion proof for the control surface itself uses the helper.
 
-Feature recipes live under `features/`. Drive from the map; do not invent alternate entry points and call them verified.
+Feature recipes live under `features/`. Machine-readable index: `features/map.json`. Lookup: `pnpm verify:feature <id>` or `pnpm verify:feature --list`. Drive from the map; do not invent alternate entry points and call them verified. `pnpm verify:doctor` runs `scripts/doctor.sh` and requires launch env (`VERIFY_ROOT`, `APP_ORIGIN`, …).
 
 ## Evidence
 
@@ -71,13 +71,13 @@ Stop only PIDs in `$VERIFY_ROOT/api.pid` and `$VERIFY_ROOT/web.pid` (and any wor
 
 ## Helpers
 
-| Script | Purpose |
-| --- | --- |
-| `scripts/launch.sh` | Create disposable DB env, migrate, start API+Vite, write PID files |
-| `scripts/doctor.sh` | Read-only health/ownership check |
-| `scripts/cleanup.sh` | Tear down owned PIDs + disposable DB |
-| `scripts/verify-computer-motion.mjs` | Drive Pip computer actions; write motion PNGs/MP4 |
-| `scripts/drive-ui.mjs` | Serial Playwright drive of landing → `/new` → workbench → Build |
+| Script                               | Purpose                                                            |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `scripts/launch.sh`                  | Create disposable DB env, migrate, start API+Vite, write PID files |
+| `scripts/doctor.sh`                  | Read-only health/ownership check                                   |
+| `scripts/cleanup.sh`                 | Tear down owned PIDs + disposable DB                               |
+| `scripts/verify-computer-motion.mjs` | Drive Pip computer actions; write motion PNGs/MP4                  |
+| `scripts/drive-ui.mjs`               | Serial Playwright drive of landing → `/new` → workbench → Build    |
 
 ```sh
 NODE_PATH="$(pwd)/node_modules" pnpm --filter @brightwork/worker exec tsx \

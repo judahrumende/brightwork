@@ -18,10 +18,13 @@
     "contracts:check": "node scripts/generate-contracts.mjs --check",
     "contracts:replay": "node --experimental-strip-types scripts/replay-har.mjs",
     "parity:check": "node scripts/check-parity-inventory.mjs",
+    "branding:check": "node scripts/check-brightwork-branding.mjs",
     "test": "playwright test",
     "test:ssr": "playwright test -c playwright.ssr.config.ts",
     "visual:report": "node scripts/visual-report.mjs",
-    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts"
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
+    "verify:doctor": "bash .cursor/skills/verify-brightwork/scripts/doctor.sh",
+    "verify:feature": "node .cursor/skills/verify-brightwork/scripts/verify-feature.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

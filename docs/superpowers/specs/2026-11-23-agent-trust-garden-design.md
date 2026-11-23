@@ -24,12 +24,12 @@ Agents treat the Brightwork codebase as a primary input. Workarounds, weak bound
 
 ## Scope decisions
 
-| Decision | Choice |
-| --- | --- |
-| Overall program | Full garden (C): foundations → verification → weed removal, phased |
+| Decision           | Choice                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Overall program    | Full garden (C): foundations → verification → weed removal, phased                                                    |
 | Phase 1 done means | Agent-safe by default (A): boundaries + lint green in CI; feature map + verify path; only weeds that new lint forbids |
-| Ban aggressiveness | Pragmatic (A): import graph + footguns; keep `useEffect`; no comment mass-ban |
-| Approach | ESLint-first organic architecture (not dependency-cruiser-first, not prose-first) |
+| Ban aggressiveness | Pragmatic (A): import graph + footguns; keep `useEffect`; no comment mass-ban                                         |
+| Approach           | ESLint-first organic architecture (not dependency-cruiser-first, not prose-first)                                     |
 
 ## Architecture — trust layers
 
@@ -45,12 +45,12 @@ Code / patterns       Allowed dependency graph; allowlisted intentional escapes
 
 ### Allowed import graph (phase 1)
 
-| From | May import | Must not import |
-| --- | --- | --- |
-| `apps/web` | `@brightwork/shared` | `@brightwork/api`, `@brightwork/worker`, `apps/api/**`, `apps/worker/**` |
-| `apps/api` | `@brightwork/shared` | `@brightwork/web`, `@brightwork/worker`, `apps/web/**`, `apps/worker/**` |
-| `apps/worker` | `@brightwork/api`, `@brightwork/shared` | `@brightwork/web`, `apps/web/**` |
-| `packages/shared` | (its own deps only) | any `apps/**`, `@brightwork/{web,api,worker}` |
+| From              | May import                              | Must not import                                                          |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `apps/web`        | `@brightwork/shared`                    | `@brightwork/api`, `@brightwork/worker`, `apps/api/**`, `apps/worker/**` |
+| `apps/api`        | `@brightwork/shared`                    | `@brightwork/web`, `@brightwork/worker`, `apps/web/**`, `apps/worker/**` |
+| `apps/worker`     | `@brightwork/api`, `@brightwork/shared` | `@brightwork/web`, `apps/web/**`                                         |
+| `packages/shared` | (its own deps only)                     | any `apps/**`, `@brightwork/{web,api,worker}`                            |
 
 Worker → API remains allowed until a later `packages/backend` extraction. Relative path escapes across package roots are forbidden the same way as package imports.
 
@@ -65,14 +65,14 @@ Extend root `eslint.config.mjs`. CI already runs `pnpm lint` in `.github/workflo
 
 ### Footgun rules
 
-| Rule | Scope | Behavior |
-| --- | --- | --- |
-| Ban `@ts-ignore` | product TS | Prefer fix or `@ts-expect-error` with description |
-| Require description on `eslint-disable*` | all linted files | No silent escapes |
-| Restrict `any` | apps (ignore generated) | Prefer `unknown` + narrow |
-| Restrict timers (`setTimeout`, `setInterval`, `requestAnimationFrame`, `requestIdleCallback`) | `apps/web` product UI | Allowlist existing intentional modules; new uses go through allowlisted helpers or a justified disable |
-| `useEffect` | web | Remains allowed; keep `eslint-plugin-react-hooks` |
-| Comments | — | No hard ban; optional later warnings for “workaround justification” markers only if cheap |
+| Rule                                                                                          | Scope                   | Behavior                                                                                               |
+| --------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| Ban `@ts-ignore`                                                                              | product TS              | Prefer fix or `@ts-expect-error` with description                                                      |
+| Require description on `eslint-disable*`                                                      | all linted files        | No silent escapes                                                                                      |
+| Restrict `any`                                                                                | apps (ignore generated) | Prefer `unknown` + narrow                                                                              |
+| Restrict timers (`setTimeout`, `setInterval`, `requestAnimationFrame`, `requestIdleCallback`) | `apps/web` product UI   | Allowlist existing intentional modules; new uses go through allowlisted helpers or a justified disable |
+| `useEffect`                                                                                   | web                     | Remains allowed; keep `eslint-plugin-react-hooks`                                                      |
+| Comments                                                                                      | —                       | No hard ban; optional later warnings for “workaround justification” markers only if cheap              |
 
 ### Weed pulls
 
