@@ -18,9 +18,14 @@ function arg(name, fallback) {
   return process.argv[index + 1] ?? fallback;
 }
 
-const outDir = path.resolve(
-  arg('--out', path.join(repoRoot, 'output/verify-brightwork/computer')),
+const outArg = arg(
+  '--out',
+  path.join(repoRoot, 'output/verify-brightwork/computer'),
 );
+// Relative --out is always from the repo root (pnpm --filter uses apps/worker cwd).
+const outDir = path.isAbsolute(outArg)
+  ? outArg
+  : path.resolve(repoRoot, outArg);
 const chrome =
   arg(
     '--chrome',

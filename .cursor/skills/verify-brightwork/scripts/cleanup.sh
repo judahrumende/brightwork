@@ -2,6 +2,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 cd "$ROOT"
+# shellcheck source=redis14-lock.sh
+source "$(dirname "$0")/redis14-lock.sh"
 
 : "${VERIFY_ROOT:?Set VERIFY_ROOT}"
 
@@ -35,4 +37,5 @@ if [[ -n "${VERIFY_DB:-}" ]]; then
   esac
 fi
 
+redis14_lock_release "$VERIFY_ROOT"
 echo "cleanup done; evidence retained at $VERIFY_ROOT"

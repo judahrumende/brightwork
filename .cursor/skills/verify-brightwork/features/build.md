@@ -7,6 +7,7 @@ Build is the workbench application where Pip plans websites/stores and the owner
 - `build-open` opens the Build application for a workspace at `/f/:businessId/build`.
 - `build-composer` shows the Pip chat composer (`Message Pip` / `#pip-prompt`).
 - `build-preview` shows website canvas thumbnail cards when sites exist (full draft preview is behind Open editor).
+- `build-media` may show a MediaLibrary strip (image/video/voice jobs) above the chat/canvas grid on Build only.
 
 ## How to get to it (user POV)
 

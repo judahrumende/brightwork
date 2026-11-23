@@ -30,5 +30,6 @@ Preconditions:
 
 - Vite port must equal `APP_ORIGIN` or API calls return origin 403.
 - Bare `/` is redirected to SPA `/home` by the API and client; that is not this feature.
+- Landing **Log in** / **Start free** link to `/sign-in` and `/sign-up` (SPA redirects into `/home`). Brand on the locale landing uses `/`, which the API redirects to `/home`. Unsigned `/home` is a workspace-unavailable / personal-mode shell, not the marketing landing.
 - Other marketing pages may say “Sign in”; the landing Account nav says **Log in**.
 - Do not treat `/dev/ui` as this feature.

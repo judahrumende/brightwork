@@ -4,8 +4,8 @@ Inside a business, Home shows the desktop dock, overview metrics, and workspace 
 
 ## Sub-features
 
-- `wb-dock` shows Workspace applications navigation (Home view only).
-- `wb-overview` shows the Business overview section (always rendered; may show loading or empty copy) including an Insights article.
+- `wb-dock` shows Workspace applications navigation on the Home shell (also mounted under the Settings modal, which keeps Home mounted).
+- `wb-overview` shows the Business overview section on the default Home layout (may show loading or empty copy) including an Insights article. Opening sales or traffic panels replaces this overview until Back.
 - `wb-shortcuts` exposes Search, Inbox, and Schedule under navigation **Workspace shortcuts**.
 
 ## How to get to it (user POV)
@@ -29,7 +29,7 @@ Preconditions:
 
 ## Gotchas
 
-- The dock exists only on Home. On `/f/:id/build` you will see **Main** but not **Workspace applications**.
+- The dock is part of the Home shell (`view=home` and `view=settings`). On `/f/:id/build` you will see **Main** but not **Workspace applications**.
 - Read-only: do not send Pip chat or publish during this check.
 - Missing MinIO may break media/file panels; Home dock can still prove shell load if those panels are unopened.
 - Fixture Playwright specs are not live proof.

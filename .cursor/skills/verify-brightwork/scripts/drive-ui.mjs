@@ -59,6 +59,8 @@ try {
   await page.getByLabel('Business name').fill(`Verify ${Date.now()}`);
   const ideaBox = page.getByLabel('Your idea');
   if (await ideaBox.count()) await ideaBox.fill(idea);
+  const separate = page.getByLabel(/Start a separate workspace/i);
+  if (await separate.count()) await separate.check();
   const draft = page.getByLabel(/Have .* draft/u);
   if (await draft.count()) await draft.uncheck().catch(() => undefined);
   await shot('workspace-before-create');
