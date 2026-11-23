@@ -21,7 +21,8 @@
     "test": "playwright test",
     "test:ssr": "playwright test -c playwright.ssr.config.ts",
     "visual:report": "node scripts/visual-report.mjs",
-    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts"
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
+    "verify:invariants": "bash scripts/verify-invariants.sh"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
