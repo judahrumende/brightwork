@@ -18,6 +18,7 @@ dist/
 **/.tanstack/
 /playwright-report/
 /test-results/
+/output/
 /docs/visual-diff.html
 /.pnpm-store/
 /apps/web/src/routeTree.gen.ts
