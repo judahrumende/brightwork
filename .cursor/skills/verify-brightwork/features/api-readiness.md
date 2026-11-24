@@ -24,12 +24,13 @@ Preconditions:
 - `S3_ENDPOINT` is unset for the baseline ready path.
 
 - **Liveness.** Request health. Run `curl -fsS "$VERIFY_API_BASE/health"`. Body is `{"status":"ok"}` and HTTP status is `200`.
-- **Readiness.** Request ready. Run `NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-ready.mjs`. Exit code `0`, `drive-ready.json` has `passed: true`, and `ready.json` lists postgres and redis checks with `ok: true` and no minio check.
+- **Readiness.** Run `pnpm verify:ready`. Exit code `0`, `drive-ready.json` has `passed: true`, and `ready.json` lists postgres and redis checks with `ok: true` and no minio check.
 - **Proof.** Keep `$VERIFY_ROOT/health.json`, `$VERIFY_ROOT/ready.json`, `$VERIFY_ROOT/drive-ready.json`, and `$VERIFY_ROOT/note.md`.
 
 ## Gotchas
 
 - A shared `.env` that sets `S3_ENDPOINT` makes `/ready` fail when MinIO is down. Launch unsets S3 for baseline proofs.
 - `/health` staying ok while `/ready` is 503 is expected when Postgres or Redis is unreachable; do not treat health alone as deploy-ready.
+- The baseline driver does not exercise a dependency failure or a configured MinIO probe.
 - Port `3018` is often busy on long-lived Macs. Default verify API port is `3028`.
 - Do not drive a foreign API listener. Doctor must confirm `api.pid` owns `API_PORT`.

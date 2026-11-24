@@ -8,7 +8,7 @@
 
 ## How to get to it (user POV)
 
-Open the pending website in **Build**. Approve the displayed revision and choose **Publish website**. Edit that same site, approve the new revision, then choose **Publish update**. Open **Deployment history** to restore the first live deployment.
+For manual publishing, sign in as an owner or admin on an instance with site hosting configured. Open the pending website in **Build**. Approve the displayed revision and choose **Publish website**. Edit that same site, approve the new revision, then choose **Publish update**. Under **Site tools**, open **Deployment history**, choose **Restore revision 1 live**, and confirm with **Restore live deployment**.
 
 ## Driving it with Playwright and the API suite
 
@@ -18,4 +18,4 @@ For authorized hosted acceptance, read both public HTTPS pages in a signed-out b
 
 ## Gotchas
 
-Local cases use fixture hostnames and do not verify DNS or TLS. Restoring a saved version as a draft and rolling back a live deployment are different actions. Label the evidence accordingly.
+Local cases use fixture hostnames and do not verify DNS or TLS. Restoring a saved version as a draft and rolling back a live deployment are different actions. A Run configured to publish can queue publication on approval instead of using the manual buttons.

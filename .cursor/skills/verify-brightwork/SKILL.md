@@ -54,8 +54,8 @@ Feature recipes live under `features/`. Drive from the map. Do not invent altern
 
 ```sh
 set -a && source "$VERIFY_ROOT/launch.env" && set +a
-NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-ready.mjs
-NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-gallery.mjs
+pnpm verify:ready
+pnpm verify:gallery
 ```
 
 Invariant gate (no live server required for the unit portion):
@@ -99,8 +99,8 @@ set -a && source "$VERIFY_ROOT/launch.env" && set +a
 VERIFY_SKIP_WORKER=1 .cursor/skills/verify-brightwork/scripts/launch.sh
 set -a && source "$VERIFY_ROOT/launch.env" && set +a
 .cursor/skills/verify-brightwork/scripts/doctor.sh
-NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-ready.mjs
-NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-gallery.mjs
+pnpm verify:ready
+pnpm verify:gallery
 pnpm verify:invariants 2>&1 | tee "$VERIFY_ROOT/invariants.log"
 .cursor/skills/verify-brightwork/scripts/cleanup.sh
 # Evidence remains at $VERIFY_ROOT

@@ -30,18 +30,15 @@ case "$REDIS_URL" in
   *) fail "REDIS_URL must use disposable logical DB 14" ;;
 esac
 
-if [[ -f "$VERIFY_ROOT/api.pid" ]]; then
-  API_PID="$(tr -d '[:space:]' <"$VERIFY_ROOT/api.pid")"
-  kill -0 "$API_PID" 2>/dev/null || fail "api.pid $API_PID is not running"
-  pass "api pid $API_PID alive"
-fi
+[[ -s "$VERIFY_ROOT/api.pid" ]] || fail "api.pid is missing or empty"
+API_PID="$(tr -d '[:space:]' <"$VERIFY_ROOT/api.pid")"
+[[ "$API_PID" =~ ^[1-9][0-9]*$ ]] || fail "api.pid is not a PID"
+kill -0 "$API_PID" 2>/dev/null || fail "api.pid $API_PID is not running"
+pass "api pid $API_PID alive"
 
 API_LISTEN="$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
 [[ -n "$API_LISTEN" ]] || fail "nothing listening on API_PORT $API_PORT"
-if [[ -f "$VERIFY_ROOT/api.pid" ]]; then
-  [[ "$API_LISTEN" == "$(tr -d '[:space:]' <"$VERIFY_ROOT/api.pid")" ]] \
-    || fail "API_PORT $API_PORT owned by $API_LISTEN, not api.pid"
-fi
+[[ "$API_LISTEN" == "$API_PID" ]] || fail "API_PORT $API_PORT owned by $API_LISTEN, not api.pid"
 pass "API_PORT $API_PORT owned by this run"
 
 HEALTH="$(curl -fsS --max-time 5 "$VERIFY_API_BASE/health" || true)"
@@ -55,9 +52,11 @@ if [[ "${VERIFY_EXPECT_READY:-1}" == "1" ]]; then
   pass "ready ok"
 fi
 
-if [[ -f "$VERIFY_ROOT/web.pid" ]]; then
-  : "${APP_ORIGIN:?APP_ORIGIN required when web.pid exists}"
+if [[ "${VERIFY_SKIP_VITE:-0}" != "1" ]]; then
+  [[ -s "$VERIFY_ROOT/web.pid" ]] || fail "web.pid is missing or empty"
+  : "${APP_ORIGIN:?APP_ORIGIN required for Vite}"
   WEB_PID="$(tr -d '[:space:]' <"$VERIFY_ROOT/web.pid")"
+  [[ "$WEB_PID" =~ ^[1-9][0-9]*$ ]] || fail "web.pid is not a PID"
   kill -0 "$WEB_PID" 2>/dev/null || fail "web.pid $WEB_PID is not running"
   ORIGIN_PORT="$(python3 -c 'import sys; from urllib.parse import urlparse; print(urlparse(sys.argv[1]).port or 0)' "$APP_ORIGIN")"
   [[ "$ORIGIN_PORT" != "0" ]] || fail "APP_ORIGIN must include an explicit port"

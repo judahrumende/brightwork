@@ -31,7 +31,10 @@ writeFileSync(
   JSON.stringify({ status: healthResponse.status, json: healthJson }, null, 2),
 );
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined,
+});
 const page = await browser.newPage();
 let title = '';
 let heading = '';
@@ -42,10 +45,16 @@ try {
     timeout: 30_000,
   });
   title = await page.title();
-  const headingLocator = page.getByRole('heading', { name: 'UI preview' });
+  const headingLocator = page.getByRole('heading', {
+    name: 'UI preview',
+    exact: true,
+  });
   await headingLocator.waitFor({ timeout: 15_000 });
   heading = (await headingLocator.textContent())?.trim() ?? '';
-  brandVisible = (await page.getByText('Brightwork').count()) > 0;
+  brandVisible = await page
+    .locator('main > header')
+    .getByText('Brightwork', { exact: true })
+    .isVisible();
   await page.screenshot({
     path: join(root, 'marketing-gallery.png'),
     fullPage: true,
@@ -64,8 +73,7 @@ const report = {
   healthStatus: healthResponse.status,
   healthOk,
   passed:
-    title.includes('UI preview') &&
-    title.includes('Brightwork') &&
+    title === 'UI preview · Brightwork' &&
     heading === 'UI preview' &&
     brandVisible &&
     healthOk,

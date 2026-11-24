@@ -19,9 +19,9 @@ Preconditions:
 - Launch with `VERIFY_SKIP_WORKER=1 VERIFY_SKIP_VITE=0` (pass `VERIFY_SKIP_VITE=0` explicitly if a prior `launch.env` was sourced).
 - `scripts/doctor.sh` passed and reported vite ownership.
 - Launch binds Vite with `--port` taken from `APP_ORIGIN` (default `http://127.0.0.1:5199`).
-- Playwright Chromium is installed (`pnpm exec playwright install chromium` once).
+- Install Playwright Chromium with `pnpm exec playwright install chromium`, or set `BROWSER_EXECUTABLE_PATH` to an installed Chrome binary.
 
-- **Open gallery.** Run `NODE_PATH="$(pwd)/node_modules" node .cursor/skills/verify-brightwork/scripts/drive-gallery.mjs`. Exit code `0`. `drive-gallery.json` has `passed: true`, title containing `UI preview · Brightwork`, heading `UI preview`, and `brandVisible: true`.
+- **Open gallery.** Run `pnpm verify:gallery`. Exit code `0`. `drive-gallery.json` has `passed: true`, title `UI preview · Brightwork`, heading `UI preview`, and `brandVisible: true`.
 - **Proxy health.** The same driver requests `$APP_ORIGIN/health` and requires `{"status":"ok"}`.
 - **Proof.** Keep `$VERIFY_ROOT/marketing-gallery.png`, `$VERIFY_ROOT/gallery-health.json`, `$VERIFY_ROOT/drive-gallery.json`, and `$VERIFY_ROOT/note-marketing-gallery.md`.
 

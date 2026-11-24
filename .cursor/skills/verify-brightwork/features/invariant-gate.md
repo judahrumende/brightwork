@@ -19,15 +19,15 @@ Preconditions:
 
 - `pnpm install --frozen-lockfile` has completed in this checkout.
 - For the unit portion, no database is required.
-- For `vault-credit-db`, set all of `TEST_DATABASE_URL` (or mirror into it from a disposable `DATABASE_URL`), `REDIS_URL`, and `TEST_MAILPIT_URL` with Mailpit reachable. Prefer a `bw_verify_*` database. Without those, only the unit portion runs.
+- For `vault-credit-db`, set `TEST_DATABASE_URL` to the owned `bw_verify_*` database. Set `REDIS_URL` to the isolated Redis instance, and set `TEST_MAILPIT_URL`, `SMTP_HOST`, and `SMTP_PORT` to the same Mailpit instance. The test uses SMTP to send and HTTP to read the message.
 
 - **Unit portion.** Run `pnpm verify:invariants`. stdout includes `BW-ARCH-10 invariant gate` and passes for `credit-amount` plus `observability`. Missing optional unit files print `skip missing` and are not failures.
-- **DB portion.** When the auth env gate is met, the script runs focused integration files if present, otherwise `apps/api/test/auth.test.ts`. Exit code `0` and stdout ends with `BW-ARCH-10 passed.` The auth test must **run**, not skip.
-- **Proof.** Capture the transcript with `pnpm verify:invariants 2>&1 | tee "$VERIFY_ROOT/invariants.log"`.
+- **DB portion.** On the website release branch, the script falls back to `apps/api/test/auth.test.ts`. Require an unskipped pass for `email and OAuth sign-in establish sessions and isolate workspace records`. If focused files replace the fallback on another branch, confirm their assertions cover the specific invariant before marking it verified.
+- **Proof.** In Bash, run `set -o pipefail` before `pnpm verify:invariants 2>&1 | tee "$VERIFY_ROOT/invariants.log"`. Check the test results, not just the final banner.
 
 ## Gotchas
 
-- `auth.test.ts` skips unless `TEST_DATABASE_URL`, `TEST_MAILPIT_URL`, and `REDIS_URL` are all set. Treat a skip as inconclusive for vault, not as a pass, even when the script exits 0.
+- A database URL alone selects the database phase. The wrapper can exit 0 even if absent provider settings caused `auth.test.ts` to skip. A skip does not prove the vault.
 - Do not point the gate at the shared product database named `brightwork`.
 - Focused files such as `run-credit-limits.integration.test.ts` and `github-site-sync.integration.test.ts` exist only on some branches; the script skips missing files.
 - Unit-only success prints `BW-ARCH-10 unit portion passed.` That is not a vault proof.
