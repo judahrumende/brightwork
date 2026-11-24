@@ -16,6 +16,9 @@ pnpm dev
 
 Open [the component gallery](http://127.0.0.1:5173/dev/ui). Vite starts on port 5173 and proxies `/api` and `/health` to Fastify. The gallery and health route can run with the containers stopped.
 
+For the single-host OpenRouter budget setup for Pip, see
+[Pip's OpenRouter budget](./docs/pip-budget.md).
+
 | Environment variable                                         | Purpose                                    |
 | ------------------------------------------------------------ | ------------------------------------------ |
 | `APP_ORIGIN`                                                 | Public app URL used when creating links    |

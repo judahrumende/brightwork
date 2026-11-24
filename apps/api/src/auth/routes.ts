@@ -431,7 +431,11 @@ export function registerAuth(
     sellerPayments,
     salesInsights: (id, range) => commerceInsights(database.db, id, range),
     media: mediaStore(database.db, credits),
-    mediaRates: mediaRates(mediaEnv.parse(process.env)),
+    mediaRates: mediaRates(
+      mediaEnv.parse(
+        process.env.BRIGHTWORK_DESKTOP_PIP === '1' ? {} : process.env,
+      ),
+    ),
     domains: domainStore(database.db),
     vault: env.VAULT_KEY ? vaultStore(database.db, env.VAULT_KEY) : undefined,
     runs: runStore(database.db),
