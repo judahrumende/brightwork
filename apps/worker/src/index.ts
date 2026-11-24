@@ -36,6 +36,7 @@ const env = z
     SENTRY_ENVIRONMENT: z.string().optional(),
   })
   .parse(process.env);
+const desktop = process.env.BRIGHTWORK_DESKTOP_PIP === '1';
 
 const sentry = await initSentry({
   dsn: env.SENTRY_DSN,
@@ -53,7 +54,7 @@ const runs = runStore(database.db);
 const schedules = taskAutomationStore(database.db);
 const credits = creditLedger(database.db, creditConfig.parse(process.env));
 const media = mediaStore(database.db, credits);
-const providers = mediaProviders(mediaEnv.parse(process.env));
+const providers = mediaProviders(mediaEnv.parse(desktop ? {} : process.env));
 const run = agentRunner(
   store,
   credits,
@@ -62,7 +63,7 @@ const run = agentRunner(
     model: env.LLM_MODEL,
     baseUrl: env.LLM_BASE_URL,
   }),
-  env.WEB_SEARCH_API_KEY && env.WEB_SEARCH_MODEL
+  !desktop && env.WEB_SEARCH_API_KEY && env.WEB_SEARCH_MODEL
     ? webSearch({ key: env.WEB_SEARCH_API_KEY, model: env.WEB_SEARCH_MODEL })
     : undefined,
   pageReader(publicPageUrl(env.APP_ORIGIN, env.SITE_BASE_DOMAIN)),

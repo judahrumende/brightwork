@@ -8,6 +8,8 @@
     "node": ">=22 <25"
   },
   "scripts": {
+    "pip:budget:init": "pnpm --dir apps/api exec tsx ../../scripts/local/init-pip-budget.ts",
+    "test:pip-budget": "pnpm --dir apps/api exec tsx --test test/pip-budget.test.ts test/pip-llm.test.ts",
     "dev": "pnpm --parallel --filter @brightwork/web --filter @brightwork/api dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
