@@ -49,6 +49,10 @@ Owners are roles until named. The release operator owns the local candidate and 
 
 Reproduce the local checks with the [repository verification skill](../../.claude/skills/verify/SKILL.md). The verifier creates its own PostgreSQL, Redis, and Mailpit instances and retains evidence after teardown. CI also runs the API and worker checks. Neither run replaces the hosted signup, model, DNS, and TLS gates.
 
+The full verifier passed on `68bc1bd8a7585f29a730359f6484d85fc5c285ab`. See the local [run note](../../output/verify-brightwork/website-beta.cHvGfF/note.txt). It ran 38 browser cases, 4 SSR cases, and all 9 API integration cases without skips. Both fresh ledgers matched the journal, and teardown left no test ports listening. The native-service run did not exercise GitHub Actions, Docker Compose, or MinIO.
+
+### Initial candidate checks
+
 Command logs and ledger exports are beside the two worktrees in `brightwork-release.sNS7vv`. The paths below are relative to this briefing on this machine. They are not part of the candidate tree. See the [original checkout comparison](../../../original-preservation.txt).
 
 | Gate                                                                                         | Result                                                                                                                                                                                                                                                                                                                                                  |
