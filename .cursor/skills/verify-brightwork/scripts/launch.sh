@@ -8,6 +8,8 @@ source "$(dirname "$0")/redis14-lock.sh"
 RUN_ID="${RUN_ID:-$(date +%Y%m%dT%H%M%S)}"
 # Always derive disposable paths from RUN_ID. Ambient VERIFY_ROOT/VERIFY_DB from a
 # prior sourced launch.env must not reuse an old evidence directory.
+VERIFY_SKIP_VITE="${VERIFY_SKIP_VITE:-0}"
+VERIFY_SKIP_WORKER="${VERIFY_SKIP_WORKER:-0}"
 if [[ -z "${VERIFY_DB_FORCE:-}" ]]; then
   VERIFY_DB="bw_verify_${RUN_ID//[^a-zA-Z0-9_]/_}"
 fi
@@ -17,7 +19,8 @@ fi
 export VERIFY_ROOT
 mkdir -p "$VERIFY_ROOT"
 export VERIFY_DB
-export DATABASE_URL="postgresql://judahrumende@127.0.0.1:5432/${VERIFY_DB}"
+PGUSER="${VERIFY_PGUSER:-$(whoami)}"
+export DATABASE_URL="postgresql://${PGUSER}@127.0.0.1:5432/${VERIFY_DB}"
 # Isolation: ignore ambient shell/.env (journey ports, OpenRouter keys, Redis DB 15).
 # Override only via VERIFY_* so a polluted parent shell cannot hijack the stack.
 export REDIS_URL="${VERIFY_REDIS_URL:-redis://127.0.0.1:6379/14}"
@@ -41,6 +44,9 @@ export TURNSTILE_SECRET_KEY="${VERIFY_TURNSTILE_SECRET_KEY:-1x000000000000000000
 export SMTP_HOST="${VERIFY_SMTP_HOST:-127.0.0.1}"
 export SMTP_PORT="${VERIFY_SMTP_PORT:-1025}"
 export SMTP_SECURE="${VERIFY_SMTP_SECURE:-false}"
+export LOG_LEVEL="${VERIFY_LOG_LEVEL:-info}"
+export SENTRY_DSN="${VERIFY_SENTRY_DSN:-}"
+unset S3_ENDPOINT S3_ACCESS_KEY S3_SECRET_KEY S3_BUCKET || true
 
 # One live stack owns Redis DB 14. Stale locks are replaced; live owners refuse.
 redis14_lock_acquire "$VERIFY_ROOT"
@@ -88,6 +94,8 @@ common_env=(
   SMTP_HOST="$SMTP_HOST"
   SMTP_PORT="$SMTP_PORT"
   SMTP_SECURE="$SMTP_SECURE"
+  LOG_LEVEL="$LOG_LEVEL"
+  SENTRY_DSN="$SENTRY_DSN"
 )
 
 # Detach into a new session so Cursor/tool shells cannot reap the stack.
@@ -149,34 +157,35 @@ for _ in $(seq 1 60); do
 done
 curl -fsS --max-time 2 "http://${API_HOST}:${API_PORT}/health" | grep -q '"status":"ok"'
 
-# Check before spawn — our tsx/hermes children would otherwise look foreign.
-FOREIGN="$(pgrep -lf "${ROOT}/apps/worker/src/index.ts" || true)"
-if [[ -n "$FOREIGN" ]]; then
-  echo "launch refused: foreign worker processes still running (run preflight-kill.sh):" >&2
-  echo "$FOREIGN" >&2
-  redis14_lock_release "$VERIFY_ROOT"
-  exit 1
+if [[ "$VERIFY_SKIP_WORKER" != "1" ]]; then
+  # Check before spawn — our tsx/hermes children would otherwise look foreign.
+  FOREIGN="$(pgrep -lf "${ROOT}/apps/worker/src/index.ts" || true)"
+  if [[ -n "$FOREIGN" ]]; then
+    echo "launch refused: foreign worker processes still running (run preflight-kill.sh):" >&2
+    echo "$FOREIGN" >&2
+    redis14_lock_release "$VERIFY_ROOT"
+    exit 1
+  fi
+
+  if [[ "$VERIFY_SKIP_VITE" == "1" ]]; then
+    start_detached "$VERIFY_ROOT/worker.pid" "$VERIFY_ROOT/worker.log" -- \
+      "${common_env[@]}" \
+      bash -c 'while true; do echo "[worker-supervisor] starting $(date -u +%H:%M:%S)" >&2; "'"$TSX"'" --env-file-if-exists=/dev/null "'"$ROOT"'/apps/worker/src/index.ts"; echo "[worker-supervisor] exit $? at $(date -u +%H:%M:%S)" >&2; sleep 2; done'
+  else
+    start_detached "$VERIFY_ROOT/worker.pid" "$VERIFY_ROOT/worker.log" -- \
+      "${common_env[@]}" \
+      "$TSX" --env-file-if-exists=/dev/null "$ROOT/apps/worker/src/index.ts"
+  fi
+
+  sleep 2
+  if ! kill -0 "$(tr -d '[:space:]' <"$VERIFY_ROOT/worker.pid")" 2>/dev/null; then
+    echo "worker exited immediately; see $VERIFY_ROOT/worker.log" >&2
+    redis14_lock_release "$VERIFY_ROOT"
+    exit 1
+  fi
 fi
 
-if [[ "${VERIFY_SKIP_VITE:-0}" == "1" ]]; then
-  start_detached "$VERIFY_ROOT/worker.pid" "$VERIFY_ROOT/worker.log" -- \
-    "${common_env[@]}" \
-    bash -c 'while true; do echo "[worker-supervisor] starting $(date -u +%H:%M:%S)" >&2; "'"$TSX"'" --env-file-if-exists=/dev/null "'"$ROOT"'/apps/worker/src/index.ts"; echo "[worker-supervisor] exit $? at $(date -u +%H:%M:%S)" >&2; sleep 2; done'
-else
-  start_detached "$VERIFY_ROOT/worker.pid" "$VERIFY_ROOT/worker.log" -- \
-    "${common_env[@]}" \
-    "$TSX" --env-file-if-exists=/dev/null "$ROOT/apps/worker/src/index.ts"
-fi
-
-# Give the worker a moment to crash-loud if misconfigured
-sleep 2
-if ! kill -0 "$(tr -d '[:space:]' <"$VERIFY_ROOT/worker.pid")" 2>/dev/null; then
-  echo "worker exited immediately; see $VERIFY_ROOT/worker.log" >&2
-  redis14_lock_release "$VERIFY_ROOT"
-  exit 1
-fi
-
-SKIP_VITE="${VERIFY_SKIP_VITE:-0}"
+SKIP_VITE="$VERIFY_SKIP_VITE"
 if [[ "$SKIP_VITE" != "1" ]]; then
   start_detached "$VERIFY_ROOT/web.pid" "$VERIFY_ROOT/web.log" -- \
     APP_ORIGIN="$APP_ORIGIN" API_PORT="$API_PORT" \
@@ -188,14 +197,8 @@ for _ in $(seq 1 60); do
   [[ "$SKIP_VITE" == "1" ]] && HEALTH_URL="http://${API_HOST}:${API_PORT}/health"
   if curl -fsS --max-time 2 "$HEALTH_URL" | grep -q '"status":"ok"'; then
     API_LISTEN="$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
-    # Keep supervisor pid when API runs under a restart loop (SKIP_VITE=1).
-    if [[ "$SKIP_VITE" != "1" && -n "$API_LISTEN" ]]; then
-      echo "$API_LISTEN" >"$VERIFY_ROOT/api.pid"
-    fi
     if [[ "$SKIP_VITE" != "1" ]]; then
-      WEB_LISTEN="$(python3 -c 'import sys; from urllib.parse import urlparse; print(urlparse(sys.argv[1]).port or "")' "$APP_ORIGIN")"
-      WEB_LISTEN_PID="$(lsof -nP -iTCP:"$WEB_LISTEN" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
-      [[ -n "$WEB_LISTEN_PID" ]] && echo "$WEB_LISTEN_PID" >"$VERIFY_ROOT/web.pid"
+      : "${API_LISTEN:?API failed to claim its port}"
     fi
     {
       printf "export VERIFY_ROOT=%q\n" "$VERIFY_ROOT"
@@ -217,8 +220,11 @@ for _ in $(seq 1 60); do
       printf "export AGENT_MAX_MODEL_CALLS=%q\n" "$AGENT_MAX_MODEL_CALLS"
       printf "export VERIFY_API_BASE=%q\n" "http://${API_HOST}:${API_PORT}"
       printf "export VERIFY_SKIP_VITE=%q\n" "$SKIP_VITE"
+      printf "export VERIFY_SKIP_WORKER=%q\n" "$VERIFY_SKIP_WORKER"
     } >"$VERIFY_ROOT/launch.env"
-    redis14_lock_update_pids "$VERIFY_ROOT"
+    if [[ "$VERIFY_SKIP_WORKER" != "1" ]]; then
+      redis14_lock_update_pids "$VERIFY_ROOT"
+    fi
     echo "VERIFY_ROOT=$VERIFY_ROOT"
     echo "VERIFY_DB=$VERIFY_DB"
     echo "APP_ORIGIN=$APP_ORIGIN"

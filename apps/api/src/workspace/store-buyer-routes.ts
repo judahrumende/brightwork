@@ -167,7 +167,7 @@ export function registerBuyerRoutes(
             order.status === 'confirmed' &&
             order.payment === 'awaiting_payment' &&
             order.saleId
-              ? `<p><a href="${escape(new URL('/sale/' + order.saleId, access.paymentOrigin).href)}">Open test payment link</a></p>`
+              ? `<p><a href="${escape(new URL('/sale/' + order.saleId, access.paymentOrigin).href)}">${order.paymentMode === 'test' ? 'Open test payment link' : 'Open payment link'}</a></p>`
               : '';
           const payment = {
             awaiting_payment: 'Awaiting payment',

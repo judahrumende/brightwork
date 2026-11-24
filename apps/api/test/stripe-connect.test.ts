@@ -9,6 +9,8 @@ import postgres from 'postgres';
 import { artifacts, businesses, publications } from '../src/db/schema';
 import { generatedStores } from '../src/workspace/generated-store';
 import { commerceInsights } from '../src/workspace/commerce-insights';
+import { storeBuyers } from '../src/workspace/store-buyers';
+import type { BuyerAccess } from '../src/workspace/store-buyer-routes';
 import {
   stripeConnect,
   stripeConnectModes,
@@ -789,13 +791,22 @@ test(
     const storefront = Fastify();
     t.after(() => storefront.close());
     const shopHost = site.id + '.shops.example.test';
+    let buyerCode = '';
+    const buyerAccess: BuyerAccess = {
+      buyers: storeBuyers(db, 'synthetic-buyer-secret'),
+      sendCode: async (_recipient, code) => {
+        buyerCode = code;
+      },
+      limit: async () => {},
+      paymentOrigin: origin,
+    };
     registerStorefront(
       storefront,
       stores,
       (hostname) => (hostname === shopHost ? site.id : null),
       () => 'https://' + shopHost,
       async () => {},
-      undefined,
+      buyerAccess,
       connect,
     );
     const headers = {
@@ -809,6 +820,10 @@ test(
     assert.equal(await stores.setCheckout(other.id, site.id, true), false);
     assert.equal(await stores.setCheckout(owner.id, site.id, true), true);
     assert.match((await catalog()).body, /name="pay" value="stripe"/u);
+    assert.ok(await stores.setPaymentMode(owner.id, site.id, 'live'));
+    assert.doesNotMatch((await catalog()).body, /test mode/u);
+    assert.ok(await stores.setPaymentMode(owner.id, site.id, 'test'));
+    assert.match((await catalog()).body, /Stripe in test mode/u);
     const product = (await stores.read(owner.id, site.id))!.products.find(
       ({ stock }) => stock > 0,
     )!;
@@ -870,9 +885,106 @@ test(
     assert.equal(redirect.headers.location, link);
     assert.equal(retry.headers.location, link);
     assert.equal(submissions, before + 1);
-    assert.equal(
-      (await stores.buyerSale(site.id, quote))?.id,
-      checkoutOrder.id,
+    const testBuyerSale = await stores.buyerSale(site.id, quote);
+    assert.equal(testBuyerSale?.id, checkoutOrder.id);
+    const codePage = await storefront.inject({
+      method: 'POST',
+      url: '/store/account/code',
+      headers,
+      payload: 'email=direct-buyer%40example.test',
+    });
+    assert.equal(codePage.statusCode, 200, codePage.body);
+    const challenge = codePage.body.match(
+      /name="challenge" value="([^"]+)"/u,
+    )?.[1];
+    assert.ok(challenge);
+    assert.notEqual(buyerCode, '');
+    const signedIn = await storefront.inject({
+      method: 'POST',
+      url: '/store/account/verify',
+      headers,
+      payload: new URLSearchParams({ challenge, code: buyerCode }).toString(),
+    });
+    assert.equal(signedIn.statusCode, 303, signedIn.body);
+    const sessionCookie = signedIn.headers['set-cookie'];
+    assert.ok(sessionCookie);
+
+    assert.ok(await stores.setPaymentMode(owner.id, site.id, 'live'));
+    assert.ok(
+      await stores.saveProduct(owner.id, site.id, {
+        name: 'Live buyer fixture',
+        description: 'Fixture product',
+        price: 1000,
+        stock: 2,
+        active: true,
+      }),
+    );
+    const liveBuyerProduct = (await stores.read(
+      owner.id,
+      site.id,
+    ))!.products.find(({ name }) => name === 'Live buyer fixture');
+    assert.ok(liveBuyerProduct);
+    const liveBuyerQuote = await stores.prepareDelivery(
+      site.id,
+      {
+        id: randomUUID(),
+        email: 'direct-buyer@example.test',
+        items: [
+          {
+            productId: liveBuyerProduct.id,
+            revision: liveBuyerProduct.revision,
+            quantity: 1,
+          },
+        ],
+      },
+      {
+        country: 'AU',
+        name: 'Fixture Buyer',
+        street: '123 Test Street',
+        city: 'Perth',
+        region: 'WA',
+        postalCode: '6000',
+        unit: '',
+      },
+      null,
+    );
+    assert.ok(liveBuyerQuote);
+    const liveBuyerOrder = await stores.placeDelivery(
+      site.id,
+      liveBuyerQuote.id,
+      null,
+    );
+    assert.ok(liveBuyerOrder);
+    assert.ok(
+      await stores.changeOrder(owner.id, site.id, liveBuyerOrder, 'confirmed'),
+    );
+    const liveBuyerSale = await stores.createPayment(
+      owner.id,
+      site.id,
+      liveBuyerOrder,
+    );
+    assert.ok(liveBuyerSale);
+    assert.ok(await stores.setPaymentMode(owner.id, site.id, 'test'));
+
+    const buyerOrders = await storefront.inject({
+      method: 'GET',
+      url: '/store/account',
+      headers: {
+        host: shopHost,
+        cookie: sessionCookie.split(';', 1)[0]!,
+      },
+    });
+    assert.equal(buyerOrders.statusCode, 200, buyerOrders.body);
+    assert.ok(testBuyerSale);
+    assert.ok(
+      buyerOrders.body.includes(
+        `/sale/${testBuyerSale.id}">Open test payment link</a>`,
+      ),
+    );
+    assert.ok(
+      buyerOrders.body.includes(
+        `/sale/${liveBuyerSale}">Open payment link</a>`,
+      ),
     );
 
     checkoutStatus = 'expired';

@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
         '/auth/callback': `http://127.0.0.1:${env.API_PORT || '3001'}`,
         '/api': `http://127.0.0.1:${env.API_PORT || '3001'}`,
         '/health': `http://127.0.0.1:${env.API_PORT || '3001'}`,
+        '/ready': `http://127.0.0.1:${env.API_PORT || '3001'}`,
       },
     },
   };

@@ -163,7 +163,7 @@ export function registerStorefront(
           h2,h3{margin:0} img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#f8f7f4;border-radius:.5rem;margin-bottom:1rem}.option{display:grid;gap:.5rem;margin-top:1rem}.option img{max-width:12rem;margin-bottom:0} form,label{display:grid;gap:.5rem}form{margin-top:1rem;gap:1rem}
           input,button,select{font:inherit;padding:.5rem .75rem;width:100%;border-radius:.375rem;border:1px solid #88867e}fieldset{display:grid;gap:.5rem;border:1px solid #ddd9d0;border-radius:.5rem}button{background:#254a3e;color:white;cursor:pointer}
         </style>
-        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>${direct ? 'Choose quantities and check out with Stripe in test mode.' : 'Choose quantities and send one order request for the store to confirm.'}</p>
+        <main><nav style="display:flex;justify-content:space-between;gap:12px"><a href="/">← ${escape(store.title)}</a>${accountLink}</nav><h1>Shop</h1><p>${direct ? `Choose quantities and check out with Stripe${store.paymentMode === 'test' ? ' in test mode' : ''}.` : 'Choose quantities and send one order request for the store to confirm.'}</p>
         <form method="post" action="${zones.length ? quotePath : orderPath}">
           <input type="hidden" name="id" value="${randomUUID()}">
           ${direct ? '<input type="hidden" name="pay" value="stripe">' : ''}

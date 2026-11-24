@@ -8,4 +8,5 @@ pnpm-lock.yaml
 **/tokens.css
 playwright-report/
 test-results/
+output/
 docs/visual-diff.html

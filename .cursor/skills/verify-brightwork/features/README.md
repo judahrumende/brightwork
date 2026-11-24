@@ -8,6 +8,7 @@ Maintained source for verifying user-facing Brightwork behavior. Machine-readabl
 - `APP_ORIGIN` (Vite) and `API_PORT` are distinct; Vite `strictPort` matches `APP_ORIGIN`.
 - `PERSONAL_MODE=true` on loopback only for local unsigned sessions.
 - Pip journey proofs need Ollama `qwen2.5:7b-instruct`, a worker from `launch.sh`, and `SITE_BASE_DOMAIN=127.0.0.1.nip.io:$API_PORT`.
+- API readiness proofs can skip Vite and the worker with `VERIFY_SKIP_VITE=1 VERIFY_SKIP_WORKER=1`; they verify `/health` and `/ready`.
 - Run `scripts/doctor.sh` and require pass before driving.
 - Never drive an instance this run did not start.
 
@@ -24,6 +25,7 @@ Maintained source for verifying user-facing Brightwork behavior. Machine-readabl
 - UI proof: ARIA snapshot + screenshot with Brightwork identity visible.
 - Computer proof: ordered frame PNGs and optional MP4 from the helper.
 - Mutation proof: a second user-facing read of the stored value.
+- HTTP proof: save status codes and response bodies.
 - Record feature ID and entry point on every artifact.
 - Unreachable paths report the unmet precondition; do not claim a different path verified them.
 
@@ -37,3 +39,6 @@ Maintained source for verifying user-facing Brightwork behavior. Machine-readabl
 - [Pip core journey](./pip-core-journey.md) — idea → plan → site → publish → live/traffic → ask/answer → change approve (local qwen).
 - [Pip capability expansion](./pip-capability-expansion.md) — Run power, Run views, memory search, expanded tool catalog.
 - [Workbench polish](./workbench-polish.md) — legal pages, Home metrics hierarchy, Workspace Settings modal.
+- [API readiness](./api-readiness.md) — `/health` liveness and `/ready` dependency probes.
+- [Invariant gate](./invariant-gate.md) — credit and vault regression pack via `pnpm verify:invariants`.
+- [Marketing gallery](./marketing-gallery.md) — Vite component gallery when the web surface is launched.
