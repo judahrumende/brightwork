@@ -7,3 +7,6 @@ ts	phase	decision	why	evidence	result
 2026-11-24T01:23:04Z	BW-RC-03	Do not migrate recorded staging	Both prototypes end before the recorded staging migration count; the actual ledger and fixture are absent	README.md	BLOCKED
 2026-11-24T01:23:04Z	BW-RC-03	Rehearse backup restore on disposable Postgres	The runner provides no down migration	../../../website-recovery-ledger.txt	synthetic account identity and ledger preserved
 2026-11-24T01:23:04Z	BW-RC-04	Do not run hosted acceptance	The owner has not authorized a host or provided the provider configuration	README.md	BLOCKED
+2026-11-24T01:26:11Z	BW-RC-02	Reproduce the runtime tree in a fresh worktree	The candidate must work without the original checkout or its env file	../../../fresh-checkout.log	Node 22 frozen install and root/API/worker checks passed
+2026-11-24T01:26:11Z	BW-RC-02	Limit the worker evidence to persisted plan and draft results	The local test calls the worker directly and does not exercise the queue or a live model	../../../website-final-checks.log	one local worker test passed without skips
+2026-11-24T01:26:11Z	BW-RC-04	Use a standalone Pip conversation for the proposed beta	An owner answer is visible to the next turn; automated Run follow-up is a separate path	README.md	owner confirmation pending
