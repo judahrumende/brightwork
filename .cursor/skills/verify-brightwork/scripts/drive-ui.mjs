@@ -8,7 +8,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
 const require = createRequire(path.join(repoRoot, 'apps/worker/package.json'));
 const { chromium } = require('playwright-core');
 
@@ -26,7 +29,9 @@ const browser = await chromium.launch({
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: true,
 });
-const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+const context = await browser.newContext({
+  viewport: { width: 1280, height: 800 },
+});
 const page = await context.newPage();
 const results = [];
 
@@ -38,8 +43,14 @@ async function shot(name) {
 
 try {
   // landing-home
-  await page.goto(`${origin}/en`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  await page.getByRole('link', { name: 'Brightwork' }).first().waitFor({ timeout: 15_000 });
+  await page.goto(`${origin}/en`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  });
+  await page
+    .getByRole('link', { name: 'Brightwork' })
+    .first()
+    .waitFor({ timeout: 15_000 });
   await page.getByRole('navigation', { name: 'Account' }).waitFor();
   await page.getByRole('group', { name: 'Choose a starting point' }).waitFor();
   await page.getByRole('textbox', { name: 'Your business idea' }).waitFor();
@@ -54,7 +65,10 @@ try {
 
   // workspace-creation
   const idea = `maintain verify ${Date.now()} coffee cart`;
-  await page.goto(`${origin}/new`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.goto(`${origin}/new`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  });
   await page.getByLabel('Business name').waitFor({ timeout: 20_000 });
   await page.getByLabel('Business name').fill(`Verify ${Date.now()}`);
   const ideaBox = page.getByLabel('Your idea');
@@ -82,9 +96,11 @@ try {
     waitUntil: 'domcontentloaded',
     timeout: 30_000,
   });
-  await page.getByRole('navigation', { name: 'Workspace applications' }).waitFor({
-    timeout: 20_000,
-  });
+  await page
+    .getByRole('navigation', { name: 'Workspace applications' })
+    .waitFor({
+      timeout: 20_000,
+    });
   await page.getByRole('navigation', { name: 'Main' }).waitFor();
   await page.getByRole('button', { name: 'Search' }).waitFor();
   await page.getByRole('link', { name: 'Inbox' }).waitFor();
@@ -98,12 +114,19 @@ try {
   });
 
   // build
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Build' }).click();
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Build' })
+    .click();
   await page.waitForURL(/\/build/u, { timeout: 30_000 });
   await page.getByRole('heading', { name: 'Build', level: 1 }).waitFor();
-  await page.locator('#pip-prompt').or(page.getByLabel('Message Pip')).first().waitFor({
-    timeout: 20_000,
-  });
+  await page
+    .locator('#pip-prompt')
+    .or(page.getByLabel('Message Pip'))
+    .first()
+    .waitFor({
+      timeout: 20_000,
+    });
   results.push({
     feature: 'build',
     ok: true,
@@ -118,11 +141,17 @@ try {
     url: page.url(),
     shot: await shot('drive-error').catch(() => null),
   });
-  await writeFile(path.join(out, 'drive-ui.json'), JSON.stringify(results, null, 2));
+  await writeFile(
+    path.join(out, 'drive-ui.json'),
+    JSON.stringify(results, null, 2),
+  );
   await browser.close();
   process.exit(1);
 }
 
-await writeFile(path.join(out, 'drive-ui.json'), JSON.stringify(results, null, 2));
+await writeFile(
+  path.join(out, 'drive-ui.json'),
+  JSON.stringify(results, null, 2),
+);
 await browser.close();
 console.log(JSON.stringify(results, null, 2));

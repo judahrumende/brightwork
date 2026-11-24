@@ -127,7 +127,10 @@
       "id": "commerce",
       "note": "Home Revenue/Insights tiles covered by workbench-polish; store dashboard unmapped"
     },
-    { "id": "insights", "note": "Home Insights article covered by workbench-polish" },
+    {
+      "id": "insights",
+      "note": "Home Insights article covered by workbench-polish"
+    },
     { "id": "channels", "note": "No verify recipe yet" },
     {
       "id": "real-signup",

@@ -7,4 +7,5 @@
 - Disposable Postgres integration passed for `apps/api/test/stripe-connect.test.ts`; lint, typecheck, all 40 root unit tests, API unit tests, and worker tests passed.
 - An earlier cleanup regression run exposed a surviving child, then passed after process-group cleanup. An earlier API integration attempt failed because an ordinary order omitted required delivery data; switched the fixture to the delivery-quote flow.
 - PR #41 is open. `ship-pr inspect` confirmed current base `main` at `848f9441` and no pending auto-merge or queue entry. Do not merge without an independent user-flow verdict and current PR checks.
-- Resume by reviewing staged/unstaged state, completing the full package test/build sequence after final test edits, then commit and push only after final review gates. The documented Pip core journey and independent review remain outstanding.
+- First CI run failed Prettier on five verification files. Applied formatting only to those files; local format, lint, contract, and parity checks pass. Follow-up CI is still required.
+- Do not merge without an independent user-flow verdict and current PR checks. The documented Pip core journey and independent review remain outstanding.

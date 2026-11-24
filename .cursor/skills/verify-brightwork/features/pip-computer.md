@@ -33,7 +33,7 @@ NODE_PATH="$(pwd)/node_modules" pnpm --filter @brightwork/worker exec tsx \
   --chrome "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 ```
 
-  Expect ordered `computer-01-navigate.png` … frames (yellow/red cursor stamp), `computer-motion.mp4` or `.webm`, and `computer-motion.html`. Cursor metadata is in `computer-frames.json`.
+Expect ordered `computer-01-navigate.png` … frames (yellow/red cursor stamp), `computer-motion.mp4` or `.webm`, and `computer-motion.html`. Cursor metadata is in `computer-frames.json`.
 
 - **Chat path (optional).** Start worker with `COMPUTER_ENABLED=true` and `COMPUTER_CHROMIUM_PATH`, open Build/chat, ask Pip to open a site and click. Proof requires a completed `use_computer` tool part in the turn UI or API readback—not only the model text.
 

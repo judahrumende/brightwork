@@ -125,7 +125,11 @@ async function turnStateFromDb(turnId) {
   try {
     const { stdout } = await execFileAsync(
       'psql',
-      [databaseUrl, '-Atc', `SELECT state FROM agent_turns WHERE id = '${turnId}'`],
+      [
+        databaseUrl,
+        '-Atc',
+        `SELECT state FROM agent_turns WHERE id = '${turnId}'`,
+      ],
       { timeout: 5_000 },
     );
     return stdout.trim() || null;
@@ -158,7 +162,11 @@ async function questionFromDb(companyId) {
   }
 }
 
-async function waitTurn(companyId, turnId, { maxMs = 900_000, label = 'turn' } = {}) {
+async function waitTurn(
+  companyId,
+  turnId,
+  { maxMs = 900_000, label = 'turn' } = {},
+) {
   const started = Date.now();
   while (Date.now() - started < maxMs) {
     let state = 'unknown';
@@ -219,7 +227,9 @@ try {
   const session = await api('POST', '/api/me/session', {});
   await save('session.json', session.json);
   if (session.status < 200 || session.status >= 300) {
-    throw new Error(`session HTTP ${session.status}: ${session.text.slice(0, 200)}`);
+    throw new Error(
+      `session HTTP ${session.status}: ${session.text.slice(0, 200)}`,
+    );
   }
   results.steps.push({ step: 'session', ok: true });
 
@@ -278,7 +288,9 @@ try {
   );
   await save('approve.json', approve.json);
   if (approve.status !== 200) {
-    throw new Error(`approve HTTP ${approve.status}: ${approve.text.slice(0, 300)}`);
+    throw new Error(
+      `approve HTTP ${approve.status}: ${approve.text.slice(0, 300)}`,
+    );
   }
   results.steps.push({ step: 'approve', ok: true });
 
@@ -290,7 +302,9 @@ try {
   );
   await save('publish.json', publish.json);
   if (publish.status !== 200) {
-    throw new Error(`publish HTTP ${publish.status}: ${publish.text.slice(0, 300)}`);
+    throw new Error(
+      `publish HTTP ${publish.status}: ${publish.text.slice(0, 300)}`,
+    );
   }
   results.steps.push({ step: 'publish', ok: true });
 
@@ -313,7 +327,12 @@ try {
   await save('live-home.html', liveHtml);
   await save('live-meta.json', { url: liveUrl, status: liveStatus });
   if (liveStatus !== 200) throw new Error(`live site HTTP ${liveStatus}`);
-  results.steps.push({ step: 'live', ok: true, status: liveStatus, url: liveUrl });
+  results.steps.push({
+    step: 'live',
+    ok: true,
+    status: liveStatus,
+    url: liveUrl,
+  });
 
   // Record a visit for traffic proof (second fetch)
   await fetch(liveUrl).catch(() =>
@@ -360,7 +379,9 @@ try {
   );
   await save('answer.json', answer.json);
   if (answer.status !== 200) {
-    throw new Error(`answer HTTP ${answer.status}: ${answer.text.slice(0, 300)}`);
+    throw new Error(
+      `answer HTTP ${answer.status}: ${answer.text.slice(0, 300)}`,
+    );
   }
   results.steps.push({ step: 'answer', ok: true, questionId: question.id });
 
@@ -375,7 +396,11 @@ try {
       prompt,
     });
     await save(`${label}.json`, change.json);
-    if (change.status !== 200 && change.status !== 201 && change.status !== 202) {
+    if (
+      change.status !== 200 &&
+      change.status !== 201 &&
+      change.status !== 202
+    ) {
       throw new Error(`${label} HTTP ${change.status}`);
     }
     try {
@@ -452,18 +477,21 @@ try {
 }
 
 await save('drive-pip-journey.json', results);
-await save('note.md', [
-  '# pip-core-journey',
-  '',
-  `- feature: pip-core-journey`,
-  `- ok: ${results.ok}`,
-  `- APP_ORIGIN: ${origin}`,
-  `- LLM_MODEL: ${process.env.LLM_MODEL || 'qwen2.5:7b-instruct'}`,
-  '',
-  '## Log',
-  ...note.map((l) => `- ${l}`),
-  '',
-].join('\n'));
+await save(
+  'note.md',
+  [
+    '# pip-core-journey',
+    '',
+    `- feature: pip-core-journey`,
+    `- ok: ${results.ok}`,
+    `- APP_ORIGIN: ${origin}`,
+    `- LLM_MODEL: ${process.env.LLM_MODEL || 'qwen2.5:7b-instruct'}`,
+    '',
+    '## Log',
+    ...note.map((l) => `- ${l}`),
+    '',
+  ].join('\n'),
+);
 
 if (!results.ok) {
   console.error(results.error || 'journey failed');

@@ -23,7 +23,10 @@ if (!origin || !out) {
 }
 await mkdir(out, { recursive: true });
 
-const sha = execSync('git rev-parse HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim();
+const sha = execSync('git rev-parse HEAD', {
+  cwd: repoRoot,
+  encoding: 'utf8',
+}).trim();
 const browser = await chromium.launch({
   executablePath:
     process.env.BROWSER_EXECUTABLE_PATH ||
@@ -64,9 +67,11 @@ try {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     });
-    await page.getByRole('heading', { level: 1, name: 'Terms of Service' }).waitFor({
-      timeout: 15_000,
-    });
+    await page
+      .getByRole('heading', { level: 1, name: 'Terms of Service' })
+      .waitFor({
+        timeout: 15_000,
+      });
     await page.getByText('Brightwork and Pip').first().waitFor();
     return { shot: await shot('legal-terms') };
   });
@@ -76,9 +81,11 @@ try {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     });
-    await page.getByRole('heading', { level: 1, name: 'Privacy Policy' }).waitFor({
-      timeout: 15_000,
-    });
+    await page
+      .getByRole('heading', { level: 1, name: 'Privacy Policy' })
+      .waitFor({
+        timeout: 15_000,
+      });
     return { shot: await shot('legal-privacy') };
   });
 
@@ -149,7 +156,10 @@ try {
       .getByRole('navigation', { name: 'Business settings' })
       .getByRole('button', { name: 'Team' })
       .waitFor();
-    await dialog.locator('header').getByRole('heading', { name: 'Team' }).waitFor();
+    await dialog
+      .locator('header')
+      .getByRole('heading', { name: 'Team' })
+      .waitFor();
     // Radix marks the page inert while the dialog is open, so role queries miss Home chrome.
     // CSS locators still prove Home stayed mounted under the settings modal.
     await page
@@ -160,18 +170,22 @@ try {
       .waitFor({ state: 'attached', timeout: 10_000 });
     const shotPath = await shot('polish-settings-modal');
     await dialog.getByRole('button', { name: 'Close settings' }).click();
-    await page.waitForURL(
-      (url) => /\/f\/[^/]+\/?$/u.test(url.pathname),
-      { timeout: 20_000 },
-    );
-    await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 10_000 });
+    await page.waitForURL((url) => /\/f\/[^/]+\/?$/u.test(url.pathname), {
+      timeout: 20_000,
+    });
+    await page
+      .getByRole('dialog')
+      .waitFor({ state: 'hidden', timeout: 10_000 });
     return { shot: shotPath, closedTo: page.url() };
   });
 } catch {
   /* results already record the failing step */
 }
 
-await writeFile(path.join(out, 'drive-polish.json'), JSON.stringify(results, null, 2));
+await writeFile(
+  path.join(out, 'drive-polish.json'),
+  JSON.stringify(results, null, 2),
+);
 await writeFile(
   path.join(out, 'note.md'),
   [
