@@ -1,0 +1,73 @@
+# Brightwork website beta release candidate
+
+**Reviewable locally. Not approved for deployment or for an upgrade of the recorded staging database.** No product code changed. The main-based candidate adds a worker test and this briefing.
+
+## Scope and release gate
+
+Accept the beta when a new owner signs up with a real provider, creates a workspace, gets a Pip plan and a two-page draft, approves that exact revision, and opens both pages over public HTTPS. The owner answers a Pip question. The next Pip turn must see the answer. Edit the same site in Build, approve and publish the new revision, then roll back. Confirm the same public URL serves the first revision, the revised content, and the first revision again. Check that the edited revision cannot publish before approval.
+
+Owner response means an answer to Pip, not a reply to a public contact form. Main does not automatically resume Pip after an answer. Use the existing Build editor for the same-site revision. Main's Pip `build` tool creates a new artifact. If acceptance requires Pip to overwrite the existing site or resume automatically, the owner must decide that separately.
+
+Generated apps, stores, payments, connected channels, and the separate Pip streaming worktree are outside the beta. Main already contains some app and channel code. The candidate doesn't remove it or claim that all those routes are hidden. Leave their providers unconfigured and do not treat them as accepted beta paths.
+
+Use [PROGRESS.md](../../PROGRESS.md) for parity and the [existing verification recipes](../../.cursor/skills/verify-brightwork/features/README.md) for local behavior evidence. This document records release selection, not a second parity inventory.
+
+See the [decision log](decisions.tsv) for the choices and their evidence.
+
+## Candidate comparison
+
+Live `git ls-remote` agreed with the local refs: `a93f27ec585e679d62e08c8e86dfec4e11aa502d` and `848f9441cee55d37ae87225ace8854ae24847f93`. The merge base is `23dc0f6e4cebd8b54bd43ab1eed0b95ff2656c5b`. The current branch is 15 commits ahead and 2 behind.
+
+| Prototype                                           | Commit                                                                                                    | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Integrate the current committed branch with main | `a6056471a354a71454df5aded8899a94c5bbd366`                                                                | 84 changed paths versus main. Adds the structured builder, generated stores, buyer accounts, shipping, checkout, reporting, Stripe mode isolation, and verification work. Six conflicts: five verification files and root `package.json`. Retained main's common verification files and combined the script keys. The branch recipes are not proven under that resolution. Frozen install, build, lint, typecheck, root tests, and fresh migration passed. Journal ends at `0047`. |
+| B. Main with focused verification only              | `848f9441cee55d37ae87225ace8854ae24847f93` base. The review candidate is the commit containing this file. | Selected. Main already has signup, the worker's plan and `build` tool, revision approval, publication, owner questions, editing, and deployment history. No transplant conflicts. No production, dependency, or migration change. Journal ends at `0037`.                                                                                                                                                                                                                          |
+
+Both use the same `pnpm-lock.yaml`. A's larger runtime and schema come from its committed store work, not added npm packages. B needs Postgres, Redis, a supported LLM endpoint, real email with SMTP and Turnstile or WorkOS, and separate wildcard DNS and TLS. Neither prototype depends on local app sandbox or browser-control changes.
+
+### Original checkout inventory
+
+- **Staged:** none. **Unstaged:** 130 tracked paths. **Untracked:** 1,332 path entries, including three linked worktree roots.
+- **Release code:** sourced only from committed main. Local API auth, worker planning, and Build changes mix beta behavior with apps, stores, provider changes, and unpublished contracts. Leave them out as ambiguous. In particular, do not transplant the dirty router, agent store, publisher, worker, lockfile, or CI.
+- **Migrations:** tracked journal edit and 58 untracked SQL files, `0048` through `0105`. Leave both out. The candidate's SQL and journal are byte-for-byte main.
+- **Tests:** local app, store, and provider tests stay out. B adds one independent worker test against committed main with a controlled model reply and disposable Postgres.
+- **Artifacts and notes:** graph output, screenshots, verifier results, coordination notes, run histories, and other local work stay out. Full path lists are in the adjacent evidence directory. No original content was staged or copied into either product tree.
+
+## Release units
+
+Owners are roles until named. The release operator owns the local candidate and evidence.
+
+| Unit                                       | Owner                      | State and evidence                                                                                                                                                                                    |
+| ------------------------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BW-RC-01. Inventory and compare candidates | Release operator           | Complete. Git and dependency review, migration and CI review, both worktrees, and adjacent `original-*-paths.txt`.                                                                                    |
+| BW-RC-02. Reproduce B locally              | Release operator           | See check results below. Review the exact candidate commit and use the existing suite paths.                                                                                                          |
+| BW-RC-03. Prove database compatibility     | Database owner             | Fresh and backup restore verified. Intended-environment upgrade **BLOCKED**. Obtain the ordered ledger and representative sanitized schema and data fixture, or approve a new isolated beta database. |
+| BW-RC-04. Prove hosted website loop        | Product and hosting owners | **BLOCKED**. Confirm the owner-response interpretation, the authorized beta host, auth provider, model, wildcard DNS/TLS, and cost limits. No hosted flow was attempted.                              |
+| BW-RC-05. Sign off                         | Release owner              | Not started. Neither local fixture passes nor a commit SHA authorizes a deploy.                                                                                                                       |
+
+## Local evidence
+
+Command logs and ledger exports are beside the two worktrees in `brightwork-release.sNS7vv`. The paths below are relative to this briefing on this machine. They are not part of the candidate tree. See the [original checkout comparison](../../../original-preservation.txt).
+
+| Gate                                                                                         | Result                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node `22.23.5`, pnpm `10.33.3`, `pnpm install --frozen-lockfile`                             | Passed. `../../../website-install.log`.                                                                                                                                                                                                                                                                                                                 |
+| `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm format:check`, `pnpm test:unit`           | Passed. `../../../website-final-checks.log`. The root suite runs on Node 22; main uses the old, consistent array planner contract in `run-plan.ts`, `agent.ts`, and the fixture. The required `successCriteria` and object return are on the excluded local planner and its changed callers. No runner or production validation change is needed for B. |
+| API `test:unit`, `test:research`, `test:growth`, root contract, parity, and invariant checks | Passed. `../../../website-check-results.txt` and the corresponding logs. `branding:check` was not a main CI gate and has no script on B.                                                                                                                                                                                                                |
+| Worker `test`                                                                                | Passed with `WEBSITE_WORKER_TEST_DATABASE_URL` set to the local `website_worker` database. No skips. Checks a persisted plan and a pending website with the home and about pages. Model and credit debit are fixtures. `../../../website-final-checks.log`.                                                                                             |
+| API `test:integration`                                                                       | 9 passed, 0 skipped. Requests reach Fastify and disposable Postgres, Redis, and Mailpit, with provider fixtures. Includes revision approval, repeat publication, owner answer, and deployment rollback. `../../../website-integration-correct-port.log`. The first runs targeted the wrong SMTP port and returned 503.                                  |
+| Focused Dev Playwright and `pnpm test:ssr`                                                   | 3 and 4 passed. `../../../website-browser.log` and `../../../website-ssr-with-services.log`. The first SSR run lacked the disposable auth services and failed two checks. Browser fixtures do not prove real signup, model reliability, DNS, or TLS. Full Playwright and Docker/MinIO CI were not run. Docker daemon was unavailable.                   |
+
+### PostgreSQL
+
+B applied `0000` through `0037` to empty, disposable PostgreSQL 16.14. The 38 ordered timestamps and SHA-256 hashes matched the candidate journal and SQL. The second migrate left the ledger unchanged. See `../../../website-ledger-1.txt` and `../../../website-ledger-2.txt`. A applied 48 migrations to a separate empty database.
+
+Recovery rehearsal used `pg_dump -Fc` and `pg_restore --exit-on-error` into a second local database. The restored account retained its email identity and the same 38 ledger rows. See `../../../website-recovery-data.txt` and `../../../website-recovery-ledger.txt`. This proves the restore procedure on a synthetic backup, not a staging recovery time or downgrade.
+
+The historical staging record ties `ad76ee0` to 78 applied migrations through `0077`. The actual staging ledger and a sanitized staging fixture were unavailable. Neither prototype can be assumed compatible with that database. Drizzle uses the last ledger timestamp as its cutoff and does not reject a database ahead of the checked-out journal. A successful no-op therefore does not prove an upgrade. Do not point either candidate at the recorded staging database.
+
+To reproduce the worker check, create and migrate a clean loopback PostgreSQL database named `website_worker`. Set `WEBSITE_WORKER_TEST_DATABASE_URL` to that database and run `pnpm --filter @brightwork/worker run test`. The test fails if the URL is missing or names a different host or database.
+
+## Next runnable unit
+
+Start BW-RC-03 with the database owner. Compare the intended environment's exported ledger to the target journal by timestamp and hash. Reject extra, missing, reordered, or changed entries before running a migrator. If the owner instead approves a fresh isolated beta database, repeat the fresh and restore checks there under the authorized release plan. Run BW-RC-04 only after the owner provides the auth, model, DNS, TLS, and spending constraints.

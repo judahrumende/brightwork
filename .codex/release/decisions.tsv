@@ -1,0 +1,9 @@
+ts	phase	decision	why	evidence	result
+2026-11-24T01:23:03Z	start	Open the website beta release review	Keep product scope to the hosted static-site loop	ses_df4e07595ffe4lG0IUI7IRTouy	open
+2026-11-24T01:23:04Z	BW-RC-01	Prototype the committed branch plus main	Observe merge conflicts without writing to the original checkout	a6056471a354a71454df5aded8899a94c5bbd366	fresh migration and core checks passed
+2026-11-24T01:23:04Z	BW-RC-01	Select the main-based prototype	Main already supports the website loop without new store migrations	848f9441cee55d37ae87225ace8854ae24847f93	selected
+2026-11-24T01:23:04Z	BW-RC-02	Keep the existing root runner and Run fixture	Root tests pass under Node 22; the selected callers still use the array contract	../../../website-final-checks.log	36 root cases passed
+2026-11-24T01:23:04Z	BW-RC-02	Add a worker test against disposable Postgres	Check persisted planning and a two-page draft without introducing product code	../../apps/worker/src/website-beta.test.ts	verified
+2026-11-24T01:23:04Z	BW-RC-03	Do not migrate recorded staging	Both prototypes end before the recorded staging migration count; the actual ledger and fixture are absent	README.md	BLOCKED
+2026-11-24T01:23:04Z	BW-RC-03	Rehearse backup restore on disposable Postgres	The runner provides no down migration	../../../website-recovery-ledger.txt	synthetic account identity and ledger preserved
+2026-11-24T01:23:04Z	BW-RC-04	Do not run hosted acceptance	The owner has not authorized a host or provided the provider configuration	README.md	BLOCKED
