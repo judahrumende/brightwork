@@ -1,6 +1,7 @@
 kit/
 reference-v1/
 PROMPT.md
+.codex/run-memory.md
 pnpm-lock.yaml
 **/dist/
 **/routeTree.gen.ts

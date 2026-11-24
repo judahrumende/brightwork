@@ -30,3 +30,11 @@ Maintained source for verifying Brightwork behavior on a disposable local stack.
 - [API readiness](./api-readiness.md) — `/health` liveness and `/ready` dependency probes.
 - [Invariant gate](./invariant-gate.md) — credit and vault regression pack via `pnpm verify:invariants`.
 - [Marketing gallery](./marketing-gallery.md) — Vite component gallery when the web surface is launched.
+
+## Website beta
+
+Use the [website beta verifier](../../../../.claude/skills/verify/SKILL.md). It owns its local services and runs its own doctor instead of the baseline launch above.
+
+- [Owner signup](./owner-signup.md)
+- [Pip plan, draft, and owner answer](./pip-website-draft.md)
+- [Publish, revise, and roll back](./website-publication.md)
