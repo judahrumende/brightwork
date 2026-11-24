@@ -16,7 +16,7 @@
 
 - Current focused verification: worker tests 80/80; API unit tests 26/26; local Postgres integrations 6/6 (model credit cap, concurrent draft/reminder idempotency, Run question answer/resume, publication approval, email delivery, generated-app persistence); full workspace typecheck, Prettier and `git diff --check` pass. Node 26.7.0 still warns against the declared >=22 <25 engine range.
 - Agent trust garden phase 1: ESLint enforces the web/api/worker/shared import graph, bans `@ts-ignore`/`any`, and allowlists intentional web timers. Feature map at `.cursor/skills/verify-brightwork/features/map.json`; `pnpm verify:feature` / `pnpm verify:doctor`; pointers in `docs/agent-trust.md` and `AGENTS.md`. Spec/plan under `docs/superpowers/`.
-- PR #41 ship worktree: merged current `main` into the PR branch; lint, typecheck, build, format, contracts, parity, 40 root unit tests, API unit tests, worker tests, cleanup regression, and Stripe/storefront Postgres integration pass. First CI run found five formatting issues, now corrected locally. Pip journey and independent user-flow review are still required before landing.
+- PR #41 ship worktree: merged current `main` into the PR branch; lint, typecheck, build, format, contracts, parity, 40 root unit tests, API unit tests, worker tests, cleanup regression, and Stripe/storefront Postgres integration pass. Follow-up GitHub CI is green through browser and SSR tests. Pip core journey and independent user-flow review remain outstanding.
 
 ## Remaining acceptance gates
 
