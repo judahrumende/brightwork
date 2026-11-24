@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-exec env -i PATH="$PATH" HOME="$HOME" LC_ALL=C \
-  BROWSER_EXECUTABLE_PATH="${BROWSER_EXECUTABLE_PATH:-}" \
-  bash -c "$(cat <<'VERIFY'
+verify() {
 set -euo pipefail
 
 if [[ "$#" -ne 0 ]]; then
@@ -132,18 +130,18 @@ doctor() {
   done
   [[ "$(redis-cli -u "$REDIS_URL" ping)" == PONG ]] || return 1
   curl -fsS --max-time 2 --retry 3 --retry-connrefused "$TEST_MAILPIT_URL/readyz" || return 1
-  node --input-type=module <<'JS' >"$evidence/expected-ledger.txt" || return 1
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-const folder = 'apps/api/drizzle/';
-const { entries } = JSON.parse(readFileSync(folder + 'meta/_journal.json', 'utf8'));
-for (const { idx, when, tag } of entries) {
-  if (entries[idx]?.tag !== tag || (idx && entries[idx - 1].when >= when))
-    throw new Error(`Migration journal is out of order at ${tag}`);
-  const hash = createHash('sha256').update(readFileSync(folder + tag + '.sql')).digest('hex');
-  console.log(`${when}|${hash}`);
-}
-JS
+  node --input-type=module -e '
+    import { createHash } from "node:crypto";
+    import { readFileSync } from "node:fs";
+    const folder = "apps/api/drizzle/";
+    const { entries } = JSON.parse(readFileSync(folder + "meta/_journal.json", "utf8"));
+    for (const [position, { idx, when, tag }] of entries.entries()) {
+      if (idx !== position || (position && entries[position - 1].when >= when))
+        throw new Error(`Migration journal is out of order at ${tag}`);
+      const hash = createHash("sha256").update(readFileSync(folder + tag + ".sql")).digest("hex");
+      console.log(`${when}|${hash}`);
+    }
+  ' >"$evidence/expected-ledger.txt" || return 1
   for url in "$DATABASE_URL" "$WEBSITE_WORKER_TEST_DATABASE_URL"; do
     db="${url##*/}"
     psql "$url" -At -v ON_ERROR_STOP=1 -c \
@@ -165,5 +163,8 @@ for suite in worker api-integration; do
 done
 check browser pnpm test --workers=2 --trace=retain-on-failure --output="$evidence/browser"
 check production-browser pnpm test:ssr --trace=retain-on-failure --output="$evidence/ssr"
-VERIFY
-)" "$0" "$@"
+}
+
+exec env -i PATH="$PATH" HOME="$HOME" LC_ALL=C \
+  BROWSER_EXECUTABLE_PATH="${BROWSER_EXECUTABLE_PATH:-}" \
+  bash -c "$(declare -f verify)"$'\n''verify "$@"' "$0" "$@"
