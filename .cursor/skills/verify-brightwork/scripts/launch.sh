@@ -4,6 +4,7 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 cd "$ROOT"
 # shellcheck source=redis14-lock.sh
 source "$(dirname "$0")/redis14-lock.sh"
+source "$(dirname "$0")/verify-pguser.sh"
 
 RUN_ID="${RUN_ID:-$(date +%Y%m%dT%H%M%S)}"
 # Always derive disposable paths from RUN_ID. Ambient VERIFY_ROOT/VERIFY_DB from a
@@ -19,7 +20,7 @@ fi
 export VERIFY_ROOT
 mkdir -p "$VERIFY_ROOT"
 export VERIFY_DB
-PGUSER="${VERIFY_PGUSER:-$(whoami)}"
+PGUSER="$(verify_pguser)"
 export DATABASE_URL="postgresql://${PGUSER}@127.0.0.1:5432/${VERIFY_DB}"
 # Isolation: ignore ambient shell/.env (journey ports, OpenRouter keys, Redis DB 15).
 # Override only via VERIFY_* so a polluted parent shell cannot hijack the stack.
