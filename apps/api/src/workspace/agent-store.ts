@@ -1,3 +1,6 @@
+import { generatedStores } from './generated-store';
+import { storeCurrency } from '@brightwork/shared';
+import type { z } from 'zod';
 import { websiteReviews } from './website-review';
 import { buildActivity } from './build-activity';
 import { publishWebsite } from './publish-website';
@@ -81,14 +84,18 @@ export function agentStore(db: Database) {
     row: typeof artifacts.$inferSelect,
     revertedFromId?: string,
   ) {
-    await writer.insert(websiteVersions).values({
-      artifactId: row.id,
-      revision: row.revision,
-      document: row.body,
-      pages: row.pages,
-      title: row.title,
-      revertedFromId: revertedFromId ?? null,
-    });
+    const [version] = await writer
+      .insert(websiteVersions)
+      .values({
+        artifactId: row.id,
+        revision: row.revision,
+        document: row.body,
+        pages: row.pages,
+        title: row.title,
+        revertedFromId: revertedFromId ?? null,
+      })
+      .returning({ id: websiteVersions.id });
+    return version;
   }
   async function insertArtifact(writer: Writer, item: Artifact) {
     const [record] = await writer.insert(artifacts).values(item).returning();
@@ -105,6 +112,9 @@ export function agentStore(db: Database) {
     db
       .select({
         ...getTableColumns(artifacts),
+        storeLive: sql<boolean>`exists (select 1 from generated_stores
+          where site_id = ${artifacts.id} and first_revision <= ${publications.draftRevision})`,
+        isStore: sql<boolean>`exists (select 1 from generated_stores where site_id = ${artifacts.id})`,
         liveVersionId: publications.id,
         liveDraftRevision: publications.draftRevision,
         publishWithRun: businessRuns.publishWebsites,
@@ -143,6 +153,7 @@ export function agentStore(db: Database) {
       );
 
   return {
+    generatedStore: generatedStores(db),
     websiteReviews: (
       businessId: string,
       filter?: Parameters<typeof websiteReviews>[2],
@@ -485,6 +496,104 @@ export function agentStore(db: Database) {
           });
         }
         return record;
+      });
+    },
+    async saveGeneratedWebsite(input: {
+      businessId: string;
+      turnId: string;
+      toolCallId: string;
+      title: string;
+      body: string;
+      pages: NonNullable<Artifact['pages']>;
+      storeCurrency?: z.infer<typeof storeCurrency>;
+      base?: Pick<typeof artifacts.$inferSelect, 'id' | 'revision' | 'state'>;
+    }) {
+      const { businessId, turnId, toolCallId, title, body, pages, base } =
+        input;
+      return db.transaction(async (tx) => {
+        const [turn] = await tx
+          .select({ parts: agentTurns.parts })
+          .from(agentTurns)
+          .where(
+            and(
+              eq(agentTurns.id, turnId),
+              eq(agentTurns.businessId, businessId),
+              eq(agentTurns.state, 'running'),
+            ),
+          )
+          .for('no key update');
+        const part = turn?.parts.find(
+          (part) =>
+            part.type === 'tool' &&
+            part.name === 'build' &&
+            part.toolCallId === toolCallId &&
+            part.status === 'running',
+        );
+        if (!turn || !part) throw new Error('This build is no longer running.');
+        const draft = { title, body, pages, turnId, state: 'pending' as const };
+        const [site] = base
+          ? await tx
+              .update(artifacts)
+              .set({
+                ...draft,
+                revision: sql`${artifacts.revision} + 1`,
+              })
+              .where(
+                and(
+                  websiteScope(businessId, base.id),
+                  eq(artifacts.revision, base.revision),
+                  eq(artifacts.state, base.state),
+                  sql`not exists (
+                select 1 from agent_turns as source
+                join business_runs as run on run.id = source.run_id
+                where source.id = ${artifacts.turnId} and run.state in ('active', 'paused')
+              )`,
+                ),
+              )
+              .returning()
+          : [
+              await insertArtifact(tx, {
+                ...draft,
+                businessId,
+                kind: 'website',
+              }),
+            ];
+        if (!site) return null;
+        if (input.storeCurrency) {
+          await tx.execute(sql`insert into generated_stores(site_id, currency, first_revision)
+            values (${site.id}, ${input.storeCurrency}, ${site.revision}) on conflict (site_id) do nothing`);
+        }
+        const version = await saveWebsiteVersion(tx, site);
+        if (!version) throw new Error('Could not save website version');
+        const output = {
+          id: site.id,
+          title,
+          state: site.state,
+          revision: site.revision,
+          versionId: version.id,
+        };
+        const parts = turn.parts.map((entry) =>
+          entry === part
+            ? { ...entry, status: 'completed' as const, output }
+            : entry,
+        );
+        const answer =
+          `Saved “${title}” as website revision ${site.revision} for review in Build.` +
+          (input.storeCurrency
+            ? ' Open Dashboard below the preview to add products.'
+            : '');
+        parts.push({ type: 'text', text: answer });
+        await tx
+          .update(agentTurns)
+          .set({
+            state: 'completed',
+            answer,
+            parts,
+            updatedAt: new Date(),
+            revision: sql`${agentTurns.revision} + 1`,
+          })
+          .where(eq(agentTurns.id, turnId));
+        return output;
       });
     },
     async controlTaskAutomation(
@@ -1100,7 +1209,12 @@ export function agentStore(db: Database) {
               .select({ runId: agentTurns.runId })
               .from(artifacts)
               .innerJoin(agentTurns, eq(agentTurns.id, artifacts.turnId))
-              .where(websiteScope(businessId, id))
+              .where(
+                and(
+                  websiteScope(businessId, id),
+                  eq(artifacts.revision, revision),
+                ),
+              )
           : [];
         const [run] = website?.runId
           ? await tx

@@ -41,8 +41,8 @@ BW-ARCH-08  worker Docker + prod compose       (needs 01 + 02)
 BW-ARCH-09  optional site payload objects      (needs 04; only if measured)
 ```
 
-Independent from trunk: `01`, `10`, `03`, `07`.  
-Blocked: `04` ← `02`+`03`; `08` ← `01`+`02`; `09` ← `04`.  
+Independent from trunk: `01`, `10`, `03`, `07`.
+Blocked: `04` ← `02`+`03`; `08` ← `01`+`02`; `09` ← `04`.
 Review-gated before merge: `07` (UI), any PR that changes interaction copy or layout.
 
 ## Cross-cutting verification baseline

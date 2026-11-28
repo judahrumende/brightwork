@@ -5,9 +5,11 @@ import { Button } from '../ui/primitives';
 export function CommerceHistoryRefresh({
   endpoint,
   queryKey,
+  query = '',
 }: {
   endpoint: string;
   queryKey: string[];
+  query?: string;
 }) {
   const cache = useQueryClient();
   const refresh = useMutation({
@@ -17,7 +19,7 @@ export function CommerceHistoryRefresh({
         refreshed: number;
         failed: number;
         next: string | null;
-      }>(endpoint + '/history/refresh', after ? { after } : {}),
+      }>(endpoint + '/history/refresh' + query, after ? { after } : {}),
     async onSuccess() {
       await cache.invalidateQueries({ queryKey });
       await cache.invalidateQueries({

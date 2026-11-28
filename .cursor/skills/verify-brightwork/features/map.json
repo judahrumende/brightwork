@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "landing-home",
+      "recipe": "features/landing-home.md",
+      "entryRoutes": ["/en"],
+      "preconditions": ["doctor-or-vite-shell"],
+      "proof": ["landing-home.png", "aria-snapshot"]
+    },
+    {
+      "id": "workspace-creation",
+      "recipe": "features/workspace-creation.md",
+      "entryRoutes": ["/new"],
+      "preconditions": ["doctor", "disposable-db", "session-or-personal-mode"],
+      "proof": ["screenshot-before-submit", "screenshot-after-navigation"]
+    },
+    {
+      "id": "workbench-home",
+      "recipe": "features/workbench-home.md",
+      "entryRoutes": ["/f/:businessId"],
+      "preconditions": ["doctor", "workspace-id", "session"],
+      "proof": ["workbench-home.png", "aria-snapshot"]
+    },
+    {
+      "id": "pip-computer",
+      "recipe": "features/pip-computer.md",
+      "entryRoutes": [],
+      "preconditions": [
+        "playwright-core",
+        "chromium-binary",
+        "verify-root",
+        "motion-helper"
+      ],
+      "proof": [
+        "computer-01-navigate.png",
+        "computer-frames.json",
+        "computer-motion.mp4|computer-motion.webm",
+        "computer-motion.html"
+      ]
+    },
+    {
+      "id": "build",
+      "recipe": "features/build.md",
+      "entryRoutes": ["/f/:businessId/build"],
+      "preconditions": ["doctor", "workspace-id", "session"],
+      "proof": ["build-shell.png"]
+    },
+    {
+      "id": "pip-core-journey",
+      "recipe": "features/pip-core-journey.md",
+      "entryRoutes": ["/new", "/f/:businessId/build"],
+      "preconditions": [
+        "doctor",
+        "disposable-db",
+        "worker",
+        "ollama-qwen2.5:7b-instruct",
+        "site-base-domain",
+        "personal-mode"
+      ],
+      "proof": [
+        "drive-pip-journey.json",
+        "live-home.html",
+        "approve.json",
+        "publish.json",
+        "answer.json",
+        "publish2.json"
+      ]
+    },
+    {
+      "id": "pip-capability-expansion",
+      "recipe": "features/pip-capability-expansion.md",
+      "entryRoutes": ["/f/:businessId/run"],
+      "preconditions": [
+        "doctor",
+        "disposable-db",
+        "worker",
+        "migration-0104-run-power",
+        "personal-mode"
+      ],
+      "proof": [
+        "drive-pip-capability.json",
+        "run-create.json",
+        "directions.json",
+        "report.json",
+        "tasks.json",
+        "questions.json",
+        "memory-search.json",
+        "catalog.json"
+      ]
+    },
+    {
+      "id": "workbench-polish",
+      "recipe": "features/workbench-polish.md",
+      "entryRoutes": [
+        "/terms",
+        "/privacy",
+        "/refund-policy",
+        "/f/:businessId",
+        "/f/:businessId/settings"
+      ],
+      "preconditions": [
+        "doctor",
+        "disposable-db",
+        "session-or-personal-mode",
+        "vite"
+      ],
+      "proof": [
+        "legal-terms.png",
+        "legal-privacy.png",
+        "legal-refund.png",
+        "polish-home-metrics.png",
+        "polish-settings-modal.png",
+        "drive-polish.json"
+      ]
+    }
+  ],
+  "unmapped": [
+    { "id": "inbox", "note": "No verify recipe yet" },
+    { "id": "schedule", "note": "No verify recipe yet" },
+    {
+      "id": "settings",
+      "note": "Covered by workbench-polish for modal chrome; account Settings dialog still separate"
+    },
+    { "id": "library", "note": "No verify recipe yet" },
+    {
+      "id": "commerce",
+      "note": "Home Revenue/Insights tiles covered by workbench-polish; store dashboard unmapped"
+    },
+    {
+      "id": "insights",
+      "note": "Home Insights article covered by workbench-polish"
+    },
+    { "id": "channels", "note": "No verify recipe yet" },
+    {
+      "id": "real-signup",
+      "note": "PERSONAL_MODE only in pip-core-journey; Resend/OAuth signup unmapped"
+    }
+  ]
+}

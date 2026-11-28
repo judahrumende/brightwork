@@ -1,3 +1,11 @@
+import {
+  merchantCustomersQuery,
+  merchantOrdersQuery,
+  merchantReportQuery,
+} from './store-merchant-reads';
+import { sendStorePhoto } from './store-product-photo';
+import { orderAction, productEdit } from './generated-store';
+import { storeCurrency, storeDeliveryZones } from '@brightwork/shared';
 import { buildSummary } from './build-activity';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -25,7 +33,7 @@ import { canLeadRun } from './run-store';
 import type { runStore } from './run-store';
 import type { mailStore } from './mail-store';
 import { smsReplyInput } from './sms';
-import type { stripeConnect } from './stripe-connect';
+import type { StripeConnectModes } from './stripe-connect';
 import type { workspaceSms } from './sms';
 import type { inboundMail } from './inbound-mail';
 
@@ -39,7 +47,7 @@ type Context = {
   store: ReturnType<typeof agentStore>;
   team: ReturnType<typeof teamStore>;
   commerce: ReturnType<typeof shopifyOrders> | undefined;
-  sellerPayments: ReturnType<typeof stripeConnect> | undefined;
+  sellerPayments: StripeConnectModes | undefined;
   media: ReturnType<typeof mediaStore>;
   mediaRates: Partial<Record<MediaKind, string>>;
   salesInsights: (
@@ -1213,6 +1221,228 @@ export function registerWorkspace(app: FastifyInstance, context: Context) {
         item: describeWork(item, new Date()),
         outreachSender: context.outreachSender ?? null,
       };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  const storePath = path + '/work/:resource/store';
+  app.get(storePath, async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const dashboard = await store.generatedStore.read(access.id, resource);
+      if (!dashboard)
+        return reply.code(404).send({ message: 'Store not found.' });
+      return {
+        ...dashboard,
+        paymentReady:
+          (await context.sellerPayments?.readyForCheckout(
+            access.id,
+            dashboard.paymentMode,
+          )) ?? false,
+        paymentModes: context.sellerPayments?.availableModes() ?? [],
+      };
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/orders', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const orders = await store.generatedStore.merchantOrders(
+        access.id,
+        resource,
+        merchantOrdersQuery.parse(request.query),
+      );
+      return orders ?? reply.code(404).send({ message: 'Store not found.' });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/customers', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const customers = await store.generatedStore.merchantCustomers(
+        access.id,
+        resource,
+        merchantCustomersQuery.parse(request.query),
+      );
+      return customers ?? reply.code(404).send({ message: 'Store not found.' });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/report', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource } = resourceParams.parse(request.params);
+      const report = await store.generatedStore.merchantReport(
+        access.id,
+        resource,
+        merchantReportQuery.parse(request.query),
+      );
+      return report ?? reply.code(404).send({ message: 'Store not found.' });
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  app.get(storePath + '/photos/:product', async (request, reply) => {
+    try {
+      const access = await authorize(request, reply);
+      if (!access) return;
+      const { resource, product } = resourceParams
+        .extend({ product: z.uuid() })
+        .parse(request.params);
+      return sendStorePhoto(
+        reply,
+        await store.generatedStore.photo(resource, product, access.id),
+      );
+    } catch (error) {
+      return reportError(error, reply);
+    }
+  });
+  const storeUpdate = z.discriminatedUnion('action', [
+    z.object({ action: z.literal('product'), product: productEdit }),
+    z.object({ action: z.literal('currency'), currency: storeCurrency }),
+    z.object({
+      action: z.literal('delivery'),
+      revision: z.int().nonnegative(),
+      zones: storeDeliveryZones,
+    }),
+    z.object({ action: z.literal('order'), id: z.uuid(), status: orderAction }),
+    z.object({ action: z.literal('payment'), id: z.uuid() }),
+    z.object({ action: z.literal('checkout'), enabled: z.boolean() }),
+    z.object({
+      action: z.literal('payment_mode'),
+      mode: z.enum(['test', 'live']),
+    }),
+    z.object({ action: z.literal('close_payment'), id: z.uuid() }),
+  ]);
+  app.post(storePath, async (request, reply) => {
+    try {
+      const access = await authorize(request, reply, true);
+      if (!access) return;
+      if (!canLeadRun(access.role))
+        return reply
+          .code(403)
+          .send({ message: 'Only owners and admins can manage stores.' });
+      const { resource } = resourceParams.parse(request.params);
+      const update = storeUpdate.parse(request.body);
+      const dashboard = await store.generatedStore.scopedStore(
+        access.id,
+        resource,
+      );
+      if (!dashboard)
+        return reply.code(404).send({ message: 'Store not found.' });
+      if (update.action === 'checkout') {
+        if (
+          update.enabled &&
+          !(await context.sellerPayments?.readyForCheckout(
+            access.id,
+            dashboard.paymentMode,
+          ))
+        )
+          return reply.code(409).send({
+            message:
+              'Connect a ready Stripe seller for the selected payment mode in Workspace settings before enabling checkout.',
+          });
+        if (
+          await store.generatedStore.setCheckout(
+            access.id,
+            resource,
+            update.enabled,
+          )
+        )
+          return { saved: true };
+        return reply.code(404).send({ message: 'Store not found.' });
+      }
+      if (update.action === 'payment_mode') {
+        if (
+          !(await context.sellerPayments?.readyForCheckout(
+            access.id,
+            update.mode,
+          ))
+        )
+          return reply.code(409).send({
+            message:
+              'Connect and finish onboarding for a Stripe seller in that payment mode before selecting it.',
+          });
+        if (
+          await store.generatedStore.setPaymentMode(
+            access.id,
+            resource,
+            update.mode,
+          )
+        )
+          return { saved: true };
+        return reply.code(404).send({ message: 'Store not found.' });
+      }
+      if (update.action === 'payment' || update.action === 'close_payment') {
+        if (!context.sellerPayments)
+          return reply
+            .code(503)
+            .send({ message: 'Stripe test payments are unavailable.' });
+        if (update.action === 'payment') {
+          const sale = await store.generatedStore.createPayment(
+            access.id,
+            resource,
+            update.id,
+          );
+          if (sale) return { saved: true };
+        } else if (
+          await context.sellerPayments.closeStoreCheckout(
+            access.id,
+            resource,
+            update.id,
+          )
+        ) {
+          return { saved: true };
+        }
+        return reply.code(409).send({
+          message:
+            update.action === 'payment'
+              ? 'Confirm the order and check your Stripe seller settings before creating a payment link.'
+              : 'Checkout could not be closed. Check the payment in Stripe before cancelling the order.',
+        });
+      }
+      const changed =
+        update.action === 'product'
+          ? await store.generatedStore.saveProduct(
+              access.id,
+              resource,
+              update.product,
+            )
+          : update.action === 'delivery'
+            ? await store.generatedStore.setDelivery(
+                access.id,
+                resource,
+                update.revision,
+                update.zones,
+              )
+            : update.action === 'currency'
+              ? await store.generatedStore.setCurrency(
+                  access.id,
+                  resource,
+                  update.currency,
+                )
+              : await store.generatedStore.changeOrder(
+                  access.id,
+                  resource,
+                  update.id,
+                  update.status,
+                );
+      if (!changed)
+        return reply.code(409).send({
+          message:
+            'This change conflicts with the current store. Refresh and try again.',
+        });
+      return { saved: true };
     } catch (error) {
       return reportError(error, reply);
     }

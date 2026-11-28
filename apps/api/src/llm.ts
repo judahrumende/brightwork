@@ -55,7 +55,7 @@ export function llmClient(
   return async (
     messages: Message[],
     tools: Tool[],
-    options: { signal?: AbortSignal; maxTokens?: number } = {},
+    options: { signal?: AbortSignal; maxTokens?: number; json?: object } = {},
   ) => {
     const response = await request(endpoint, {
       method: 'POST',
@@ -70,6 +70,14 @@ export function llmClient(
           ? { tools, tool_choice: 'auto', parallel_tool_calls: false }
           : {}),
         max_completion_tokens: options.maxTokens ?? 2048,
+        ...(options.json
+          ? {
+              response_format: {
+                type: 'json_schema',
+                json_schema: { name: 'website_plan', schema: options.json },
+              },
+            }
+          : {}),
       }),
       redirect: 'error',
       signal: options.signal ?? AbortSignal.timeout(75_000),

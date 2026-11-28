@@ -1,3 +1,4 @@
+import { storeBuyers } from '../workspace/store-buyers';
 import { creditConfig, creditLedger } from '../workspace/credits';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Redis from 'ioredis';
@@ -28,7 +29,7 @@ import { vaultStore } from '../workspace/vault';
 import { domainStore } from '../workspace/domains';
 import { shopifyOrders } from '../workspace/shopify-orders';
 import { referralProgram } from '../workspace/referrals';
-import { stripeConnect } from '../workspace/stripe-connect';
+import { stripeConnectModes } from '../workspace/stripe-connect';
 import { stripeBilling } from '../workspace/stripe-billing';
 import { registerResearch } from '../research/routes';
 import { registerGrowth } from '../growth/routes';
@@ -298,21 +299,56 @@ export function registerAuth(
           referralCredits: env.STRIPE_REFERRAL_CREDITS,
         })
       : null;
-  const hosting = siteHosting(app, workspace, origin, env.SITE_BASE_DOMAIN);
-  billing?.register(app);
   const sellerPayments =
-    env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
-      ? stripeConnect(
+    (env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET) ||
+    (env.STRIPE_LIVE_KEY && env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET)
+      ? stripeConnectModes(
           database.db,
           {
-            key: env.STRIPE_TEST_KEY,
-            secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
-            identityKey: secret,
-            origin,
+            ...(env.STRIPE_TEST_KEY && env.STRIPE_CONNECT_WEBHOOK_SECRET
+              ? {
+                  test: {
+                    key: env.STRIPE_TEST_KEY,
+                    secret: env.STRIPE_CONNECT_WEBHOOK_SECRET,
+                  },
+                }
+              : {}),
+            ...(env.STRIPE_LIVE_KEY && env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET
+              ? {
+                  live: {
+                    key: env.STRIPE_LIVE_KEY,
+                    secret: env.STRIPE_CONNECT_LIVE_WEBHOOK_SECRET,
+                  },
+                }
+              : {}),
           },
+          { identityKey: secret, origin },
           providerRequest,
         )
       : undefined;
+  const hosting = siteHosting(
+    app,
+    workspace,
+    origin,
+    env.SITE_BASE_DOMAIN,
+    (key) => allow('store-order', key, 12, 600),
+    auth.buyerEmailEnabled
+      ? {
+          buyers: storeBuyers(database.db, secret),
+          sendCode: auth.sendBuyerCode,
+          limit: (type, key) =>
+            allow(
+              'store-sign-in-' + type,
+              key,
+              type === 'email' ? 4 : type === 'ip' ? 15 : 30,
+              600,
+            ),
+          paymentOrigin: origin,
+        }
+      : undefined,
+    sellerPayments,
+  );
+  billing?.register(app);
   sellerPayments?.register(app);
   app.get('/api/sales/:id', async (request, reply) => {
     reply.header('Cache-Control', 'no-store');

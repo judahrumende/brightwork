@@ -16,7 +16,16 @@ export const authEnv = z.object({
       .regex(/^(?:sk|rk)_test_[A-Za-z0-9_]+$/u)
       .optional(),
   ),
+  STRIPE_LIVE_KEY: optionalValue.pipe(
+    z
+      .string()
+      .regex(/^(?:sk|rk)_live_[A-Za-z0-9_]+$/u)
+      .optional(),
+  ),
   STRIPE_CONNECT_WEBHOOK_SECRET: optionalValue.pipe(
+    z.string().startsWith('whsec_').optional(),
+  ),
+  STRIPE_CONNECT_LIVE_WEBHOOK_SECRET: optionalValue.pipe(
     z.string().startsWith('whsec_').optional(),
   ),
   STRIPE_WEBHOOK_SECRET: optionalValue.pipe(

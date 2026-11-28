@@ -4,6 +4,7 @@ import { api, errorMessage } from '../auth/client';
 import { Button } from '../ui/primitives';
 
 type CommerceReport = {
+  mode: 'test' | 'live';
   revenue: {
     source: 'shopify' | 'stripe';
     currency: string;
@@ -29,9 +30,14 @@ export function CommerceInsights({
   companyId: string;
   onBack: () => void;
 }) {
-  const [range, setRange] = useState(() => ({
+  const [range, setRange] = useState<{
+    from: string;
+    through: string;
+    mode: 'test' | 'live';
+  }>(() => ({
     from: isoDay(Date.now() - 29 * 86_400_000),
     through: isoDay(Date.now()),
+    mode: 'test',
   }));
   const report = useQuery({
     queryKey: ['commerce-insights', companyId, range],
@@ -57,12 +63,20 @@ export function CommerceInsights({
           setRange({
             from: String(data.get('from')),
             through: String(data.get('through')),
+            mode: data.get('mode') === 'live' ? 'live' : 'test',
           });
         }}
       >
         <label>
           From
           <input required type="date" name="from" defaultValue={range.from} />
+        </label>
+        <label>
+          Stripe payment mode
+          <select name="mode" defaultValue={range.mode}>
+            <option value="test">Test</option>
+            <option value="live">Live</option>
+          </select>
         </label>
         <label>
           Through
@@ -123,7 +137,8 @@ export function CommerceInsights({
           </dl>
           <p>
             Customer counts identify repeat purchases within each store or
-            seller account. Stripe purchases use test payments.
+            seller account. Stripe rows show {report.data.mode} payments;
+            Shopify rows are unaffected by this selector.
           </p>
         </>
       )}

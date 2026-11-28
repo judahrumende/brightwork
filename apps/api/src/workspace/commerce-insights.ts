@@ -3,7 +3,11 @@ import { z } from 'zod';
 import type { Database } from '../db/database';
 
 export const commerceRange = z
-  .object({ from: z.iso.date(), through: z.iso.date() })
+  .object({
+    from: z.iso.date(),
+    through: z.iso.date(),
+    mode: z.enum(['test', 'live']).default('test'),
+  })
   .refine(({ from, through }) => {
     const difference = Date.parse(through) - Date.parse(from);
     return difference >= 0 && difference < 366 * 86_400_000;
@@ -16,7 +20,8 @@ export async function commerceInsights(
 ) {
   const where = sql`business_id = ${businessId}::uuid
     AND occurred_at >= ${range.from}::date::timestamp AT TIME ZONE 'UTC'
-    AND occurred_at < (${range.through}::date + 1)::timestamp AT TIME ZONE 'UTC'`;
+    AND occurred_at < (${range.through}::date + 1)::timestamp AT TIME ZONE 'UTC'
+    AND (source <> 'stripe' OR payment_mode = ${range.mode ?? 'test'})`;
   const [revenue, [customers]] = await Promise.all([
     db.execute<{
       source: 'shopify' | 'stripe';
@@ -46,5 +51,5 @@ export async function commerceInsights(
       FROM customer_totals
     `),
   ]);
-  return { revenue: [...revenue], customers };
+  return { mode: range.mode ?? 'test', revenue: [...revenue], customers };
 }
